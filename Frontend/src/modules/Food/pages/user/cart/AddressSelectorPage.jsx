@@ -349,7 +349,7 @@ export default function AddressSelectorPage() {
       const response = await fetch(url, { 
         headers: { 
           "Accept-Language": "en",
-          "User-Agent": "Foodelo-App"
+          "User-Agent": "ZiggyBites-App"
         }
       })
       const json = await response.json()

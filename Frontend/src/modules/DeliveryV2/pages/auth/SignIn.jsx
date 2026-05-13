@@ -99,7 +99,7 @@ export default function DeliverySignIn() {
             >
               <img 
                 src={logoNew} 
-                alt="Foodelo Logo" 
+                alt="ZiggyBites Logo" 
                 className="w-32 h-32 md:w-36 md:h-36 object-contain mx-auto"
               />
             </motion.div>
@@ -172,7 +172,7 @@ export default function DeliverySignIn() {
 
           <div className="mt-8 text-center">
             <p className="text-[11px] text-gray-400 font-medium leading-relaxed max-w-[320px] mx-auto">
-              By continuing, you agree to Foodelo's <br />
+              By continuing, you agree to ZiggyBites's <br />
               <Link to="/food/delivery/profile/terms" className="text-gray-900 dark:text-white font-bold hover:text-[#7e3866] transition-colors">Terms of Service</Link>
               <span className="mx-1">&</span>
               <Link to="/food/delivery/profile/privacy" className="text-gray-900 dark:text-white font-bold hover:text-[#7e3866] transition-colors">Privacy Policy</Link>

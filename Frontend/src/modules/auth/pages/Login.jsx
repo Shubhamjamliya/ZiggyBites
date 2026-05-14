@@ -32,6 +32,7 @@ export default function UnifiedOTPFastLogin() {
   const [pendingVerify, setPendingVerify] = useState(null)
   const navigate = useNavigate()
   const submitting = useRef(false)
+  const goToFoodPreference = () => navigate("/user/auth/portal", { replace: true })
 
   const normalizedPhone = () => {
     const digits = String(phoneNumber).replace(/\D/g, "").slice(-15)
@@ -152,7 +153,7 @@ export default function UnifiedOTPFastLogin() {
         setShowNameModal(true)
       } else {
         toast.success("Welcome back!")
-        navigate("/user/auth/portal", { replace: true })
+        goToFoodPreference()
       }
     } catch (err) {
       const status = err?.response?.status
@@ -208,7 +209,7 @@ export default function UnifiedOTPFastLogin() {
         setPendingVerify(null)
         toast.success(`Welcome, ${newName.trim()}!`)
         setShowNameModal(false)
-        navigate("/user/auth/portal", { replace: true })
+        goToFoodPreference()
         return
       }
 
@@ -221,7 +222,7 @@ export default function UnifiedOTPFastLogin() {
 
       toast.success(`Welcome, ${newName.trim()}!`)
       setShowNameModal(false)
-      navigate("/user/auth/portal", { replace: true })
+      goToFoodPreference()
     } catch (err) {
       toast.error("Failed to update name. You can skip this for now or try again.")
       console.error(err)
@@ -516,7 +517,7 @@ export default function UnifiedOTPFastLogin() {
                   type="button"
                   onClick={() => {
                     setShowNameModal(false)
-                    navigate("/user/auth/portal", { replace: true })
+                    goToFoodPreference()
                   }}
                   className="text-sm text-gray-400 hover:text-gray-600 transition-colors py-2"
                 >

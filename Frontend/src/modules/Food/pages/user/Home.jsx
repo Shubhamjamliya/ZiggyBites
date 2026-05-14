@@ -120,6 +120,7 @@ const placeholders = [
 ];
 
 const WEBVIEW_SESSION_CACHE_BUSTER = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+const HOME_FOOD_PREFERENCE_KEY = "userHomeFoodPreference";
 
 const getRestaurantDisplayName = (restaurant) => {
   const nameCandidates = [
@@ -839,6 +840,20 @@ export default function Home() {
     }
   };
 
+  const applyHomeFoodPreference = useCallback(
+    (preference) => {
+      const nextPreference = preference === "healthy" ? "healthy" : "all";
+      localStorage.setItem(HOME_FOOD_PREFERENCE_KEY, nextPreference);
+      localStorage.setItem("userVegMode", String(nextPreference === "healthy"));
+      setVegModeContext(nextPreference === "healthy");
+      setPrevVegMode(nextPreference === "healthy");
+      setShowVegModePopup(false);
+      setShowSwitchOffPopup(false);
+      isHandlingSwitchOff.current = false;
+    },
+    [setVegModeContext],
+  );
+
   // Update popup position on scroll/resize
   useEffect(() => {
     if (!showVegModePopup) return;
@@ -1385,6 +1400,14 @@ export default function Home() {
       return newSet;
     });
   };
+
+  const foodPreferenceFilters = useMemo(
+    () => [
+      { id: "healthy", label: "Healthy Food", icon: Leaf },
+      { id: "all", label: "All Food Items", icon: UtensilsCrossed },
+    ],
+    [],
+  );
 
   // Refs for scroll tracking
   const filterSectionRefs = useRef({});
@@ -2771,6 +2794,30 @@ export default function Home() {
                             <span className="text-[10px] font-bold uppercase">Filters</span>
                           </button>
 
+                          {foodPreferenceFilters.map((filter) => {
+                            const Icon = filter.icon;
+                            const isActive =
+                              (filter.id === "healthy" && vegMode) ||
+                              (filter.id === "all" && !vegMode);
+                            return (
+                              <button
+                                key={filter.id}
+                                type="button"
+                                onClick={() => applyHomeFoodPreference(filter.id)}
+                                className={`h-8 px-4 rounded-full flex items-center gap-2 whitespace-nowrap transition-all font-bold text-[10px] uppercase ${
+                                  isActive
+                                    ? filter.id === "healthy"
+                                      ? "bg-green-600 text-white"
+                                      : "bg-[#7e3866] text-white"
+                                    : "bg-white dark:bg-white/5 border border-gray-100 dark:border-white/5 text-gray-600 dark:text-gray-400"
+                                }`}
+                              >
+                                <Icon className="h-3 w-3" />
+                                {filter.label}
+                              </button>
+                            );
+                          })}
+
                           {[
                             { id: "delivery-under-30", label: "Under 30 mins" },
                             { id: "delivery-under-45", label: "Under 45 mins" },
@@ -2821,6 +2868,30 @@ export default function Home() {
                         Filters
                       </span>
                     </button>
+
+                    {foodPreferenceFilters.map((filter) => {
+                      const Icon = filter.icon;
+                      const isActive =
+                        (filter.id === "healthy" && vegMode) ||
+                        (filter.id === "all" && !vegMode);
+                      return (
+                        <button
+                          key={filter.id}
+                          type="button"
+                          onClick={() => applyHomeFoodPreference(filter.id)}
+                          className={`h-9 px-4 rounded-full flex items-center gap-2 whitespace-nowrap flex-shrink-0 transition-all font-bold shadow-sm active:scale-95 ${
+                            isActive
+                              ? filter.id === "healthy"
+                                ? "bg-green-600 text-white border border-green-600"
+                                : "bg-[#7e3866] text-white border border-[#7e3866]"
+                              : "bg-white dark:bg-[#1a1a1a] border border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300"
+                          }`}
+                        >
+                          <Icon className="h-4 w-4" />
+                          {filter.label}
+                        </button>
+                      );
+                    })}
 
                     {[
                       { id: "delivery-under-30", label: "Under 30 mins" },

@@ -81,40 +81,40 @@ export default function SubscriptionPlans() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-white text-gray-950 dark:bg-[#0a0a0a] dark:text-white">
+    <div className="min-h-screen bg-white text-gray-900 font-sans">
       <div className="mx-auto flex min-h-screen w-full max-w-md flex-col px-4 pb-24 pt-4">
         <header className="flex items-center justify-between">
           <button
             type="button"
             onClick={() => navigate(-1)}
-            className="flex h-10 w-10 items-center justify-center rounded-full text-gray-900 active:bg-gray-100 dark:text-white dark:active:bg-white/10"
+            className="flex h-10 w-10 items-center justify-center rounded-full text-gray-900 active:bg-gray-100"
             aria-label="Go back"
           >
-            <ArrowLeft className="h-5 w-5" />
+            <ArrowLeft className="h-6 w-6" />
           </button>
-          <h1 className="flex-1 text-left text-xl font-black tracking-tight">
+          <h1 className="flex-1 text-left text-lg font-bold">
             Choose your plan
           </h1>
           <button
             type="button"
             onClick={() => navigate("/food/user/profile")}
-            className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-50 text-gray-700 shadow-sm dark:bg-white/10 dark:text-white"
+            className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-50 text-gray-700 shadow-sm"
             aria-label="Profile"
           >
             <UserCircle2 className="h-6 w-6" />
           </button>
         </header>
 
-        <section className="mt-4 overflow-hidden rounded-[10px] bg-[#fff0f0] px-4 py-4">
+        <section className="mt-4 overflow-hidden rounded-[16px] bg-[#fff6f0] px-4 py-4">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <p className="text-sm font-black uppercase tracking-[0.14em] text-[#e92823]">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-[#e3282c]">
                 Your Selection
               </p>
-              <p className="mt-5 text-sm font-black text-gray-950">
+              <p className="mt-2 text-sm font-bold text-gray-900">
                 You have selected {selectedMealCount} meal{selectedMealCount === 1 ? "" : "s"}.
               </p>
-              <p className="text-xs font-semibold text-gray-700">
+              <p className="mt-0.5 text-xs font-medium text-gray-600">
                 Price will be calculated based on this selection.
               </p>
             </div>
@@ -126,7 +126,7 @@ export default function SubscriptionPlans() {
                   search: `?dish=${encodeURIComponent(dish.name || "")}&restaurant=${encodeURIComponent(dish.restaurantName || "")}&category=${encodeURIComponent(dish.categoryName || "")}${dish.price ? `&price=${encodeURIComponent(dish.price)}` : ""}`,
                 }, { state: { dish } })
               }
-              className="inline-flex shrink-0 items-center gap-1 text-xs font-black text-[#e92823]"
+              className="inline-flex shrink-0 items-center gap-1 text-xs font-bold text-[#e3282c] mt-1"
             >
               <Edit3 className="h-3.5 w-3.5" />
               Edit Meals
@@ -136,43 +136,43 @@ export default function SubscriptionPlans() {
 
         <main className="mt-5 space-y-4">
           {loading && plans.length === 0 ? (
-            <div className="rounded-[10px] border border-red-100 p-8 text-center text-sm font-semibold text-gray-400">
+            <div className="rounded-[16px] border border-red-100 p-8 text-center text-sm font-medium text-gray-400">
               Loading subscription plans...
             </div>
           ) : (
             plans.length > 0 ? plans.map((plan) => (
               <article
                 key={plan.id}
-                className="rounded-[18px] border border-[#ef2b24] bg-white p-6 shadow-sm dark:bg-[#111]"
+                className="rounded-[20px] border border-[#e3282c] bg-white p-5 shadow-sm"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <h2 className="text-3xl font-black tracking-tight">
+                    <h2 className="text-2xl font-bold">
                       {plan.title}
                     </h2>
                     {plan.subtitle && (
-                      <p className="mt-2 text-sm font-semibold text-gray-700 dark:text-gray-300">
+                      <p className="mt-1 text-sm font-medium text-gray-600">
                         {plan.subtitle}
                       </p>
                     )}
                     {plan.description && (
-                      <p className="mt-2 text-sm font-medium leading-5 text-gray-600 dark:text-gray-400">
+                      <p className="mt-2 text-sm text-gray-500 leading-snug">
                         {plan.description}
                       </p>
                     )}
                   </div>
                   {plan.badge && (
-                    <span className="rounded-full bg-[#e92823] px-4 py-1.5 text-[10px] font-black uppercase tracking-[0.12em] text-white shadow-sm">
+                    <span className="rounded-full bg-[#e3282c] px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-white shadow-sm">
                       {plan.badge}
                     </span>
                   )}
                 </div>
 
-                <div className="mt-6">
-                  <p className="text-xs font-black uppercase tracking-[0.2em] text-[#e92823]">
+                <div className="mt-6 bg-[#fafafa] rounded-[12px] p-3 border border-gray-100">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-[#e3282c]">
                     Pricing
                   </p>
-                  <p className="mt-2 text-lg font-black text-gray-950 dark:text-white">
+                  <p className="mt-1 text-[15px] font-bold text-gray-900">
                     {plan.priceLabel}
                   </p>
                 </div>
@@ -180,27 +180,27 @@ export default function SubscriptionPlans() {
                 <button
                   type="button"
                   onClick={() =>
-                    navigate("/food/user/cart", {
+                    navigate("/food/user/checkout", {
                       state: { dish, selectedMeals, subscriptionPlan: plan },
                     })
                   }
-                  className="mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-[10px] bg-[#e92823] text-sm font-black text-white shadow-sm active:scale-[0.98]"
+                  className="mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#e3282c] text-sm font-bold text-white transition active:bg-[#c42226]"
                 >
-                  View details
+                  Continue
                   <ChevronRight className="h-4 w-4" />
                 </button>
 
                 {plan.features.length > 0 && (
-                  <div className="mt-5 border-t border-gray-100 pt-4">
-                    <div className="space-y-4">
+                  <div className="mt-5 border-t border-gray-100 pt-5">
+                    <div className="space-y-3.5">
                       {plan.features.map((feature, index) => {
                         const Icon = featureIcons[index % featureIcons.length];
                         return (
-                          <div key={`${plan.id}-${feature}`} className="flex items-center gap-4">
-                            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-red-50 text-[#e92823]">
+                          <div key={`${plan.id}-${feature}`} className="flex items-center gap-3">
+                            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-red-50 text-[#e3282c]">
                               <Icon className="h-4 w-4" />
                             </span>
-                            <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                            <span className="text-sm font-medium text-gray-700">
                               {feature}
                             </span>
                           </div>
@@ -211,7 +211,7 @@ export default function SubscriptionPlans() {
                 )}
               </article>
             )) : (
-              <div className="rounded-[10px] border border-dashed border-red-100 p-8 text-center text-sm font-semibold text-gray-400">
+               <div className="rounded-[16px] border border-dashed border-red-100 p-8 text-center text-sm font-medium text-gray-400">
                 No subscription plans available.
               </div>
             )
@@ -222,10 +222,10 @@ export default function SubscriptionPlans() {
           <button
             type="button"
             onClick={() => navigate("/food/user/help")}
-            className="flex h-14 w-14 items-center justify-center rounded-full bg-[#ef2b24] text-white shadow-xl"
+            className="flex h-14 w-14 items-center justify-center rounded-full bg-[#e3282c] text-white shadow-lg"
             aria-label="Help"
           >
-            <MessageCircle className="h-7 w-7" />
+            <MessageCircle className="h-6 w-6" />
           </button>
         </div>
       </div>

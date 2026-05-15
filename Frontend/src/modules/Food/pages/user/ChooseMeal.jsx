@@ -124,31 +124,31 @@ export default function ChooseMeal() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-white text-gray-950 dark:bg-[#0a0a0a] dark:text-white">
-      <div className="mx-auto flex min-h-screen w-full max-w-md flex-col px-5 pb-24 pt-4">
+    <div className="min-h-screen bg-white text-gray-900 font-sans">
+      <div className="mx-auto flex min-h-screen w-full max-w-md flex-col px-4 pb-24 pt-4">
         <header className="flex items-center justify-between">
           <button
             type="button"
             onClick={() => navigate(-1)}
-            className="flex h-10 w-10 items-center justify-center rounded-full text-gray-900 active:bg-gray-100 dark:text-white dark:active:bg-white/10"
+            className="flex h-10 w-10 items-center justify-center rounded-full text-gray-900 active:bg-gray-100"
             aria-label="Go back"
           >
-            <ArrowLeft className="h-5 w-5" />
+            <ArrowLeft className="h-6 w-6" />
           </button>
-          <h1 className="flex-1 text-left text-xl font-black tracking-tight">
+          <h1 className="flex-1 text-left text-lg font-bold">
             Choose your meal
           </h1>
           <button
             type="button"
             onClick={() => navigate("/food/user/profile")}
-            className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-50 text-gray-700 shadow-sm dark:bg-white/10 dark:text-white"
+            className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-50 text-gray-700 shadow-sm"
             aria-label="Profile"
           >
             <UserCircle2 className="h-6 w-6" />
           </button>
         </header>
 
-        <section className="mt-5 rounded-2xl border border-gray-100 bg-gray-50 p-3 dark:border-white/10 dark:bg-white/5">
+        <section className="mt-5 rounded-[16px] border border-gray-100 bg-gray-50 p-3">
           <div className="flex gap-3">
             <div className="h-16 w-20 shrink-0 overflow-hidden rounded-xl bg-red-50">
               {dish.image ? (
@@ -158,25 +158,25 @@ export default function ChooseMeal() {
                   className="h-full w-full object-cover"
                 />
               ) : (
-                <span className="flex h-full w-full items-center justify-center text-xl font-black text-[#ef2b24]">
+                <span className="flex h-full w-full items-center justify-center text-xl font-bold text-[#ef2b24]">
                   {String(dish.name || "M").slice(0, 1).toUpperCase()}
                 </span>
               )}
             </div>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-base font-black">{dish.name}</p>
+              <p className="truncate text-base font-bold">{dish.name}</p>
               {[dish.restaurantName, dish.categoryName]
                 .filter(Boolean)
                 .map((line) => (
                   <p
                     key={line}
-                    className="mt-0.5 truncate text-xs font-semibold text-gray-500 dark:text-gray-400"
+                    className="mt-0.5 truncate text-xs font-medium text-gray-500"
                   >
                     {line}
                   </p>
                 ))}
               {dish.price && (
-                <p className="mt-1 text-sm font-black text-[#ef2b24]">
+                <p className="mt-1 text-sm font-bold text-[#ef2b24]">
                   Rs. {dish.price}
                 </p>
               )}
@@ -184,19 +184,19 @@ export default function ChooseMeal() {
           </div>
         </section>
 
-        <p className="mt-5 text-sm font-semibold leading-6 text-gray-600 dark:text-gray-300">
+        <p className="mt-5 text-sm font-medium leading-6 text-gray-600">
           Pick your preferred meal time to get started. Once you choose at
           least one meal, you can continue to the plan page.
         </p>
 
         <section className="mt-7">
           <div className="flex items-end justify-between">
-            <h2 className="text-xl font-black tracking-tight">
+            <h2 className="text-lg font-bold">
               Select Meal Time
             </h2>
-            <span className="flex items-center gap-1 text-[10px] font-black uppercase tracking-[0.14em] text-[#ef2b24]">
+            <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-[#ef2b24]">
               Daily Schedule
-              <CalendarDays className="h-3.5 w-3.5" />
+              <CalendarDays className="h-3.5 w-3.5" strokeWidth={2} />
             </span>
           </div>
 
@@ -209,26 +209,26 @@ export default function ChooseMeal() {
                   key={slot.id}
                   type="button"
                   onClick={() => toggleSlot(slot.id)}
-                  className={`relative min-h-[184px] overflow-hidden rounded-[10px] border p-4 text-left shadow-sm transition active:scale-[0.98] ${
+                  className={`relative min-h-[160px] overflow-hidden rounded-[16px] border p-4 text-left shadow-sm transition active:scale-[0.98] ${
                     active
-                      ? "border-[#ef2b24] bg-red-50 ring-2 ring-[#ef2b24]/15 dark:bg-[#3a1212]"
-                      : "border-transparent bg-[#f6f4fb] dark:bg-white/10"
+                      ? "border-[#ef2b24] ring-2 ring-[#ef2b24]/10"
+                      : "border-transparent bg-[#f9f9f9]"
                   }`}
                   style={{
                     backgroundColor: active ? "#fff1f1" : slot.backgroundColor,
                   }}
                 >
-                  <span className="absolute right-3 top-3 h-4 w-4 rounded-full border-2 border-gray-400 bg-white">
+                  <span className="absolute right-3 top-3 h-5 w-5 rounded-full border-2 border-gray-300 bg-white">
                     {active && (
                       <span className="absolute inset-0.5 rounded-full bg-[#ef2b24]" />
                     )}
                   </span>
                   <span className="flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm">
-                    <Icon className="h-6 w-6" style={{ color: slot.accentColor }} />
+                    <Icon className="h-5 w-5" style={{ color: slot.accentColor }} strokeWidth={2} />
                   </span>
-                  <p className="mt-5 text-base font-black">{slot.title}</p>
+                  <p className="mt-4 text-[15px] font-bold">{slot.title}</p>
                   <p
-                    className="mt-1 text-[10px] font-black uppercase tracking-[0.08em]"
+                    className="mt-1 text-[10px] font-bold uppercase tracking-wider"
                     style={{ color: slot.accentColor }}
                   >
                     {slot.timeLabel}
@@ -237,10 +237,10 @@ export default function ChooseMeal() {
                     <img
                       src={slot.imageUrl}
                       alt={slot.title}
-                      className="absolute bottom-0 right-0 h-24 w-[86%] object-contain"
+                      className="absolute bottom-0 right-0 h-20 w-[80%] object-contain mix-blend-multiply opacity-80"
                     />
                   ) : (
-                    <span className="absolute bottom-4 right-4 flex h-16 w-16 items-center justify-center rounded-full bg-white/70 text-2xl font-black" style={{ color: slot.accentColor }}>
+                    <span className="absolute bottom-4 right-4 flex h-14 w-14 items-center justify-center rounded-full bg-white/60 text-xl font-bold opacity-70" style={{ color: slot.accentColor }}>
                       {String(slot.title).slice(0, 1).toUpperCase()}
                     </span>
                   )}
@@ -249,22 +249,22 @@ export default function ChooseMeal() {
             })}
           </div>
           {loadingSlots && (
-            <p className="mt-3 text-center text-xs font-semibold text-gray-400">
+            <p className="mt-3 text-center text-xs font-medium text-gray-400">
               Loading meal schedule...
             </p>
           )}
         </section>
 
-        <section className="mt-7 overflow-hidden rounded-[22px] bg-gray-200 dark:bg-white/10">
+        <section className="mt-7 overflow-hidden rounded-[16px] bg-gray-100">
           {dish.image ? (
             <img
               src={dish.image}
               alt={dish.name}
-              className="h-32 w-full object-cover grayscale"
+              className="h-28 w-full object-cover grayscale opacity-50"
             />
           ) : (
-            <div className="flex h-32 w-full items-center justify-center bg-gray-100 text-gray-400 dark:bg-white/10">
-              <Moon className="h-10 w-10" />
+            <div className="flex h-28 w-full items-center justify-center text-gray-400">
+              <Moon className="h-8 w-8" />
             </div>
           )}
         </section>
@@ -283,10 +283,10 @@ export default function ChooseMeal() {
               },
             });
           }}
-          className={`mt-6 h-12 rounded-2xl text-sm font-black text-white shadow-sm transition ${
+          className={`mt-6 h-12 w-full rounded-xl text-sm font-bold text-white shadow-sm transition ${
             canContinue
-              ? "bg-[#ef2b24] active:scale-[0.98]"
-              : "bg-gray-300 dark:bg-white/15"
+              ? "bg-[#e3282c] active:scale-[0.98]"
+              : "bg-gray-300"
           }`}
         >
           Continue
@@ -296,10 +296,10 @@ export default function ChooseMeal() {
           <button
             type="button"
             onClick={() => navigate("/food/user/help")}
-            className="flex h-14 w-14 items-center justify-center rounded-full bg-[#ef2b24] text-white shadow-xl"
+            className="flex h-14 w-14 items-center justify-center rounded-full bg-[#e3282c] text-white shadow-xl"
             aria-label="Help"
           >
-            <MessageCircle className="h-7 w-7" />
+            <MessageCircle className="h-6 w-6" />
           </button>
         </div>
       </div>

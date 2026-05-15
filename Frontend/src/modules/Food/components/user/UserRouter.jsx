@@ -30,6 +30,7 @@ const SearchResults = lazy(() => import("@food/pages/user/search/ProfessionalSea
 const ProductDetail = lazy(() => import("@food/pages/user/ProductDetail"))
 const ChooseMeal = lazy(() => import("@food/pages/user/ChooseMeal"))
 const SubscriptionPlans = lazy(() => import("@food/pages/user/SubscriptionPlans"))
+const SubscriptionCheckout = lazy(() => import("@food/pages/user/SubscriptionCheckout"))
 
 // Cart
 const Cart = lazy(() => import("@food/pages/user/cart/Cart"))
@@ -130,6 +131,7 @@ export default function UserRouter() {
           <Route path="product/:id" element={<ProductDetail />} />
           <Route path="choose-meal" element={<ChooseMeal />} />
           <Route path="subscription-plans" element={<SubscriptionPlans />} />
+          <Route path="checkout" element={<SubscriptionCheckout />} />
 
           {/* Cart - Now Public */}
           <Route path="cart" element={<Cart />} />

@@ -36,6 +36,15 @@ import {
     updateExploreMoreOrderController
 } from '../controllers/exploreIcon.controller.js';
 import {
+    createMealSlotController,
+    deleteMealSlotController,
+    listMealSlotsAdminController,
+    listMealSlotsPublicController,
+    toggleMealSlotStatusController,
+    updateMealSlotController,
+    updateMealSlotOrderController
+} from '../controllers/mealSlot.controller.js';
+import {
     getPublicHeroBannersController,
     getPublicUnder250BannersController,
     getPublicDiningBannersController,
@@ -113,6 +122,14 @@ router.patch(
     updateExploreMoreController
 );
 
+// Admin meal slots for user subscription flow
+router.get('/meal-slots', listMealSlotsAdminController);
+router.post('/meal-slots', upload.single('image'), createMealSlotController);
+router.patch('/meal-slots/:id', upload.single('image'), updateMealSlotController);
+router.delete('/meal-slots/:id', deleteMealSlotController);
+router.patch('/meal-slots/:id/status', toggleMealSlotStatusController);
+router.patch('/meal-slots/:id/order', updateMealSlotOrderController);
+
 // Admin Gourmet (hero-banners)
 router.get('/hero-banners/gourmet', listGourmetAdmin);
 router.post('/hero-banners/gourmet', createGourmetAdmin);
@@ -127,6 +144,7 @@ router.get('/hero-banners/dining/public', getPublicDiningBannersController);
 router.get('/explore-icons/public', getPublicExploreIconsController);
 router.get('/hero-banners/gourmet/public', getPublicGourmetController);
 router.get('/landing/settings/public', getPublicLandingSettingsController);
+router.get('/meal-slots/public', listMealSlotsPublicController);
 router.get('/zones/detect', detectZonePublicController);
 router.get('/zones/nearby', listZonesNearbyPublicController);
 router.get('/zones/public', listZonesPublicController);

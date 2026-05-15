@@ -3132,7 +3132,11 @@ export default function Home() {
                     categoryFoodItems.map((item, index) => (
                       <Link
                         key={`${item.restaurantSlug}-${item.id}-${index}`}
-                        to={`/user/restaurants/${item.restaurantSlug}`}
+                        to={{
+                          pathname: "/food/user/choose-meal",
+                          search: `?dish=${encodeURIComponent(item.name || "")}&restaurant=${encodeURIComponent(item.restaurantName || "")}&category=${encodeURIComponent(item.categoryName || "")}${Number.isFinite(item.price) ? `&price=${encodeURIComponent(item.price)}` : ""}`,
+                        }}
+                        state={{ dish: item }}
                         className="flex gap-3 rounded-[10px] bg-white border border-orange-100 shadow-sm p-2"
                       >
                         <div className="h-[74px] w-[94px] rounded-lg overflow-hidden shrink-0 bg-orange-50">
@@ -3187,7 +3191,11 @@ export default function Home() {
                   recommendedFoodItems.map((item, index) => (
                     <Link
                       key={`${item.restaurantSlug}-${item.id}-${index}`}
-                      to={`/user/restaurants/${item.restaurantSlug}`}
+                      to={{
+                        pathname: "/food/user/choose-meal",
+                        search: `?dish=${encodeURIComponent(item.name || "")}&restaurant=${encodeURIComponent(item.restaurantName || "")}&category=${encodeURIComponent(item.categoryName || "")}${Number.isFinite(item.price) ? `&price=${encodeURIComponent(item.price)}` : ""}`,
+                      }}
+                      state={{ dish: item }}
                       className="flex gap-3 rounded-[10px] bg-white border border-orange-100 shadow-sm p-2"
                     >
                       <div className="h-[74px] w-[94px] rounded-lg overflow-hidden shrink-0 bg-orange-50">

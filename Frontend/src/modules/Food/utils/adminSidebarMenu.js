@@ -199,6 +199,7 @@ export const adminSidebarMenu = [
     label: "BANNER SETTINGS",
     items: [
       { type: "link", label: "Landing Page Management", path: "/admin/food/hero-banner-management", icon: "Image" },
+      { type: "link", label: "Meal Time Management", path: "/admin/food/meal-time-management", icon: "Calendar" },
     ],
   },
   {

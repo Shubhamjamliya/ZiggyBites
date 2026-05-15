@@ -45,6 +45,15 @@ import {
     updateMealSlotOrderController
 } from '../controllers/mealSlot.controller.js';
 import {
+    createSubscriptionPlanController,
+    deleteSubscriptionPlanController,
+    listSubscriptionPlansAdminController,
+    listSubscriptionPlansPublicController,
+    toggleSubscriptionPlanStatusController,
+    updateSubscriptionPlanController,
+    updateSubscriptionPlanOrderController
+} from '../controllers/subscriptionPlan.controller.js';
+import {
     getPublicHeroBannersController,
     getPublicUnder250BannersController,
     getPublicDiningBannersController,
@@ -130,6 +139,14 @@ router.delete('/meal-slots/:id', deleteMealSlotController);
 router.patch('/meal-slots/:id/status', toggleMealSlotStatusController);
 router.patch('/meal-slots/:id/order', updateMealSlotOrderController);
 
+// Admin subscription plans for user subscription flow
+router.get('/subscription-plans', listSubscriptionPlansAdminController);
+router.post('/subscription-plans', createSubscriptionPlanController);
+router.patch('/subscription-plans/:id', updateSubscriptionPlanController);
+router.delete('/subscription-plans/:id', deleteSubscriptionPlanController);
+router.patch('/subscription-plans/:id/status', toggleSubscriptionPlanStatusController);
+router.patch('/subscription-plans/:id/order', updateSubscriptionPlanOrderController);
+
 // Admin Gourmet (hero-banners)
 router.get('/hero-banners/gourmet', listGourmetAdmin);
 router.post('/hero-banners/gourmet', createGourmetAdmin);
@@ -145,6 +162,7 @@ router.get('/explore-icons/public', getPublicExploreIconsController);
 router.get('/hero-banners/gourmet/public', getPublicGourmetController);
 router.get('/landing/settings/public', getPublicLandingSettingsController);
 router.get('/meal-slots/public', listMealSlotsPublicController);
+router.get('/subscription-plans/public', listSubscriptionPlansPublicController);
 router.get('/zones/detect', detectZonePublicController);
 router.get('/zones/nearby', listZonesNearbyPublicController);
 router.get('/zones/public', listZonesPublicController);

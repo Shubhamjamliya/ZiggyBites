@@ -60,7 +60,7 @@ export default function ChooseMeal() {
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
-  const [selectedSlot, setSelectedSlot] = useState("");
+  const [selectedSlots, setSelectedSlots] = useState([]);
   const [mealSlots, setMealSlots] = useState(fallbackMealSlots);
   const [loadingSlots, setLoadingSlots] = useState(true);
 
@@ -76,7 +76,14 @@ export default function ChooseMeal() {
     };
   }, [location.state, searchParams]);
 
-  const canContinue = Boolean(selectedSlot);
+  const canContinue = selectedSlots.length > 0;
+  const toggleSlot = (slotId) => {
+    setSelectedSlots((current) =>
+      current.includes(slotId)
+        ? current.filter((id) => id !== slotId)
+        : [...current, slotId],
+    );
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -196,12 +203,12 @@ export default function ChooseMeal() {
           <div className="mt-4 grid grid-cols-2 gap-4">
             {mealSlots.map((slot) => {
               const Icon = slot.icon;
-              const active = selectedSlot === slot.id;
+              const active = selectedSlots.includes(slot.id);
               return (
                 <button
                   key={slot.id}
                   type="button"
-                  onClick={() => setSelectedSlot(slot.id)}
+                  onClick={() => toggleSlot(slot.id)}
                   className={`relative min-h-[184px] overflow-hidden rounded-[10px] border p-4 text-left shadow-sm transition active:scale-[0.98] ${
                     active
                       ? "border-[#ef2b24] bg-red-50 ring-2 ring-[#ef2b24]/15 dark:bg-[#3a1212]"
@@ -265,11 +272,17 @@ export default function ChooseMeal() {
         <button
           type="button"
           disabled={!canContinue}
-          onClick={() =>
-            navigate("/food/user/cart", {
-              state: { dish, mealSlot: selectedSlot },
-            })
-          }
+          onClick={() => {
+            const mealsToPass = mealSlots
+              .filter((slot) => selectedSlots.includes(slot.id))
+              .map(({ icon, ...rest }) => rest);
+            navigate("/food/user/subscription-plans", {
+              state: {
+                dish,
+                selectedMeals: mealsToPass,
+              },
+            });
+          }}
           className={`mt-6 h-12 rounded-2xl text-sm font-black text-white shadow-sm transition ${
             canContinue
               ? "bg-[#ef2b24] active:scale-[0.98]"

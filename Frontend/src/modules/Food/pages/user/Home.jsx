@@ -2274,6 +2274,8 @@ export default function Home() {
 
         return {
           id: item._id || item.id || `${restaurantSlug}-${selectedSlug}-${itemIndex}`,
+          itemId:
+            item._id || item.id || `${restaurantSlug}-${selectedSlug}-${itemIndex}`,
           name: itemName || itemCategory,
           description:
             item.description ||
@@ -2284,6 +2286,12 @@ export default function Home() {
           image,
           foodType: item.foodType || "",
           restaurantName: restaurant.name,
+          restaurantId:
+            restaurant.restaurantId ||
+            restaurant.id ||
+            restaurant.mongoId ||
+            restaurant._id ||
+            "",
           restaurantSlug,
           categoryName: itemCategory || category?.name || "",
         };
@@ -2389,12 +2397,20 @@ export default function Home() {
 
       return {
         id: item?._id || item?.id || `${restaurantSlug}-recommended-${itemIndex}`,
+        itemId:
+          item?._id || item?.id || `${restaurantSlug}-recommended-${itemIndex}`,
         name: itemName,
         description: item?.description || item?.shortDescription || restaurant?.name || "",
         price: priceCandidate,
         image,
         foodType: item?.foodType || "",
         restaurantName: restaurant?.name || "",
+        restaurantId:
+          restaurant?.restaurantId ||
+          restaurant?.id ||
+          restaurant?.mongoId ||
+          restaurant?._id ||
+          "",
         restaurantSlug,
         categoryName: itemCategory,
       };
@@ -3134,7 +3150,7 @@ export default function Home() {
                         key={`${item.restaurantSlug}-${item.id}-${index}`}
                         to={{
                           pathname: "/food/user/choose-meal",
-                          search: `?dish=${encodeURIComponent(item.name || "")}&restaurant=${encodeURIComponent(item.restaurantName || "")}&category=${encodeURIComponent(item.categoryName || "")}${Number.isFinite(item.price) ? `&price=${encodeURIComponent(item.price)}` : ""}`,
+                          search: `?dish=${encodeURIComponent(item.name || "")}&dishId=${encodeURIComponent(item.itemId || item.id || "")}&restaurant=${encodeURIComponent(item.restaurantName || "")}&restaurantId=${encodeURIComponent(item.restaurantId || "")}&category=${encodeURIComponent(item.categoryName || "")}${Number.isFinite(item.price) ? `&price=${encodeURIComponent(item.price)}` : ""}`,
                         }}
                         state={{ dish: item }}
                         className="flex gap-3 rounded-[10px] bg-white border border-orange-100 shadow-sm p-2"
@@ -3193,7 +3209,7 @@ export default function Home() {
                       key={`${item.restaurantSlug}-${item.id}-${index}`}
                       to={{
                         pathname: "/food/user/choose-meal",
-                        search: `?dish=${encodeURIComponent(item.name || "")}&restaurant=${encodeURIComponent(item.restaurantName || "")}&category=${encodeURIComponent(item.categoryName || "")}${Number.isFinite(item.price) ? `&price=${encodeURIComponent(item.price)}` : ""}`,
+                        search: `?dish=${encodeURIComponent(item.name || "")}&dishId=${encodeURIComponent(item.itemId || item.id || "")}&restaurant=${encodeURIComponent(item.restaurantName || "")}&restaurantId=${encodeURIComponent(item.restaurantId || "")}&category=${encodeURIComponent(item.categoryName || "")}${Number.isFinite(item.price) ? `&price=${encodeURIComponent(item.price)}` : ""}`,
                       }}
                       state={{ dish: item }}
                       className="flex gap-3 rounded-[10px] bg-white border border-orange-100 shadow-sm p-2"

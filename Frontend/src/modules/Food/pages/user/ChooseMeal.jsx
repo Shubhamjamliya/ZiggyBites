@@ -67,12 +67,17 @@ export default function ChooseMeal() {
   const dish = useMemo(() => {
     const stateDish = location.state?.dish || {};
     return {
+      id: stateDish.id || stateDish.itemId || searchParams.get("dishId") || "",
+      itemId: stateDish.itemId || stateDish.id || searchParams.get("dishId") || "",
       name: stateDish.name || searchParams.get("dish") || "Selected meal",
       restaurantName:
         stateDish.restaurantName || searchParams.get("restaurant") || "",
+      restaurantId:
+        stateDish.restaurantId || searchParams.get("restaurantId") || "",
       categoryName: stateDish.categoryName || searchParams.get("category") || "",
       price: stateDish.price || searchParams.get("price") || "",
       image: stateDish.image || "",
+      foodType: stateDish.foodType || "",
     };
   }, [location.state, searchParams]);
 

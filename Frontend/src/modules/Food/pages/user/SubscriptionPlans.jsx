@@ -24,12 +24,17 @@ export default function SubscriptionPlans() {
   const dish = useMemo(() => {
     const stateDish = location.state?.dish || {};
     return {
+      id: stateDish.id || stateDish.itemId || searchParams.get("dishId") || "",
+      itemId: stateDish.itemId || stateDish.id || searchParams.get("dishId") || "",
       name: stateDish.name || searchParams.get("dish") || "Selected meal",
       restaurantName:
         stateDish.restaurantName || searchParams.get("restaurant") || "",
+      restaurantId:
+        stateDish.restaurantId || searchParams.get("restaurantId") || "",
       categoryName: stateDish.categoryName || searchParams.get("category") || "",
       price: stateDish.price || searchParams.get("price") || "",
       image: stateDish.image || "",
+      foodType: stateDish.foodType || "",
     };
   }, [location.state, searchParams]);
 
@@ -123,7 +128,7 @@ export default function SubscriptionPlans() {
               onClick={() =>
                 navigate({
                   pathname: "/food/user/choose-meal",
-                  search: `?dish=${encodeURIComponent(dish.name || "")}&restaurant=${encodeURIComponent(dish.restaurantName || "")}&category=${encodeURIComponent(dish.categoryName || "")}${dish.price ? `&price=${encodeURIComponent(dish.price)}` : ""}`,
+                  search: `?dish=${encodeURIComponent(dish.name || "")}&dishId=${encodeURIComponent(dish.itemId || dish.id || "")}&restaurant=${encodeURIComponent(dish.restaurantName || "")}&restaurantId=${encodeURIComponent(dish.restaurantId || "")}&category=${encodeURIComponent(dish.categoryName || "")}${dish.price ? `&price=${encodeURIComponent(dish.price)}` : ""}`,
                 }, { state: { dish } })
               }
               className="inline-flex shrink-0 items-center gap-1 text-xs font-bold text-[#e3282c] mt-1"

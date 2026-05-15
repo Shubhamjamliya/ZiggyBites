@@ -2370,6 +2370,17 @@ export const orderAPI = {
     ),
 };
 
+export const subscriptionAPI = {
+  createOrder: (payload) =>
+    apiClient.post("/food/subscriptions/create-order", payload ?? {}, {
+      contextModule: "user",
+    }),
+  verifyPayment: (body) =>
+    apiClient.post("/food/subscriptions/verify-payment", body ?? {}, {
+      contextModule: "user",
+    }),
+};
+
 // Dining bookings now handled by backend
 
 

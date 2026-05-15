@@ -54,6 +54,7 @@ const debugLog = (...args) => { };
 const debugWarn = (...args) => { };
 const debugError = (...args) => { };
 const USER_SESSION_PREFERENCE_KEYS = ["userVegMode", "userHomeFoodPreference", "food-under-250-filters"];
+const HOME_FOOD_PREFERENCE_KEY = "userHomeFoodPreference";
 
 import { registerWebPushForCurrentModule } from "@food/utils/firebaseMessaging";
 
@@ -78,6 +79,7 @@ export default function Profile() {
 
   // Popup states
   const [vegModeOpen, setVegModeOpen] = useState(false);
+  const [foodPreferenceOpen, setFoodPreferenceOpen] = useState(false);
   const [appearanceOpen, setAppearanceOpen] = useState(false);
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
@@ -96,6 +98,19 @@ export default function Profile() {
   const handleVegModeUpdate = (nextValue) => {
     setVegMode(nextValue);
     localStorage.setItem("userVegMode", String(nextValue));
+  };
+
+  const [foodPreference, setFoodPreference] = useState(() => {
+    const saved = localStorage.getItem(HOME_FOOD_PREFERENCE_KEY);
+    return saved === "healthy" ? "healthy" : "all";
+  });
+
+  const handleFoodPreferenceUpdate = (nextPreference) => {
+    const normalized = nextPreference === "healthy" ? "healthy" : "all";
+    setFoodPreference(normalized);
+    localStorage.setItem(HOME_FOOD_PREFERENCE_KEY, normalized);
+    localStorage.setItem("userVegMode", String(normalized === "healthy"));
+    setVegMode(normalized === "healthy");
   };
 
   // Settings states
@@ -751,6 +766,41 @@ export default function Profile() {
             transition={{ duration: 0.2, type: "spring", stiffness: 300 }}>
             <Card
               className="bg-white dark:bg-[#1a1a1a] py-0 rounded-xl shadow-sm border-0 dark:border-gray-800 cursor-pointer"
+              onClick={() => setFoodPreferenceOpen(true)}>
+              <CardContent className="p-4  flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <motion.div
+                    className="bg-gray-100 dark:bg-gray-800 rounded-full p-2"
+                    whileHover={{ rotate: 15, scale: 1.1 }}
+                    transition={{ duration: 0.3 }}>
+                    <Utensils className="h-5 w-5 text-gray-700 dark:text-gray-300" />
+                  </motion.div>
+                  <span className="text-base font-medium text-gray-900 dark:text-white">
+                    Food Preference
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <motion.span
+                    className="text-base font-medium text-gray-900 dark:text-white"
+                    whileHover={{ scale: 1.1 }}
+                    transition={{ duration: 0.2 }}>
+                    {foodPreference === "healthy" ? "Healthy" : "All Items"}
+                  </motion.span>
+                  <motion.div
+                    whileHover={{ x: 4 }}
+                    transition={{ duration: 0.2 }}>
+                    <ChevronRight className="h-5 w-5 text-gray-400" />
+                  </motion.div>
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+
+          <motion.div
+            whileHover={{ x: 4, scale: 1.01 }}
+            transition={{ duration: 0.2, type: "spring", stiffness: 300 }}>
+            <Card
+              className="bg-white dark:bg-[#1a1a1a] py-0 rounded-xl shadow-sm border-0 dark:border-gray-800 cursor-pointer"
               onClick={() => setAppearanceOpen(true)}>
               <CardContent className="p-4  flex items-center justify-between">
                 <div className="flex items-center gap-3">
@@ -1109,6 +1159,80 @@ export default function Profile() {
                   <p className="text-xs text-gray-500">Show all options</p>
                 </div>
               </div>
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Food Preference Popup */}
+      <Dialog open={foodPreferenceOpen} onOpenChange={setFoodPreferenceOpen}>
+        <DialogContent className="max-w-sm md:max-w-md lg:max-w-lg w-[calc(100%-2rem)] rounded-2xl p-0 overflow-hidden bg-white dark:bg-[#1a1a1a] border-gray-200 dark:border-gray-800">
+          <DialogHeader className="p-5 pb-3">
+            <DialogTitle className="text-lg font-bold text-gray-900 dark:text-white">
+              Food Preference
+            </DialogTitle>
+            <DialogDescription className="text-sm text-gray-500 dark:text-gray-400">
+              Choose what you want to see first on the Home page
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 px-5 pb-5">
+            <button
+              onClick={() => {
+                handleFoodPreferenceUpdate("healthy");
+                setFoodPreferenceOpen(false);
+              }}
+              className={`w-full p-3 rounded-xl border-2 transition-all flex items-center justify-between ${foodPreference === "healthy"
+                  ? "border-green-600 bg-green-50 dark:bg-green-950/20"
+                  : "border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1a1a1a] hover:border-gray-300"
+                }`}>
+              <div className="flex items-center gap-3">
+                <div
+                  className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${foodPreference === "healthy"
+                      ? "border-green-600 bg-green-600"
+                      : "border-gray-300"
+                    }`}>
+                  {foodPreference === "healthy" && <Check className="h-3 w-3 text-white" />}
+                </div>
+                <div className="text-left">
+                  <p className="font-medium text-gray-900 dark:text-white text-sm">
+                    Healthy Food
+                  </p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    Show categories marked as healthy first
+                  </p>
+                </div>
+              </div>
+              <Leaf
+                className={`h-5 w-5 ${foodPreference === "healthy" ? "text-green-600" : "text-gray-400"}`}
+              />
+            </button>
+            <button
+              onClick={() => {
+                handleFoodPreferenceUpdate("all");
+                setFoodPreferenceOpen(false);
+              }}
+              className={`w-full p-3 rounded-xl border-2 transition-all flex items-center justify-between ${foodPreference === "all"
+                  ? "border-[#55254b] bg-[#fdfafc] dark:bg-[#3c0f3d]/10"
+                  : "border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1a1a1a] hover:border-gray-300"
+                }`}>
+              <div className="flex items-center gap-3">
+                <div
+                  className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${foodPreference === "all" ? "border-[#55254b] bg-[#55254b]" : "border-gray-300"
+                    }`}>
+                  {foodPreference === "all" && <Check className="h-3 w-3 text-white" />}
+                </div>
+                <div className="text-left">
+                  <p className="font-medium text-gray-900 dark:text-white text-sm">
+                    All Items
+                  </p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    Show every available category and item
+                  </p>
+                </div>
+              </div>
+              <Utensils
+                className={`h-5 w-5 ${foodPreference === "all" ? "text-[#55254b]" : "text-gray-400"}`}
+              />
             </button>
           </div>
         </DialogContent>

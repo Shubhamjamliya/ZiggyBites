@@ -5,6 +5,7 @@ import {
   BadgeCheck,
   Download,
   Globe,
+  Leaf,
   Loader2,
   Pencil,
   Plus,
@@ -26,6 +27,7 @@ const defaultFormData = {
   type: "",
   zoneId: "global",
   foodTypeScope: "Both",
+  healthy: false,
 }
 
 const approvalBadgeClass = (status) => {
@@ -181,6 +183,7 @@ export default function Category() {
       type: category?.type || "",
       zoneId: zoneIdValue || "global",
       foodTypeScope: category?.foodTypeScope || "Both",
+      healthy: category?.healthy === true,
     })
     setSelectedImageFile(null)
     setImagePreview(category?.image || null)
@@ -341,6 +344,7 @@ export default function Category() {
         name: String(formData.name || "").trim(),
         type: String(formData.type || "").trim(),
         status: Boolean(formData.status),
+        healthy: Boolean(formData.healthy),
         image: imageUrl || undefined,
         zoneId: formData.zoneId || "global",
         foodTypeScope: formData.foodTypeScope,
@@ -481,6 +485,15 @@ export default function Category() {
                             <p className="truncate text-lg font-semibold leading-6 text-slate-900">{category?.name || "-"}</p>
                             <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
                               <span>{category?.type || "No type"}</span>
+                              {category?.healthy && (
+                                <>
+                                  <span className="text-slate-300">•</span>
+                                  <span className="inline-flex items-center gap-1 font-semibold text-emerald-700">
+                                    <Leaf className="h-3 w-3" />
+                                    Healthy
+                                  </span>
+                                </>
+                              )}
                               <span className="text-slate-300">•</span>
                               <span>Items linked: {category?.itemCount || 0}</span>
                             </div>
@@ -704,6 +717,16 @@ export default function Category() {
                             </div>
                           </div>
                         </div>
+
+                        <label className="flex items-center gap-3 text-sm font-medium text-slate-700">
+                          <input
+                            type="checkbox"
+                            checked={formData.healthy}
+                            onChange={(event) => setFormData((prev) => ({ ...prev, healthy: event.target.checked }))}
+                            className="h-4 w-4 rounded border-slate-300"
+                          />
+                          Healthy Category
+                        </label>
 
                         <label className="flex items-center gap-3 text-sm font-medium text-slate-700">
                           <input

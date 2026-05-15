@@ -172,6 +172,7 @@ export const serializeCategoryForResponse = (category = {}, options = {}) => {
         name: category.name,
         image: category.image || '',
         type: category.type || '',
+        healthy: category.healthy === true,
         status: category.isActive !== false,
         isActive: category.isActive !== false,
         isApproved: approvalStatus === 'approved',

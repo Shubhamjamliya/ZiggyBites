@@ -2557,6 +2557,9 @@ export async function getCategories(query) {
             }];
         }
     }
+    if (query.healthy !== undefined) {
+        filter.healthy = query.healthy === true;
+    }
 
     const [list, total] = await Promise.all([
         FoodCategory.find(filter)
@@ -2600,6 +2603,7 @@ export async function createCategory(body) {
         name,
         image: typeof body.image === 'string' ? body.image.trim() : '',
         type: typeof body.type === 'string' ? body.type.trim() : '',
+        healthy: body.healthy === true,
         foodTypeScope: normalizeCategoryFoodTypeScope(body.foodTypeScope, 'Both'),
         zoneId:
             body.zoneId && String(body.zoneId).trim()
@@ -2707,6 +2711,7 @@ export async function updateCategory(id, body) {
     if (body.name !== undefined) doc.name = String(body.name || '').trim();
     if (body.image !== undefined) doc.image = String(body.image || '').trim();
     if (body.type !== undefined) doc.type = String(body.type || '').trim();
+    if (body.healthy !== undefined) doc.healthy = body.healthy === true;
     if (body.foodTypeScope !== undefined) doc.foodTypeScope = nextFoodTypeScope;
     if (!doc.restaurantId && doc.createdByRestaurantId) {
         doc.zoneId = undefined;

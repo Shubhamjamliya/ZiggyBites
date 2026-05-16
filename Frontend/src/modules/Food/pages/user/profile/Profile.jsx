@@ -25,6 +25,7 @@ import {
   Share2,
   Utensils,
   Trash2,
+  CalendarDays,
 } from "lucide-react";
 
 import AnimatedPage from "@food/components/user/AnimatedPage";
@@ -518,6 +519,33 @@ export default function Profile() {
 
         {/* Account Options */}
         <div className="space-y-2 mb-3 mt-3">
+          <Link to="/food/user/profile/subscriptions" className="block">
+            <motion.div
+              whileHover={{ x: 4, scale: 1.01 }}
+              transition={{ duration: 0.2, type: "spring", stiffness: 300 }}>
+              <Card className="bg-white dark:bg-[#1a1a1a] py-0 rounded-xl shadow-sm border-0 dark:border-gray-800 cursor-pointer">
+                <CardContent className="p-4 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <motion.div
+                      className="bg-gray-100 dark:bg-gray-800 rounded-full p-2"
+                      whileHover={{ rotate: 15, scale: 1.1 }}
+                      transition={{ duration: 0.3 }}>
+                      <CalendarDays className="h-5 w-5 text-gray-700 dark:text-gray-300" />
+                    </motion.div>
+                    <span className="text-base font-medium text-gray-900 dark:text-white">
+                      Purchased Subscriptions
+                    </span>
+                  </div>
+                  <motion.div
+                    whileHover={{ x: 4 }}
+                    transition={{ duration: 0.2 }}>
+                    <ChevronRight className="h-5 w-5 text-gray-400 dark:text-gray-500" />
+                  </motion.div>
+                </CardContent>
+              </Card>
+            </motion.div>
+          </Link>
+
           <Link to="/user/wallet" className="block">
             <motion.div
               whileHover={{ x: 4, scale: 1.01 }}

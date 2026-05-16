@@ -34,6 +34,11 @@ import * as dispatchService from './order-dispatch.service.js';
 import * as deliveryService from './order-delivery.service.js';
 import * as paymentService from './order-payment.service.js';
 import {
+  computeSubscriptionOrderAdjustment,
+  consumeSubscriptionCredit,
+  getApplicableActiveSubscription,
+} from '../../subscription/services/subscription.service.js';
+import {
   enqueueOrderEvent,
   haversineKm,
   generateFourDigitDeliveryOtp,
@@ -203,10 +208,62 @@ export async function createOrder(userId, dto) {
     normalizedPricing.total = computedTotal;
   }
 
+  normalizedPricing.originalTotal = Number(
+    dto.pricing?.originalTotal ?? normalizedPricing.total,
+  );
+
+  let subscriptionUsage = undefined;
+  let payableTotal = Number(
+    dto.pricing?.payableTotal ?? normalizedPricing.total,
+  );
+  const applicableSubscription = await getApplicableActiveSubscription(
+    userId,
+    dto.restaurantId,
+    {
+      restaurantName: dto.restaurantName,
+    },
+  );
+  if (applicableSubscription) {
+    const adjustment = computeSubscriptionOrderAdjustment(
+      applicableSubscription,
+      normalizedPricing.total,
+    );
+    payableTotal = adjustment.payableTotal;
+    normalizedPricing.payableTotal = adjustment.payableTotal;
+    normalizedPricing.subscriptionCreditApplied =
+      adjustment.subscriptionCreditApplied;
+    normalizedPricing.subscriptionWalletCredit = adjustment.walletCreditAmount;
+    subscriptionUsage = {
+      subscriptionId: new mongoose.Types.ObjectId(adjustment.subscriptionId),
+      planId: adjustment.planId
+        ? new mongoose.Types.ObjectId(adjustment.planId)
+        : null,
+      planTitle: adjustment.planTitle,
+      creditPerOrder: adjustment.creditPerOrder,
+      subscriptionCreditApplied: adjustment.subscriptionCreditApplied,
+      walletCreditAmount: adjustment.walletCreditAmount,
+      payableTotal: adjustment.payableTotal,
+      status: adjustment.payableTotal > 0 ? 'pending_payment' : 'applied',
+      appliedAt: adjustment.payableTotal > 0 ? null : new Date(),
+    };
+  } else {
+    normalizedPricing.payableTotal = payableTotal;
+    normalizedPricing.subscriptionCreditApplied = 0;
+    normalizedPricing.subscriptionWalletCredit = 0;
+  }
+
   const payment = {
-    method: paymentMethod,
-    status: isCash ? "cod_pending" : isWallet ? "paid" : "created",
-    amountDue: normalizedPricing.total ?? 0,
+    method:
+      subscriptionUsage && payableTotal <= 0 ? "subscription" : paymentMethod,
+    status:
+      subscriptionUsage && payableTotal <= 0
+        ? "paid"
+        : isCash
+          ? "cod_pending"
+          : isWallet
+            ? "paid"
+            : "created",
+    amountDue: payableTotal ?? normalizedPricing.total ?? 0,
     razorpay: {},
     qr: {},
   };
@@ -256,6 +313,7 @@ export async function createOrder(userId, dto) {
     customerPhone: dto.customerPhone || deliveryAddress.phone || "",
     pricing: normalizedPricing,
     payment,
+    subscriptionUsage,
     orderStatus: "created",
     dispatch: { modeAtCreation: dispatchMode, status: "unassigned" },
     statusHistory: [
@@ -278,8 +336,8 @@ export async function createOrder(userId, dto) {
 
   let razorpayPayload = null;
 
-  if (paymentMethod === "razorpay" && isRazorpayConfigured()) {
-    const amountPaise = Math.round((normalizedPricing.total ?? 0) * 100);
+  if (paymentMethod === "razorpay" && (payment.amountDue ?? 0) > 0 && isRazorpayConfigured()) {
+    const amountPaise = Math.round((payment.amountDue ?? 0) * 100);
     if (amountPaise < 100)
       throw new ValidationError("Amount too low for online payment");
     try {
@@ -300,9 +358,9 @@ export async function createOrder(userId, dto) {
 
   await order.save();
 
-  if (isWallet) {
+  if (isWallet && (payment.amountDue ?? 0) > 0) {
     try {
-      await userWalletService.deductWalletBalance(userId, order.pricing.total, `Payment for order #${order.order_id || order._id}`, { orderId: order._id });
+      await userWalletService.deductWalletBalance(userId, payment.amountDue, `Payment for order #${order.order_id || order._id}`, { orderId: order._id });
     } catch (err) {
       // If wallet deduction fails (e.g. insufficient balance), we should not have saved the order or we should delete/cancel it.
       // But since we already saved it, let's at least throw the error so the user knows.
@@ -321,6 +379,25 @@ export async function createOrder(userId, dto) {
 
   if (paymentMethod === "razorpay" && payment?.razorpay?.orderId) {
     // Audit can still happen here or via FinanceService events
+  }
+
+  if (
+    subscriptionUsage &&
+    (payment.amountDue <= 0 || paymentMethod !== "razorpay")
+  ) {
+    try {
+      await consumeSubscriptionCredit({
+        subscriptionId: subscriptionUsage.subscriptionId,
+        userId,
+        orderId: order._id,
+        orderTotal: normalizedPricing.total,
+      });
+      order.subscriptionUsage.status = 'applied';
+      order.subscriptionUsage.appliedAt = new Date();
+      await order.save();
+    } catch (err) {
+      throw err;
+    }
   }
 
   // Realtime + push notifications.
@@ -433,6 +510,21 @@ export async function verifyPayment(userId, dto) {
     recordedByRole: "USER",
     recordedById: new mongoose.Types.ObjectId(userId)
   });
+
+  if (
+    order.subscriptionUsage?.subscriptionId &&
+    String(order.subscriptionUsage?.status || '') !== 'applied'
+  ) {
+    await consumeSubscriptionCredit({
+      subscriptionId: order.subscriptionUsage.subscriptionId,
+      userId,
+      orderId: order._id,
+      orderTotal: order.pricing?.total,
+    });
+    order.subscriptionUsage.status = 'applied';
+    order.subscriptionUsage.appliedAt = new Date();
+    await order.save();
+  }
 
   // After online payment is verified, now notify restaurant about the new order.
   await notifyRestaurantNewOrder(order);

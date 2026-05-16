@@ -54,6 +54,21 @@ const foodSubscriptionSchema = new mongoose.Schema(
       required: true,
       min: 1,
     },
+    creditPerOrder: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    totalCredits: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    usedCredits: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
     currency: {
       type: String,
       trim: true,
@@ -67,15 +82,26 @@ const foodSubscriptionSchema = new mongoose.Schema(
     },
     paymentStatus: {
       type: String,
-      enum: ['created', 'paid', 'failed'],
+      enum: ['created', 'authenticated', 'paid', 'failed'],
       default: 'created',
+      index: true,
+    },
+    razorpayPlanId: {
+      type: String,
+      trim: true,
+      default: '',
+      index: true,
+    },
+    razorpaySubscriptionId: {
+      type: String,
+      trim: true,
+      default: '',
       index: true,
     },
     razorpayOrderId: {
       type: String,
       trim: true,
-      required: true,
-      unique: true,
+      default: '',
       index: true,
     },
     razorpayPaymentId: {

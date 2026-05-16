@@ -44,6 +44,10 @@ const pricingSchema = new mongoose.Schema(
         platformFee: { type: Number, default: 0, min: 0 },
         restaurantCommission: { type: Number, default: 0, min: 0 },
         discount: { type: Number, default: 0, min: 0 },
+        originalTotal: { type: Number, default: 0, min: 0 },
+        payableTotal: { type: Number, default: 0, min: 0 },
+        subscriptionCreditApplied: { type: Number, default: 0, min: 0 },
+        subscriptionWalletCredit: { type: Number, default: 0, min: 0 },
         total: { type: Number, required: true, min: 0 },
         currency: { type: String, default: 'INR' }
     },
@@ -54,7 +58,7 @@ const paymentSchema = new mongoose.Schema(
     {
         method: {
             type: String,
-            enum: ['cash', 'razorpay', 'razorpay_qr', 'wallet'],
+            enum: ['cash', 'razorpay', 'razorpay_qr', 'wallet', 'subscription'],
             required: true
         },
         status: {
@@ -100,6 +104,21 @@ const paymentSchema = new mongoose.Schema(
             refundId: { type: String, default: '' },
             processedAt: { type: Date }
         }
+    },
+    { _id: false }
+);
+
+const subscriptionUsageSchema = new mongoose.Schema(
+    {
+        subscriptionId: { type: mongoose.Schema.Types.ObjectId, ref: 'FoodSubscription', default: null },
+        planId: { type: mongoose.Schema.Types.ObjectId, ref: 'FoodSubscriptionPlan', default: null },
+        planTitle: { type: String, default: '', trim: true },
+        creditPerOrder: { type: Number, default: 0, min: 0 },
+        subscriptionCreditApplied: { type: Number, default: 0, min: 0 },
+        walletCreditAmount: { type: Number, default: 0, min: 0 },
+        payableTotal: { type: Number, default: 0, min: 0 },
+        status: { type: String, enum: ['none', 'pending_payment', 'applied'], default: 'none' },
+        appliedAt: { type: Date, default: null }
     },
     { _id: false }
 );
@@ -246,6 +265,10 @@ const orderSchema = new mongoose.Schema(
          */
         payment: {
             type: paymentSchema,
+            required: false
+        },
+        subscriptionUsage: {
+            type: subscriptionUsageSchema,
             required: false
         },
         orderStatus: {

@@ -897,15 +897,79 @@ export default function Cart() {
           isVeg: item.isVeg !== false
         }))
 
-        const resolvedRestaurantId = restaurantData?.restaurantId || restaurantData?._id || restaurantId || undefined
+        const resolvedRestaurantId = restaurantData?._id || restaurantData?.restaurantId || restaurantId || undefined
         const resolvedCouponCode = appliedCoupon?.code || couponCode || undefined
+
+        console.log("[Cart] calculatePricing request", {
+          resolvedRestaurantId,
+          restaurantData: restaurantData
+            ? {
+                _id: restaurantData._id,
+                restaurantId: restaurantData.restaurantId,
+                name: restaurantData.name,
+              }
+            : null,
+          cartRestaurantId: restaurantId,
+          cartItems: cart.map((item) => ({
+            id: item.id,
+            itemId: item.itemId,
+            name: item.name,
+            restaurant: item.restaurant,
+            restaurantId: item.restaurantId,
+            quantity: item.quantity,
+            price: item.price,
+          })),
+          couponCode: resolvedCouponCode || null,
+          hasSavedAddress,
+        })
 
         const response = await orderAPI.calculateOrder({
           items,
           restaurantId: resolvedRestaurantId,
+          restaurantName:
+            restaurantData?.name ||
+            restaurantData?.restaurantName ||
+            cart[0]?.restaurant ||
+            undefined,
           deliveryAddress: defaultAddress,
           couponCode: resolvedCouponCode
         })
+
+        console.log("[Cart] calculatePricing response", {
+          success: response?.data?.success,
+          pricing: response?.data?.data?.pricing || null,
+          rawData: response?.data?.data || null,
+        })
+        console.log(
+          "[Cart] calculatePricing response summary",
+          JSON.stringify(
+            {
+              resolvedRestaurantId,
+              pricingSummary: response?.data?.data?.pricing
+                ? {
+                    subtotal: response.data.data.pricing.subtotal,
+                    deliveryFee: response.data.data.pricing.deliveryFee,
+                    platformFee: response.data.data.pricing.platformFee,
+                    packagingFee: response.data.data.pricing.packagingFee,
+                    tax: response.data.data.pricing.tax,
+                    discount: response.data.data.pricing.discount,
+                    originalTotal: response.data.data.pricing.originalTotal,
+                    total: response.data.data.pricing.total,
+                    payableTotal: response.data.data.pricing.payableTotal,
+                    subscriptionCreditApplied:
+                      response.data.data.pricing.subscriptionCreditApplied,
+                    subscriptionWalletCredit:
+                      response.data.data.pricing.subscriptionWalletCredit,
+                    subscriptionAdjustment:
+                      response.data.data.pricing.subscriptionAdjustment || null,
+                    couponCode: response.data.data.pricing.couponCode || null,
+                  }
+                : null,
+            },
+            null,
+            2,
+          ),
+        )
 
         if (response?.data?.success && response?.data?.data?.pricing) {
           setPricing(response.data.data.pricing)
@@ -919,6 +983,11 @@ export default function Cart() {
           }
         }
       } catch (error) {
+        console.log("[Cart] calculatePricing error", {
+          message: error?.message,
+          response: error?.response?.data || null,
+          status: error?.response?.status || null,
+        })
         // Network errors or 404 errors - silently handle, fallback to frontend calculation
         if (error.code !== 'ERR_NETWORK' && error.response?.status !== 404) {
           debugError("Error calculating pricing:", error)
@@ -1066,8 +1135,115 @@ export default function Cart() {
   const gstCharges = pricing != null ? (pricing.tax ?? 0) : Math.round(subtotal * ((feeSettings.gstRate ?? 0) / 100))
   const discount = pricing?.discount || (appliedCoupon ? Math.min(appliedCoupon.discount, subtotal * 0.5) : 0)
   const totalBeforeDiscount = subtotal + deliveryFee + platformFee + packagingFee + gstCharges
-  const total = pricing?.total || (totalBeforeDiscount - discount)
+  const subscriptionCreditApplied = Number(pricing?.subscriptionCreditApplied || 0)
+  const subscriptionWalletCredit = Number(pricing?.subscriptionWalletCredit || 0)
+  const total = pricing?.payableTotal ?? pricing?.total ?? (totalBeforeDiscount - discount)
+  const hasSubscriptionPricing = subscriptionCreditApplied > 0
+  const isFullyCoveredBySubscription = hasSubscriptionPricing && total <= 0.01
+  const effectivePaymentMethod = isFullyCoveredBySubscription ? "subscription" : selectedPaymentMethod
   const savings = pricing?.savings ?? Math.max(0, totalBeforeDiscount - total)
+
+  useEffect(() => {
+    if (cart.length === 0) return
+
+    console.log("[Cart] subscription pricing snapshot", {
+      restaurantData: restaurantData
+        ? {
+            _id: restaurantData._id,
+            restaurantId: restaurantData.restaurantId,
+            name: restaurantData.name,
+          }
+        : null,
+      cartRestaurantId: restaurantId,
+      pricing,
+      derived: {
+        subtotal,
+        discount,
+        totalBeforeDiscount,
+        total,
+        subscriptionCreditApplied,
+        subscriptionWalletCredit,
+        hasSubscriptionPricing,
+        isFullyCoveredBySubscription,
+        effectivePaymentMethod,
+      },
+      cartItems: cart.map((item) => ({
+        id: item.id,
+        itemId: item.itemId,
+        name: item.name,
+        restaurantId: item.restaurantId,
+        quantity: item.quantity,
+        price: item.price,
+      })),
+    })
+    console.log(
+      "[Cart] subscription pricing summary",
+      JSON.stringify(
+        {
+          restaurantData: restaurantData
+            ? {
+                _id: restaurantData._id,
+                restaurantId: restaurantData.restaurantId,
+                name: restaurantData.name,
+              }
+            : null,
+          cartRestaurantId: restaurantId,
+          derived: {
+            subtotal,
+            discount,
+            totalBeforeDiscount,
+            total,
+            subscriptionCreditApplied,
+            subscriptionWalletCredit,
+            hasSubscriptionPricing,
+            isFullyCoveredBySubscription,
+            effectivePaymentMethod,
+          },
+          pricingSummary: pricing
+            ? {
+                subtotal: pricing.subtotal,
+                deliveryFee: pricing.deliveryFee,
+                platformFee: pricing.platformFee,
+                packagingFee: pricing.packagingFee,
+                tax: pricing.tax,
+                discount: pricing.discount,
+                originalTotal: pricing.originalTotal,
+                total: pricing.total,
+                payableTotal: pricing.payableTotal,
+                subscriptionCreditApplied: pricing.subscriptionCreditApplied,
+                subscriptionWalletCredit: pricing.subscriptionWalletCredit,
+                subscriptionAdjustment: pricing.subscriptionAdjustment || null,
+                couponCode: pricing.couponCode || null,
+              }
+            : null,
+          cartItems: cart.map((item) => ({
+            id: item.id,
+            itemId: item.itemId,
+            name: item.name,
+            restaurantId: item.restaurantId,
+            quantity: item.quantity,
+            price: item.price,
+          })),
+        },
+        null,
+        2,
+      ),
+    )
+  }, [
+    cart,
+    pricing,
+    restaurantData,
+    restaurantId,
+    subtotal,
+    discount,
+    totalBeforeDiscount,
+    total,
+    subscriptionCreditApplied,
+    subscriptionWalletCredit,
+    hasSubscriptionPricing,
+    isFullyCoveredBySubscription,
+    effectivePaymentMethod,
+  ])
   
   // Calculate platform pricing comparison savings
   const platformPricingSavings = useMemo(() => {
@@ -1125,9 +1301,11 @@ export default function Cart() {
     }
   }, [cart, total])
   const selectedPaymentLabel =
-    selectedPaymentMethod === "wallet"
+    effectivePaymentMethod === "subscription"
+      ? "Subscription"
+      : effectivePaymentMethod === "wallet"
       ? "Wallet"
-      : selectedPaymentMethod === "razorpay"
+      : effectivePaymentMethod === "razorpay"
         ? "Online Payment"
         : "Cash on Delivery"
 
@@ -1359,7 +1537,12 @@ export default function Cart() {
 
         const response = await orderAPI.calculateOrder({
           items,
-          restaurantId: restaurantData?.restaurantId || restaurantData?._id || restaurantId || null,
+          restaurantId: restaurantData?._id || restaurantData?.restaurantId || restaurantId || null,
+          restaurantName:
+            restaurantData?.name ||
+            restaurantData?.restaurantName ||
+            cart[0]?.restaurant ||
+            undefined,
           deliveryAddress: defaultAddress,
           couponCode: coupon.code
         })
@@ -1420,7 +1603,12 @@ export default function Cart() {
 
       const response = await orderAPI.calculateOrder({
         items,
-        restaurantId: restaurantData?.restaurantId || restaurantData?._id || restaurantId || null,
+        restaurantId: restaurantData?._id || restaurantData?.restaurantId || restaurantId || null,
+        restaurantName:
+          restaurantData?.name ||
+          restaurantData?.restaurantName ||
+          cart[0]?.restaurant ||
+          undefined,
         deliveryAddress: defaultAddress,
         couponCode: inputCode
       })
@@ -1479,7 +1667,12 @@ export default function Cart() {
 
         const response = await orderAPI.calculateOrder({
           items,
-          restaurantId: restaurantData?.restaurantId || restaurantData?._id || restaurantId || null,
+          restaurantId: restaurantData?._id || restaurantData?.restaurantId || restaurantId || null,
+          restaurantName:
+            restaurantData?.name ||
+            restaurantData?.restaurantName ||
+            cart[0]?.restaurant ||
+            undefined,
           deliveryAddress: defaultAddress,
           couponCode: null
         })
@@ -1571,7 +1764,7 @@ export default function Cart() {
 
       // CRITICAL: Validate restaurant ID before placing order
       // Ensure we're using the correct restaurant from restaurantData (most reliable)
-      const finalRestaurantId = restaurantData?.restaurantId || restaurantData?._id || null;
+      const finalRestaurantId = restaurantData?._id || restaurantData?.restaurantId || null;
       const finalRestaurantName = restaurantData?.name || null;
 
       if (!finalRestaurantId) {
@@ -1743,7 +1936,7 @@ export default function Cart() {
         note: "",
         restaurantNote: restaurantNote || "",
         sendCutlery: sendCutlery !== false,
-        paymentMethod: selectedPaymentMethod,
+        paymentMethod: effectivePaymentMethod,
         // `useZone()` can return `null`. Zod expects string/undefined, not null.
         zoneId: zoneId || undefined,
         scheduledAt: isScheduled ? new Date(`${scheduledDate}T${scheduledTime}:00`).toISOString() : undefined,
@@ -1754,11 +1947,12 @@ export default function Cart() {
         restaurantName: finalRestaurantName,
         itemCount: orderItems.length,
         totalAmount: orderPricing.total,
+        payableAmount: total,
         paymentMethod: orderPayload.paymentMethod
       });
 
       // Check wallet balance if wallet payment selected
-      if (selectedPaymentMethod === "wallet" && walletBalance < total) {
+      if (effectivePaymentMethod === "wallet" && walletBalance < total) {
         toast.error(`Insufficient wallet balance. Required: ${RUPEE_SYMBOL}${total.toFixed(0)}, Available: ${RUPEE_SYMBOL}${walletBalance.toFixed(0)}`)
         setIsPlacingOrder(false)
         return
@@ -1771,8 +1965,41 @@ export default function Cart() {
 
       const { order, razorpay } = orderResponse.data.data
 
+      if (effectivePaymentMethod === "subscription") {
+        toast.success("Order placed using your subscription")
+        setPlacedOrderId(order?._id || order?.orderId || order?.id || null)
+        setOrderSuccessSavingsAmount(platformPricingSavings.totalSavings > 0 ? platformPricingSavings.totalSavings : 0)
+        if (platformPricingSavings.totalSavings > 0) {
+          setCongratssSavingsAmount(platformPricingSavings.totalSavings)
+          setCongratssSavingsPercentage(platformPricingSavings.savingsPercentage)
+          setCongratssSavingsItems(platformPricingSavings.items)
+          setShowSavingsCongrats(true)
+        } else {
+          setShowOrderSuccess(true)
+        }
+        window.dispatchEvent(new CustomEvent('order-placed', { detail: { order } }))
+        clearCart()
+        setRestaurantNote("")
+        setShowRestaurantNoteInput(false)
+        try {
+          window.localStorage.removeItem(CART_ORDER_NOTE_STORAGE_KEY)
+        } catch {
+          // ignore
+        }
+        setIsPlacingOrder(false)
+        try {
+          const walletResponse = await userAPI.getWallet()
+          if (walletResponse?.data?.success && walletResponse?.data?.data?.wallet) {
+            setWalletBalance(walletResponse.data.data.wallet.balance || 0)
+          }
+        } catch (error) {
+          debugError("Error refreshing wallet balance:", error)
+        }
+        return
+      }
+
       // Cash flow: order placed without online payment
-      if (selectedPaymentMethod === "cash") {
+      if (effectivePaymentMethod === "cash") {
         toast.success("Order placed with Cash on Delivery")
         setPlacedOrderId(order?._id || order?.orderId || order?.id || null)
         setOrderSuccessSavingsAmount(platformPricingSavings.totalSavings > 0 ? platformPricingSavings.totalSavings : 0)
@@ -1798,7 +2025,7 @@ export default function Cart() {
       }
 
       // Wallet flow: order placed with wallet payment (already processed in backend)
-      if (selectedPaymentMethod === "wallet") {
+      if (effectivePaymentMethod === "wallet") {
         toast.success("Order placed with Wallet payment")
         setPlacedOrderId(order?._id || order?.orderId || order?.id || null)
         setOrderSuccessSavingsAmount(platformPricingSavings.totalSavings > 0 ? platformPricingSavings.totalSavings : 0)
@@ -2716,11 +2943,25 @@ export default function Cart() {
                             {RUPEE_SYMBOL}{platformPricingSavings.totalPlatformPriceWithGst.toFixed(2)}
                           </span>
                         )}
+                        {hasSubscriptionPricing && (
+                          <span className="text-base text-gray-400 dark:text-gray-500 line-through font-medium">
+                            {RUPEE_SYMBOL}{(pricing?.total ?? totalBeforeDiscount - discount).toFixed(2)}
+                          </span>
+                        )}
                         <span className="text-base font-bold text-gray-900 dark:text-white">
                           {RUPEE_SYMBOL}{total.toFixed(2)}
                         </span>
+                        {isFullyCoveredBySubscription && (
+                          <span className="inline-flex items-center rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider">
+                            Covered by subscription
+                          </span>
+                        )}
                       </div>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Incl. taxes and charges</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        {hasSubscriptionPricing
+                          ? "Subscription credit applied to this order"
+                          : "Incl. taxes and charges"}
+                      </p>
                     </div>
                   </div>
                   <ChevronRight className={`h-5 w-5 text-gray-400 transition-transform ${showBillDetails ? 'rotate-90' : ''}`} />
@@ -2772,6 +3013,29 @@ export default function Cart() {
                          <span>Coupon Discount</span>
                          <span>-{RUPEE_SYMBOL}{discount.toFixed(2)}</span>
                        </div>
+                    )}
+                    {subscriptionCreditApplied > 0 && (
+                      <div className="flex justify-between text-sm text-green-600 font-medium">
+                        <span>Subscription Credit</span>
+                        <span>-{RUPEE_SYMBOL}{subscriptionCreditApplied.toFixed(2)}</span>
+                      </div>
+                    )}
+                    {subscriptionWalletCredit > 0 && (
+                      <div className="flex justify-between text-sm text-blue-600 font-medium">
+                        <span>Wallet Credit After Order</span>
+                        <span>+{RUPEE_SYMBOL}{subscriptionWalletCredit.toFixed(2)}</span>
+                      </div>
+                    )}
+                    {subscriptionCreditApplied > 0 && (
+                      <div className="flex justify-between text-sm font-semibold text-gray-800 dark:text-gray-200 border-t border-dashed border-gray-200 dark:border-gray-800 pt-3">
+                        <span>Payable Now</span>
+                        <span>{RUPEE_SYMBOL}{total.toFixed(2)}</span>
+                      </div>
+                    )}
+                    {isFullyCoveredBySubscription && (
+                      <div className="rounded-xl bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400 px-3 py-2 text-xs font-semibold">
+                        This order will be placed directly using your active subscription. No payment is needed for this checkout.
+                      </div>
                     )}
 
                     {/* Platform Pricing Comparison - Bottom */}
@@ -2831,14 +3095,28 @@ export default function Cart() {
           <div className="w-full max-w-lg mx-auto space-y-3">
             {/* Pay Using - Slim Pro UI */}
             <div
-              className="flex items-center justify-between p-2 bg-gray-50 dark:bg-[#222222] rounded-xl border border-gray-100 dark:border-gray-800 cursor-pointer hover:bg-gray-100 dark:hover:bg-[#282828] active:scale-[0.98] transition-all duration-200 shadow-sm"
-              onClick={() => setShowPaymentSheet(true)}
+              className={`flex items-center justify-between p-2 rounded-xl border transition-all duration-200 shadow-sm ${
+                isFullyCoveredBySubscription
+                  ? "bg-green-50 dark:bg-green-900/10 border-green-200 dark:border-green-900/30"
+                  : "bg-gray-50 dark:bg-[#222222] border-gray-100 dark:border-gray-800 cursor-pointer hover:bg-gray-100 dark:hover:bg-[#282828] active:scale-[0.98]"
+              }`}
+              onClick={() => {
+                if (!isFullyCoveredBySubscription) {
+                  setShowPaymentSheet(true)
+                }
+              }}
             >
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-lg bg-[#7e386610] dark:bg-[#7e386620] flex items-center justify-center flex-shrink-0">
-                   {selectedPaymentMethod === "wallet" ? (
+                <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                  isFullyCoveredBySubscription
+                    ? "bg-green-100 dark:bg-green-900/20"
+                    : "bg-[#7e386610] dark:bg-[#7e386620]"
+                }`}>
+                   {effectivePaymentMethod === "subscription" ? (
+                    <Check className="h-5 w-5 text-green-600 dark:text-green-400" />
+                  ) : effectivePaymentMethod === "wallet" ? (
                     <Wallet className="h-5 w-5 text-[#7e3866]" />
-                  ) : selectedPaymentMethod === "razorpay" ? (
+                  ) : effectivePaymentMethod === "razorpay" ? (
                     <Zap className="h-5 w-5 text-[#7e3866]" />
                   ) : (
                     <Banknote className="h-5 w-5 text-[#7e3866]" />
@@ -2846,13 +3124,13 @@ export default function Cart() {
                 </div>
                 <div className="leading-tight">
                   <p className="text-[10px] uppercase tracking-wider text-gray-500 dark:text-gray-400 font-bold opacity-80">
-                    PAYING WITH
+                    {isFullyCoveredBySubscription ? "ORDER USING" : "PAYING WITH"}
                   </p>
                   <div className="flex items-center gap-1.5">
                     <p className="text-sm font-bold text-gray-800 dark:text-gray-100">
                       {selectedPaymentLabel}
                     </p>
-                    {selectedPaymentMethod === "wallet" && (
+                    {effectivePaymentMethod === "wallet" && (
                       <p className="text-[10px] text-green-600 dark:text-green-400 font-bold bg-green-50 dark:bg-green-900/20 px-1 rounded">
                         {RUPEE_SYMBOL}{walletBalance.toFixed(0)}
                       </p>
@@ -2861,21 +3139,27 @@ export default function Cart() {
                 </div>
               </div>
 
-               <div className="flex items-center gap-0.5 text-[#7e3866] font-bold text-[11px] uppercase tracking-widest bg-[#7e386605] dark:bg-[#7e386610] px-2.5 py-1 rounded-lg">
-                CHANGE <ChevronRight className="h-3.5 w-3.5" />
+               <div className={`flex items-center gap-0.5 font-bold text-[11px] uppercase tracking-widest px-2.5 py-1 rounded-lg ${
+                 isFullyCoveredBySubscription
+                   ? "text-green-700 dark:text-green-400 bg-green-100 dark:bg-green-900/20"
+                   : "text-[#7e3866] bg-[#7e386605] dark:bg-[#7e386610]"
+               }`}>
+                {isFullyCoveredBySubscription ? "AUTO APPLIED" : <>CHANGE <ChevronRight className="h-3.5 w-3.5" /></>}
               </div>
             </div>
 
             {/* Place Order Button */}
             <button
               onClick={handlePlaceOrder}
-              disabled={isPlacingOrder || (selectedPaymentMethod === "wallet" && walletBalance < total)}
+              disabled={isPlacingOrder || (effectivePaymentMethod === "wallet" && walletBalance < total)}
               className="w-full bg-gradient-to-r from-[#7e3866] to-[#55254b] hover:from-[#55254b] hover:to-[#3c0f3d] text-white px-6 h-12 md:h-14 rounded-2xl font-bold shadow-lg shadow-[#7e3866]/30 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-between transition-transform active:scale-[0.98]"
             >
-              {(selectedPaymentMethod === "razorpay" || selectedPaymentMethod === "wallet" || selectedPaymentMethod === "cash") && (
+              {["razorpay", "wallet", "cash", "subscription"].includes(effectivePaymentMethod) && (
                 <div className="text-left flex flex-col justify-center border-r-[1.5px] border-white/20 pr-4">
                   <span className="text-xs md:text-sm font-semibold text-white/90">{RUPEE_SYMBOL}{total.toFixed(2)}</span>
-                  <span className="text-[9px] md:text-[10px] uppercase font-bold tracking-wider text-white/80 mt-[-2px]">Total</span>
+                  <span className="text-[9px] md:text-[10px] uppercase font-bold tracking-wider text-white/80 mt-[-2px]">
+                    {isFullyCoveredBySubscription ? "Covered" : "Total"}
+                  </span>
                 </div>
               )}
               <div className="flex items-center gap-1 mx-auto text-sm md:text-lg tracking-wide">
@@ -2883,7 +3167,9 @@ export default function Cart() {
                   ? "Processing..."
                   : !hasSavedAddress
                     ? "Select Address"
-                    : "Place Order"}
+                    : isFullyCoveredBySubscription
+                      ? "Place Order with Subscription"
+                      : "Place Order"}
                 <div className="flex align-center h-full">
                   <ChevronRight className="h-4 w-4 md:h-5 md:w-5" />
                 </div>
@@ -2915,9 +3201,11 @@ export default function Cart() {
                     </div>
                     <div>
                       <p className="text-lg font-semibold text-gray-900">
-                        {selectedPaymentMethod === "razorpay"
+                        {effectivePaymentMethod === "subscription"
+                          ? "Using your subscription credit for this order"
+                          : effectivePaymentMethod === "razorpay"
                           ? `Pay ${RUPEE_SYMBOL}${total.toFixed(2)} online (Razorpay)`
-                          : selectedPaymentMethod === "wallet"
+                          : effectivePaymentMethod === "wallet"
                             ? `Pay ${RUPEE_SYMBOL}${total.toFixed(2)} from Wallet`
                             : `Pay on delivery (COD)`}
                       </p>
@@ -3229,7 +3517,9 @@ export default function Cart() {
                     </div>
 
                     <div className="space-y-3 overflow-y-auto pr-1 custom-scrollbar pb-4 flex-1 min-h-0">
-                      {[
+                      {(isFullyCoveredBySubscription
+                        ? []
+                        : [
                         {
                           id: 'razorpay',
                           name: 'Online Payment',
@@ -3258,7 +3548,7 @@ export default function Cart() {
                           color: 'bg-orange-50 text-#55254b dark:bg-orange-900/40 dark:text-orange-400',
                           selectedColor: 'bg-[#7e3866] text-white'
                         }
-                      ].map((option) => (
+                      ]).map((option) => (
                         <button
                           key={option.id}
                           onClick={() => {
@@ -3326,6 +3616,23 @@ export default function Cart() {
                            </div>
                         </button>
                       ))}
+                      {isFullyCoveredBySubscription && (
+                        <div className="rounded-2xl border border-green-200 dark:border-green-900/30 bg-green-50 dark:bg-green-900/10 p-4">
+                          <div className="flex items-start gap-3">
+                            <div className="w-11 h-11 rounded-xl bg-green-100 dark:bg-green-900/20 flex items-center justify-center flex-shrink-0">
+                              <Check className="w-5 h-5 text-green-600 dark:text-green-400" />
+                            </div>
+                            <div>
+                              <p className="text-sm font-black text-green-700 dark:text-green-400">
+                                Subscription applied
+                              </p>
+                              <p className="text-xs font-medium text-green-700/80 dark:text-green-400/80 mt-1">
+                                This order is fully covered by your active subscription, so no separate payment step is needed.
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     <div
@@ -3333,14 +3640,16 @@ export default function Cart() {
                       style={{ paddingBottom: "max(0.25rem, env(safe-area-inset-bottom, 0px))" }}
                     >
                       <div className="flex-shrink-0">
-                         <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest leading-none mb-1">Total Pay</p>
+                         <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest leading-none mb-1">
+                           {isFullyCoveredBySubscription ? "Payable Now" : "Total Pay"}
+                         </p>
                          <p className="text-xl font-black text-[#7e3866] tabular-nums">{RUPEE_SYMBOL}{total.toFixed(0)}</p>
                        </div>
                        <Button
                         onClick={() => setShowPaymentSheet(false)}
                         className="flex-1 bg-[#7e3866] hover:bg-[#55254b] text-white h-11 rounded-xl text-sm font-bold shadow-lg shadow-[#7e3866]/20 transition-all active:scale-[0.98]"
                       >
-                        Confirm Order
+                        {isFullyCoveredBySubscription ? "Got it" : "Confirm Order"}
                       </Button>
                     </div>
                   </div>

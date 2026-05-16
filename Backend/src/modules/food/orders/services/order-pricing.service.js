@@ -6,10 +6,14 @@ import { FoodOffer } from '../../admin/models/offer.model.js';
 import { FoodOfferUsage } from '../../admin/models/offerUsage.model.js';
 import { ValidationError } from '../../../../core/auth/errors.js';
 import { haversineKm } from './order.helpers.js';
+import {
+  computeSubscriptionOrderAdjustment,
+  getApplicableActiveSubscription,
+} from '../../subscription/services/subscription.service.js';
 
 export async function calculateOrderPricing(userId, dto) {
   const restaurant = await FoodRestaurant.findById(dto.restaurantId)
-    .select("status location")
+    .select("status location restaurantName name")
     .lean();
   if (!restaurant) throw new ValidationError("Restaurant not found");
   if (restaurant.status !== "approved")
@@ -200,6 +204,52 @@ export async function calculateOrderPricing(userId, dto) {
     subtotal + packagingFee + deliveryFee + platformFee + tax - discount,
   );
 
+  let subscriptionAdjustment = null;
+  if (userId && dto.restaurantId) {
+    const subscription = await getApplicableActiveSubscription(userId, dto.restaurantId, {
+      restaurantName: restaurant?.restaurantName || restaurant?.name || dto.restaurantName,
+    });
+    console.log(
+      "[OrderPricing] subscription lookup",
+      JSON.stringify(
+        {
+          userId: String(userId || ""),
+          restaurantId: String(dto.restaurantId || ""),
+          restaurantName:
+            restaurant?.restaurantName || restaurant?.name || dto.restaurantName || "",
+          matchedSubscription: subscription
+            ? {
+                id: String(subscription._id || ""),
+                restaurantId: String(subscription.restaurantId || ""),
+                status: subscription.status,
+                startDate: subscription.startDate,
+                endDate: subscription.endDate,
+                totalCredits: subscription.totalCredits,
+                usedCredits: subscription.usedCredits,
+                creditPerOrder: subscription.creditPerOrder,
+              }
+            : null,
+        },
+        null,
+        2,
+      ),
+    );
+    if (subscription) {
+      subscriptionAdjustment = computeSubscriptionOrderAdjustment(subscription, total);
+      console.log(
+        "[OrderPricing] subscription adjustment",
+        JSON.stringify(
+          {
+            orderTotal: total,
+            adjustment: subscriptionAdjustment,
+          },
+          null,
+          2,
+        ),
+      );
+    }
+  }
+
   return {
     pricing: {
       subtotal,
@@ -210,10 +260,17 @@ export async function calculateOrderPricing(userId, dto) {
       freeDeliveryUpTo: Number.isFinite(freeUpTo) ? freeUpTo : undefined,
       platformFee,
       discount,
+      originalTotal: total,
+      payableTotal: subscriptionAdjustment?.payableTotal ?? total,
+      subscriptionCreditApplied:
+        subscriptionAdjustment?.subscriptionCreditApplied ?? 0,
+      subscriptionWalletCredit:
+        subscriptionAdjustment?.walletCreditAmount ?? 0,
       total,
       currency: "INR",
       couponCode: appliedCoupon?.code || codeRaw || null,
       appliedCoupon,
+      subscriptionAdjustment,
     },
   };
 }

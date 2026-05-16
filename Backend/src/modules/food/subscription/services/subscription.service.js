@@ -4,11 +4,13 @@ import { FoodRestaurant } from '../../restaurant/models/restaurant.model.js';
 import { FoodSubscriptionPlan } from '../../landing/models/subscriptionPlan.model.js';
 import { FoodSubscription } from '../models/subscription.model.js';
 import {
-  createRazorpayOrder,
+  createRazorpaySubscription,
+  fetchRazorpaySubscription,
   getRazorpayKeyId,
   isRazorpayConfigured,
-  verifyPaymentSignature,
+  verifySubscriptionSignature,
 } from '../../orders/helpers/razorpay.helper.js';
+import * as userWalletService from '../../user/services/userWallet.service.js';
 
 function normalizeMeals(meals = []) {
   return meals
@@ -23,12 +25,201 @@ function buildSubscriptionDates(planDays) {
   return { startDate, endDate };
 }
 
+function getTotalCredits(planDays, meals = []) {
+  const safePlanDays = Math.max(0, Number(planDays) || 0);
+  const mealCount = Math.max(1, Array.isArray(meals) ? meals.length : 0);
+  return safePlanDays * mealCount;
+}
+
+function getCreditPerOrder(totalAmount, totalCredits) {
+  const safeTotalAmount = Math.max(0, Number(totalAmount) || 0);
+  const safeCredits = Math.max(0, Number(totalCredits) || 0);
+  if (!safeCredits) return 0;
+  return Number((safeTotalAmount / safeCredits).toFixed(2));
+}
+
+function getRazorpayBillingCycle(planDays) {
+  const days = Math.max(1, Number(planDays) || 1);
+  if (days % 365 === 0) return { period: 'yearly', interval: days / 365 };
+  if (days % 30 === 0) return { period: 'monthly', interval: days / 30 };
+  if (days % 7 === 0) return { period: 'weekly', interval: days / 7 };
+  return { period: 'daily', interval: Math.max(7, days) };
+}
+
+function getSyncedRazorpayPlan({
+  dbPlan,
+  billingCycle,
+  amountPaise,
+  currency,
+}) {
+  if (
+    dbPlan?.razorpayPlanId &&
+    Number(dbPlan.razorpayPlanAmountPaise) === Number(amountPaise) &&
+    String(dbPlan.currency || '').toUpperCase() === currency &&
+    String(dbPlan.razorpayPlanPeriod || '') === billingCycle.period &&
+    Number(dbPlan.razorpayPlanInterval) === Number(billingCycle.interval)
+  ) {
+    return {
+      id: dbPlan.razorpayPlanId,
+      item: {
+        amount: dbPlan.razorpayPlanAmountPaise,
+        currency,
+      },
+      reused: true,
+    };
+  }
+
+  throw new ValidationError(
+    'Selected subscription plan is not synced with Razorpay. Please edit and save the plan from admin.',
+  );
+}
+
 function normalizeSubscriptionForClient(doc) {
   const subscription = doc?.toObject ? doc.toObject() : doc || {};
+  const totalCredits =
+    Number(subscription.totalCredits) ||
+    getTotalCredits(subscription.planDays, subscription.meals);
+  const usedCredits = Math.max(0, Number(subscription.usedCredits) || 0);
   return {
     ...subscription,
     subscriptionId:
       subscription._id?.toString?.() || String(subscription._id || ''),
+    totalCredits,
+    usedCredits,
+    remainingCredits: Math.max(0, totalCredits - usedCredits),
+    creditPerOrder:
+      Number(subscription.creditPerOrder) ||
+      getCreditPerOrder(subscription.totalAmount, totalCredits),
+  };
+}
+
+function isSubscriptionActiveNow(subscription) {
+  if (!subscription) return false;
+  if (String(subscription.status || '').toLowerCase() !== 'active') return false;
+  if (String(subscription.paymentStatus || '').toLowerCase() !== 'paid') return false;
+  const now = new Date();
+  if (subscription.startDate && new Date(subscription.startDate) > now) return false;
+  if (subscription.endDate && new Date(subscription.endDate) < now) return false;
+  const normalized = normalizeSubscriptionForClient(subscription);
+  return normalized.remainingCredits > 0;
+}
+
+export function computeSubscriptionOrderAdjustment(subscriptionDoc, orderTotal) {
+  const normalized = normalizeSubscriptionForClient(subscriptionDoc);
+  const orderAmount = Math.max(0, Number(orderTotal) || 0);
+  const creditPerOrder = Math.max(0, Number(normalized.creditPerOrder) || 0);
+  const subscriptionCreditApplied = Math.min(orderAmount, creditPerOrder);
+  const payableTotal = Math.max(
+    0,
+    Number((orderAmount - creditPerOrder).toFixed(2)),
+  );
+  const walletCreditAmount = Math.max(
+    0,
+    Number((creditPerOrder - orderAmount).toFixed(2)),
+  );
+
+  return {
+    subscriptionId: normalized.subscriptionId,
+    planId: normalized.planId || null,
+    planTitle: normalized.planTitle || '',
+    creditPerOrder,
+    subscriptionCreditApplied,
+    payableTotal,
+    walletCreditAmount,
+    remainingCredits: normalized.remainingCredits,
+  };
+}
+
+export async function getApplicableActiveSubscription(
+  userId,
+  restaurantId,
+  { restaurantName } = {},
+) {
+  if (!mongoose.isValidObjectId(userId)) {
+    return null;
+  }
+
+  const baseFilter = {
+    userId: new mongoose.Types.ObjectId(userId),
+    status: 'active',
+    paymentStatus: 'paid',
+  };
+
+  let candidates = [];
+
+  if (mongoose.isValidObjectId(restaurantId)) {
+    candidates = await FoodSubscription.find({
+      ...baseFilter,
+      restaurantId: new mongoose.Types.ObjectId(restaurantId),
+    })
+      .sort({ createdAt: -1 })
+      .lean();
+  }
+
+  let matchedSubscription =
+    candidates.find((subscription) => isSubscriptionActiveNow(subscription)) || null;
+
+  const normalizedRestaurantName = String(restaurantName || '').trim().toLowerCase();
+  if (!matchedSubscription && normalizedRestaurantName) {
+    const fallbackCandidates = await FoodSubscription.find(baseFilter)
+      .sort({ createdAt: -1 })
+      .lean();
+
+    matchedSubscription =
+      fallbackCandidates.find((subscription) => {
+        const subscriptionRestaurantName = String(
+          subscription.restaurantName || '',
+        )
+          .trim()
+          .toLowerCase();
+
+        return (
+          subscriptionRestaurantName &&
+          subscriptionRestaurantName === normalizedRestaurantName &&
+          isSubscriptionActiveNow(subscription)
+        );
+      }) || null;
+  }
+
+  return matchedSubscription;
+}
+
+export async function consumeSubscriptionCredit({
+  subscriptionId,
+  userId,
+  orderId,
+  orderTotal,
+}) {
+  if (!mongoose.isValidObjectId(subscriptionId)) {
+    throw new ValidationError('Subscription id is invalid');
+  }
+
+  const subscription = await FoodSubscription.findById(subscriptionId);
+  if (!subscription) throw new NotFoundError('Subscription not found');
+  if (!isSubscriptionActiveNow(subscription)) {
+    throw new ValidationError('Subscription is not active for this order');
+  }
+
+  const adjustment = computeSubscriptionOrderAdjustment(subscription, orderTotal);
+  subscription.usedCredits = Math.max(0, Number(subscription.usedCredits || 0)) + 1;
+  await subscription.save();
+
+  if (adjustment.walletCreditAmount > 0) {
+    await userWalletService.refundWalletBalance(
+      userId,
+      adjustment.walletCreditAmount,
+      `Subscription balance credit for order #${orderId}`,
+      {
+        source: 'subscription_leftover_credit',
+        orderId,
+        subscriptionId: subscription._id,
+      },
+    );
+  }
+
+  return {
+    subscription: normalizeSubscriptionForClient(subscription),
+    adjustment,
   };
 }
 
@@ -57,8 +248,11 @@ export async function createSubscriptionOrder(userId, dto) {
     plan = await FoodSubscriptionPlan.findOne({
       _id: new mongoose.Types.ObjectId(dto.planId),
       isActive: true,
-    }).lean();
+    });
     if (!plan) throw new ValidationError('Subscription plan not found');
+  }
+  if (!plan) {
+    throw new ValidationError('Please select an admin-created subscription plan');
   }
 
   const planDays = Number(plan?.durationDays || dto.planDays || 0);
@@ -71,21 +265,48 @@ export async function createSubscriptionOrder(userId, dto) {
     throw new ValidationError('Total amount must be greater than 0');
   }
 
-  const amountPaise = Math.round(totalAmount * 100);
-  if (amountPaise < 100) {
-    throw new ValidationError('Amount too low for online payment');
-  }
-
   const meals = normalizeMeals(dto.meals);
   if (!meals.length) {
     throw new ValidationError('At least one meal is required');
   }
+  const planAmount = Number(plan?.amount || 0);
+  if (!Number.isFinite(planAmount) || planAmount <= 0) {
+    throw new ValidationError(
+      'Selected subscription plan does not have a fixed admin amount',
+    );
+  }
+  const payableAmount = planAmount;
+  const payableAmountPaise = Math.round(payableAmount * 100);
+  if (payableAmountPaise < 100) {
+    throw new ValidationError('Amount too low for online payment');
+  }
+  const totalCredits = getTotalCredits(planDays, meals);
+  const creditPerOrder = getCreditPerOrder(payableAmount, totalCredits);
+  const currency = String(plan?.currency || dto.currency || 'INR').trim().toUpperCase();
+  const billingCycle = getRazorpayBillingCycle(planDays);
+  const notes = {
+    userId: String(userId),
+    restaurantId: String(dto.restaurantId),
+    planId: plan?._id?.toString?.() || '',
+    dishId: String(dto.dishId || ''),
+    meals: meals.join(', '),
+  };
 
-  const razorpayOrder = await createRazorpayOrder(
-    amountPaise,
-    dto.currency || 'INR',
-    `subscription_${Date.now()}`,
-  );
+  const razorpayPlan = getSyncedRazorpayPlan({
+    dbPlan: plan,
+    billingCycle,
+    amountPaise: payableAmountPaise,
+    currency,
+  });
+
+  const razorpaySubscription = await createRazorpaySubscription({
+    planId: razorpayPlan.id,
+    totalCount: dto.totalCount || 12,
+    quantity: 1,
+    customerNotify: true,
+    expireBy: Math.floor(Date.now() / 1000) + 30 * 60,
+    notes,
+  });
 
   const subscription = await FoodSubscription.create({
     userId: new mongoose.Types.ObjectId(userId),
@@ -98,21 +319,28 @@ export async function createSubscriptionOrder(userId, dto) {
     planId: plan?._id || null,
     planTitle: String(plan?.title || `${planDays} Days`).trim(),
     planDays,
-    totalAmount,
-    currency: String(dto.currency || razorpayOrder.currency || 'INR').trim(),
-    razorpayOrderId: razorpayOrder.id,
+    totalAmount: payableAmount,
+    creditPerOrder,
+    totalCredits,
+    usedCredits: 0,
+    currency,
+    razorpayPlanId: razorpayPlan.id,
+    razorpaySubscriptionId: razorpaySubscription.id,
+    razorpayOrderId: razorpaySubscription.id,
     status: 'pending_payment',
     paymentStatus: 'created',
   });
 
   return {
     subscription: normalizeSubscriptionForClient(subscription),
-    order: razorpayOrder,
+    order: null,
+    razorpaySubscription,
     razorpay: {
       key: getRazorpayKeyId(),
-      orderId: razorpayOrder.id,
-      amount: razorpayOrder.amount,
-      currency: razorpayOrder.currency || 'INR',
+      subscriptionId: razorpaySubscription.id,
+      planId: razorpayPlan.id,
+      amount: razorpayPlan.item?.amount || payableAmountPaise,
+      currency: razorpayPlan.item?.currency || currency,
     },
   };
 }
@@ -132,13 +360,16 @@ export async function verifySubscriptionPayment(userId, dto) {
     return { subscription: normalizeSubscriptionForClient(subscription) };
   }
 
-  if (String(subscription.razorpayOrderId) !== String(dto.razorpayOrderId)) {
-    throw new ValidationError('Razorpay order mismatch');
+  const razorpaySubscriptionId =
+    subscription.razorpaySubscriptionId || subscription.razorpayOrderId;
+
+  if (String(razorpaySubscriptionId) !== String(dto.razorpaySubscriptionId)) {
+    throw new ValidationError('Razorpay subscription mismatch');
   }
 
-  const valid = verifyPaymentSignature(
-    dto.razorpayOrderId,
+  const valid = verifySubscriptionSignature(
     dto.razorpayPaymentId,
+    dto.razorpaySubscriptionId,
     dto.razorpaySignature,
   );
   if (!valid) {
@@ -148,14 +379,53 @@ export async function verifySubscriptionPayment(userId, dto) {
     throw new ValidationError('Payment verification failed');
   }
 
+  let remoteSubscription = null;
+  try {
+    remoteSubscription = await fetchRazorpaySubscription(dto.razorpaySubscriptionId);
+  } catch (error) {
+    console.warn(
+      '[Subscription] Could not fetch Razorpay subscription after checkout:',
+      error?.message || error,
+    );
+  }
+  if (
+    remoteSubscription?.status &&
+    ['cancelled', 'expired', 'halted'].includes(remoteSubscription.status)
+  ) {
+    subscription.paymentStatus = 'failed';
+    subscription.status = 'payment_failed';
+    await subscription.save();
+    throw new ValidationError('Razorpay subscription is not active');
+  }
+
   const { startDate, endDate } = buildSubscriptionDates(subscription.planDays);
+  const totalCredits = getTotalCredits(subscription.planDays, subscription.meals);
+  const creditPerOrder = getCreditPerOrder(subscription.totalAmount, totalCredits);
+  subscription.razorpaySubscriptionId = dto.razorpaySubscriptionId;
   subscription.razorpayPaymentId = dto.razorpayPaymentId;
   subscription.razorpaySignature = dto.razorpaySignature;
   subscription.paymentStatus = 'paid';
   subscription.status = 'active';
+  subscription.totalCredits = totalCredits;
+  subscription.creditPerOrder = creditPerOrder;
+  subscription.usedCredits = Number(subscription.usedCredits || 0);
   subscription.startDate = startDate;
   subscription.endDate = endDate;
   await subscription.save();
 
   return { subscription: normalizeSubscriptionForClient(subscription) };
+}
+
+export async function listSubscriptionsForUser(userId) {
+  const subscriptions = await FoodSubscription.find({
+    userId: new mongoose.Types.ObjectId(userId),
+  })
+    .sort({ createdAt: -1 })
+    .lean();
+
+  return {
+    subscriptions: subscriptions.map((subscription) =>
+      normalizeSubscriptionForClient(subscription),
+    ),
+  };
 }

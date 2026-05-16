@@ -26,3 +26,13 @@ export async function verifySubscriptionPaymentController(req, res, next) {
     next(err);
   }
 }
+
+export async function listMySubscriptionsController(req, res, next) {
+  try {
+    const userId = req.user?.userId;
+    const result = await subscriptionService.listSubscriptionsForUser(userId);
+    return sendResponse(res, 200, 'Subscriptions retrieved', result);
+  } catch (err) {
+    next(err);
+  }
+}

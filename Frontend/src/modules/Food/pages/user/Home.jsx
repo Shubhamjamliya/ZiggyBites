@@ -41,6 +41,7 @@ import {
   ChevronDown,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { toast } from "sonner";
 import Footer from "@food/components/user/Footer";
 import AddToCartButton from "@food/components/user/AddToCartButton";
 import StickyCartCard from "@food/components/user/StickyCartCard";
@@ -428,7 +429,6 @@ export default function Home() {
   const [isStickyHeaderVisible, setIsStickyHeaderVisible] = useState(false);
   const [showStickySearch, setShowStickySearch] = useState(false);
   const lastScrollY = useRef(0);
-
   useEffect(() => {
     const handleScrollHeader = () => {
       const currentScrollY = window.scrollY;
@@ -1169,6 +1169,40 @@ export default function Home() {
     getDefaultAddress,
   } = profileContext;
   const { addToCart, cart } = useCart();
+  const handleAddHomeItemToCart = useCallback(
+    (event, item) => {
+      event.preventDefault();
+      event.stopPropagation();
+
+      const cartPayload = {
+        id: item.itemId || item.id,
+        itemId: item.itemId || item.id,
+        name: item.name || "Item",
+        price: Number(item.price) || 0,
+        image: item.image || "",
+        description: item.description || "",
+        isVeg:
+          String(item.foodType || "")
+            .trim()
+            .toLowerCase() === "veg",
+        restaurant: item.restaurantName || "",
+        restaurantId:
+          item.mongoRestaurantId ||
+          item.restaurantMongoId ||
+          item.restaurantId ||
+          "",
+      };
+
+      const result = addToCart(cartPayload);
+      if (result?.ok === false) {
+        toast.error(result.error || "Unable to add item to cart");
+        return;
+      }
+
+      toast.success(`${item.name || "Item"} added to cart`);
+    },
+    [addToCart],
+  );
   const { location, loading, requestLocation } = useLocation();
   const {
     zoneId,
@@ -2286,11 +2320,17 @@ export default function Home() {
           image,
           foodType: item.foodType || "",
           restaurantName: restaurant.name,
-          restaurantId:
-            restaurant.restaurantId ||
-            restaurant.id ||
-            restaurant.mongoId ||
+          mongoRestaurantId:
             restaurant._id ||
+            restaurant.mongoId ||
+            restaurant.id ||
+            restaurant.restaurantId ||
+            "",
+          restaurantId:
+            restaurant._id ||
+            restaurant.mongoId ||
+            restaurant.id ||
+            restaurant.restaurantId ||
             "",
           restaurantSlug,
           categoryName: itemCategory || category?.name || "",
@@ -2405,11 +2445,17 @@ export default function Home() {
         image,
         foodType: item?.foodType || "",
         restaurantName: restaurant?.name || "",
-        restaurantId:
-          restaurant?.restaurantId ||
-          restaurant?.id ||
-          restaurant?.mongoId ||
+        mongoRestaurantId:
           restaurant?._id ||
+          restaurant?.mongoId ||
+          restaurant?.id ||
+          restaurant?.restaurantId ||
+          "",
+        restaurantId:
+          restaurant?._id ||
+          restaurant?.mongoId ||
+          restaurant?.id ||
+          restaurant?.restaurantId ||
           "",
         restaurantSlug,
         categoryName: itemCategory,
@@ -3188,9 +3234,16 @@ export default function Home() {
                               <Leaf className="h-3 w-3" />
                               {item.foodType || (selectedHomeCategory.healthy ? "Healthy" : "Meal")}
                             </span>
-                            <span className="h-6 w-6 rounded-full bg-[#ef2b24] text-white flex items-center justify-center">
+                            <button
+                              type="button"
+                              onClick={(event) =>
+                                handleAddHomeItemToCart(event, item)
+                              }
+                              className="h-6 w-6 rounded-full bg-[#ef2b24] text-white flex items-center justify-center"
+                              aria-label={`Add ${item.name || "item"} to cart`}
+                            >
                               <Plus className="h-4 w-4" />
-                            </span>
+                            </button>
                           </div>
                         </div>
                       </Link>
@@ -3251,9 +3304,16 @@ export default function Home() {
                               {item.foodType}
                             </span>
                           )}
-                          <span className="ml-auto h-6 w-6 rounded-full bg-[#ef2b24] text-white flex items-center justify-center">
+                          <button
+                            type="button"
+                            onClick={(event) =>
+                              handleAddHomeItemToCart(event, item)
+                            }
+                            className="ml-auto h-6 w-6 rounded-full bg-[#ef2b24] text-white flex items-center justify-center"
+                            aria-label={`Add ${item.name || "item"} to cart`}
+                          >
                             <Plus className="h-4 w-4" />
-                          </span>
+                          </button>
                         </div>
                       </div>
                     </Link>

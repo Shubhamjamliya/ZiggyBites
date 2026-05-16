@@ -10,12 +10,13 @@ const createSubscriptionOrderSchema = z.object({
   planId: z.string().optional(),
   planDays: z.number().int().min(1, 'Plan days must be at least 1'),
   totalAmount: z.number().positive('Total amount must be greater than 0'),
+  totalCount: z.number().int().min(1).max(1200).optional(),
   currency: z.string().optional(),
 });
 
 const verifySubscriptionPaymentSchema = z.object({
   subscriptionId: z.string().min(1, 'Subscription id required'),
-  razorpayOrderId: z.string().min(1, 'Razorpay order id required'),
+  razorpaySubscriptionId: z.string().min(1, 'Razorpay subscription id required'),
   razorpayPaymentId: z.string().min(1, 'Razorpay payment id required'),
   razorpaySignature: z.string().min(1, 'Razorpay signature required'),
 });

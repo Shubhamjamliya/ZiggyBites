@@ -76,6 +76,7 @@ const ReportSafetyEmergency = lazy(() => import("@food/pages/user/profile/Report
 const Accessibility = lazy(() => import("@food/pages/user/profile/Accessibility"))
 const Logout = lazy(() => import("@food/pages/user/profile/Logout"))
 const ReferEarn = lazy(() => import("@food/pages/user/profile/ReferEarn"))
+const MySubscriptions = lazy(() => import("@food/pages/user/profile/MySubscriptions"))
 
 // Auth
 const SignIn = lazy(() => import("@food/pages/user/auth/SignIn"))
@@ -200,6 +201,14 @@ export default function UserRouter() {
             element={
               <ProtectedRoute requiredRole="user" loginPath="/user/auth/login">
                 <EditProfile />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="profile/subscriptions"
+            element={
+              <ProtectedRoute requiredRole="user" loginPath="/user/auth/login">
+                <MySubscriptions />
               </ProtectedRoute>
             }
           />

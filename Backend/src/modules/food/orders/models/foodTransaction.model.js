@@ -11,7 +11,7 @@ const foodTransactionSchema = new mongoose.Schema({
     // Core Payment Info
     paymentMethod: { 
         type: String, 
-        enum: ['cash', 'razorpay', 'razorpay_qr', 'wallet'], 
+        enum: ['cash', 'razorpay', 'razorpay_qr', 'wallet', 'subscription'], 
         required: true 
     },
     status: { 

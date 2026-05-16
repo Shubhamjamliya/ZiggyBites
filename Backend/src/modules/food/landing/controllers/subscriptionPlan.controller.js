@@ -11,8 +11,20 @@ import {
 
 const toItem = (plan) => {
     if (!plan) return plan;
-    const { sortOrder, ...rest } = plan;
-    return { ...rest, order: sortOrder };
+    const {
+        sortOrder,
+        razorpayPlans,
+        razorpayPlanId,
+        razorpayPlanAmountPaise,
+        razorpayPlanPeriod,
+        razorpayPlanInterval,
+        ...rest
+    } = plan;
+    return {
+        ...rest,
+        order: sortOrder,
+        isRazorpaySynced: Boolean(razorpayPlanId)
+    };
 };
 
 export const listSubscriptionPlansAdminController = async (_req, res, next) => {

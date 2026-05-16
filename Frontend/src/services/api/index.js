@@ -2371,6 +2371,10 @@ export const orderAPI = {
 };
 
 export const subscriptionAPI = {
+  getMySubscriptions: () =>
+    apiClient.get("/food/subscriptions/my", {
+      contextModule: "user",
+    }),
   createOrder: (payload) =>
     apiClient.post("/food/subscriptions/create-order", payload ?? {}, {
       contextModule: "user",

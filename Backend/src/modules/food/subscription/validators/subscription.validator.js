@@ -12,6 +12,23 @@ const createSubscriptionOrderSchema = z.object({
   totalAmount: z.number().positive('Total amount must be greater than 0'),
   totalCount: z.number().int().min(1).max(1200).optional(),
   currency: z.string().optional(),
+  customerName: z.string().optional(),
+  customerPhone: z.string().optional(),
+  deliveryAddress: z.object({
+    label: z.string().optional(),
+    name: z.string().optional(),
+    fullName: z.string().optional(),
+    street: z.string().optional(),
+    additionalDetails: z.string().optional(),
+    city: z.string().optional(),
+    state: z.string().optional(),
+    zipCode: z.string().optional(),
+    phone: z.string().optional(),
+    location: z.object({
+      type: z.string().optional(),
+      coordinates: z.array(z.number()).optional(),
+    }).optional(),
+  }).passthrough().optional(),
 });
 
 const verifySubscriptionPaymentSchema = z.object({

@@ -1,5 +1,24 @@
 import mongoose from 'mongoose';
 
+const subscriptionDeliveryAddressSchema = new mongoose.Schema(
+  {
+    label: { type: String, default: 'Home', trim: true },
+    name: { type: String, default: '', trim: true },
+    fullName: { type: String, default: '', trim: true },
+    street: { type: String, default: '', trim: true },
+    additionalDetails: { type: String, default: '', trim: true },
+    city: { type: String, default: '', trim: true },
+    state: { type: String, default: '', trim: true },
+    zipCode: { type: String, default: '', trim: true },
+    phone: { type: String, default: '', trim: true },
+    location: {
+      type: { type: String, enum: ['Point'], default: 'Point' },
+      coordinates: { type: [Number], default: undefined },
+    },
+  },
+  { _id: false },
+);
+
 const foodSubscriptionSchema = new mongoose.Schema(
   {
     userId: {
@@ -32,6 +51,20 @@ const foodSubscriptionSchema = new mongoose.Schema(
     meals: {
       type: [String],
       default: [],
+    },
+    customerName: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    customerPhone: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    deliveryAddress: {
+      type: subscriptionDeliveryAddressSchema,
+      default: null,
     },
     planId: {
       type: mongoose.Schema.Types.ObjectId,

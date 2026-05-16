@@ -3,6 +3,10 @@ import { ValidationError, NotFoundError } from '../../../../core/auth/errors.js'
 import { FoodRestaurant } from '../../restaurant/models/restaurant.model.js';
 import { FoodSubscriptionPlan } from '../../landing/models/subscriptionPlan.model.js';
 import { FoodSubscription } from '../models/subscription.model.js';
+import { FoodSubscriptionSchedule } from '../models/subscriptionSchedule.model.js';
+import { FoodOrder } from '../../orders/models/order.model.js';
+import { FoodItem } from '../../admin/models/food.model.js';
+import { FoodUser } from '../../../../core/users/user.model.js';
 import {
   createRazorpaySubscription,
   fetchRazorpaySubscription,
@@ -11,6 +15,16 @@ import {
   verifySubscriptionSignature,
 } from '../../orders/helpers/razorpay.helper.js';
 import * as userWalletService from '../../user/services/userWallet.service.js';
+import * as foodTransactionService from '../../orders/services/foodTransaction.service.js';
+import * as dispatchService from '../../orders/services/order-dispatch.service.js';
+import {
+  enqueueOrderEvent,
+  haversineKm,
+  notifyOwnersSafely,
+  pushStatusHistory,
+  normalizeOrderForClient,
+} from '../../orders/services/order.helpers.js';
+import { getIO, rooms } from '../../../../config/socket.js';
 
 function normalizeMeals(meals = []) {
   return meals
@@ -20,9 +34,47 @@ function normalizeMeals(meals = []) {
 
 function buildSubscriptionDates(planDays) {
   const startDate = new Date();
+  startDate.setDate(startDate.getDate() + 1);
+  startDate.setHours(0, 0, 0, 0);
   const endDate = new Date(startDate);
-  endDate.setDate(endDate.getDate() + Number(planDays || 0));
+  endDate.setDate(endDate.getDate() + Number(planDays || 0) - 1);
+  endDate.setHours(23, 59, 59, 999);
   return { startDate, endDate };
+}
+
+function normalizeDeliveryAddress(address = {}, { customerName = '', customerPhone = '' } = {}) {
+  const coordinates = Array.isArray(address?.location?.coordinates)
+    ? address.location.coordinates.map(Number).filter((n) => Number.isFinite(n))
+    : undefined;
+  return {
+    label: address.label || 'Home',
+    name: address.name || address.fullName || customerName || '',
+    fullName: address.fullName || address.name || customerName || '',
+    street: address.street || address.address || address.formattedAddress || '',
+    additionalDetails: address.additionalDetails || '',
+    city: address.city || '',
+    state: address.state || '',
+    zipCode: address.zipCode || address.postalCode || '',
+    phone: address.phone || customerPhone || '',
+    location:
+      coordinates?.length === 2
+        ? { type: 'Point', coordinates }
+        : undefined,
+  };
+}
+
+function getDayBounds(dateInput = new Date()) {
+  const start = new Date(dateInput);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(start);
+  end.setHours(23, 59, 59, 999);
+  return { start, end };
+}
+
+function addDays(dateInput, days) {
+  const next = new Date(dateInput);
+  next.setDate(next.getDate() + days);
+  return next;
 }
 
 function getTotalCredits(planDays, meals = []) {
@@ -102,6 +154,104 @@ function isSubscriptionActiveNow(subscription) {
   if (subscription.endDate && new Date(subscription.endDate) < now) return false;
   const normalized = normalizeSubscriptionForClient(subscription);
   return normalized.remainingCredits > 0;
+}
+
+async function createSubscriptionSchedules(subscriptionDoc) {
+  const subscription = subscriptionDoc?.toObject
+    ? subscriptionDoc.toObject()
+    : subscriptionDoc;
+  if (!subscription?._id) return { created: 0 };
+
+  const meals = normalizeMeals(subscription.meals);
+  if (!meals.length) return { created: 0 };
+
+  const startDate = subscription.startDate
+    ? new Date(subscription.startDate)
+    : buildSubscriptionDates(subscription.planDays).startDate;
+  startDate.setHours(0, 0, 0, 0);
+
+  const rows = [];
+  const planDays = Math.max(1, Number(subscription.planDays || 0));
+  for (let dayOffset = 0; dayOffset < planDays; dayOffset += 1) {
+    const serviceDate = addDays(startDate, dayOffset);
+    serviceDate.setHours(0, 0, 0, 0);
+    for (const mealName of meals) {
+      rows.push({
+        subscriptionId: subscription._id,
+        userId: subscription.userId,
+        restaurantId: subscription.restaurantId,
+        planId: subscription.planId || null,
+        dishId: subscription.dishId,
+        dishName: subscription.dishName,
+        mealName,
+        serviceDate,
+        status: 'scheduled',
+      });
+    }
+  }
+
+  if (!rows.length) return { created: 0 };
+
+  try {
+    const result = await FoodSubscriptionSchedule.insertMany(rows, {
+      ordered: false,
+    });
+    return { created: result.length };
+  } catch (error) {
+    if (error?.code !== 11000 && error?.writeErrors == null) throw error;
+    return { created: 0, duplicate: true };
+  }
+}
+
+async function notifyRestaurantSubscriptionStarted(subscriptionDoc) {
+  const subscription = subscriptionDoc?.toObject
+    ? subscriptionDoc.toObject()
+    : subscriptionDoc;
+  if (!subscription?.restaurantId) return;
+
+  const payload = {
+    subscriptionId: String(subscription._id),
+    restaurantId: String(subscription.restaurantId),
+    userId: String(subscription.userId),
+    dishName: subscription.dishName,
+    planTitle: subscription.planTitle,
+    meals: subscription.meals || [],
+    startDate: subscription.startDate,
+    type: 'subscription_started',
+  };
+
+  try {
+    const io = getIO();
+    if (io) {
+      io.to(rooms.restaurant(subscription.restaurantId)).emit(
+        'play_notification_sound',
+        {
+          ...payload,
+          orderId: `SUB-${String(subscription._id).slice(-6)}`,
+          orderMongoId: String(subscription._id),
+        },
+      );
+      io.to(rooms.restaurant(subscription.restaurantId)).emit(
+        'subscription_started',
+        payload,
+      );
+    }
+  } catch {
+    // Notification failure should not block activation.
+  }
+
+  await notifyOwnersSafely(
+    [{ ownerType: 'RESTAURANT', ownerId: subscription.restaurantId }],
+    {
+      title: 'New subscription received',
+      body: `${subscription.dishName || 'A dish'} subscription starts from tomorrow.`,
+      data: {
+        type: 'subscription_started',
+        subscriptionId: String(subscription._id),
+        restaurantId: String(subscription.restaurantId),
+      },
+    },
+  );
 }
 
 export function computeSubscriptionOrderAdjustment(subscriptionDoc, orderTotal) {
@@ -269,6 +419,15 @@ export async function createSubscriptionOrder(userId, dto) {
   if (!meals.length) {
     throw new ValidationError('At least one meal is required');
   }
+  const customerName = String(dto.customerName || '').trim();
+  const customerPhone = String(dto.customerPhone || '').trim();
+  const deliveryAddress = normalizeDeliveryAddress(dto.deliveryAddress, {
+    customerName,
+    customerPhone,
+  });
+  if (!deliveryAddress.street || !deliveryAddress.city || !deliveryAddress.state) {
+    throw new ValidationError('Delivery address is required for subscription');
+  }
   const planAmount = Number(plan?.amount || 0);
   if (!Number.isFinite(planAmount) || planAmount <= 0) {
     throw new ValidationError(
@@ -316,6 +475,9 @@ export async function createSubscriptionOrder(userId, dto) {
     restaurantName:
       String(dto.restaurantName || restaurant.restaurantName || '').trim(),
     meals,
+    customerName,
+    customerPhone: customerPhone || deliveryAddress.phone || '',
+    deliveryAddress,
     planId: plan?._id || null,
     planTitle: String(plan?.title || `${planDays} Days`).trim(),
     planDays,
@@ -412,6 +574,9 @@ export async function verifySubscriptionPayment(userId, dto) {
   subscription.startDate = startDate;
   subscription.endDate = endDate;
   await subscription.save();
+
+  await createSubscriptionSchedules(subscription);
+  await notifyRestaurantSubscriptionStarted(subscription);
 
   return { subscription: normalizeSubscriptionForClient(subscription) };
 }

@@ -170,6 +170,9 @@ export default function SubscriptionCheckout() {
         totalAmount,
         totalCount: autoPay ? 12 : 1,
         currency: "INR",
+        customerName,
+        customerPhone,
+        deliveryAddress: defaultAddress,
       };
 
       console.log("[SubscriptionCheckout] Subscription create-order payload", payload);

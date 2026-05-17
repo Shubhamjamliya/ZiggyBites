@@ -50,6 +50,10 @@ import {
     deleteAddonController
 } from '../controllers/restaurantAddon.controller.js';
 import * as orderController from '../../orders/controllers/order.controller.js';
+import {
+    listTodaySubscriptionMealsRestaurantController,
+    sendSubscriptionMealToDeliveryController
+} from '../../subscription/controllers/subscription.controller.js';
 import { downloadRestaurantMenuPdf } from '../../admin/controllers/admin.controller.js';
 import { authMiddleware } from '../../../../core/auth/auth.middleware.js';
 import { sendError } from '../../../../utils/response.js';
@@ -195,6 +199,8 @@ router.get('/orders', authMiddleware, requireRestaurant, orderController.listOrd
 router.get('/orders/:orderId', authMiddleware, requireRestaurant, orderController.getOrderByIdRestaurantController);
 router.patch('/orders/:orderId/status', authMiddleware, requireRestaurant, orderController.updateOrderStatusRestaurantController);
 router.post('/orders/:orderId/resend-notification', authMiddleware, requireRestaurant, orderController.resendDeliveryNotificationRestaurantController);
+router.get('/subscription-meals/today', authMiddleware, requireRestaurant, listTodaySubscriptionMealsRestaurantController);
+router.post('/subscription-meals/:scheduleId/send-to-delivery', authMiddleware, requireRestaurant, sendSubscriptionMealToDeliveryController);
 
 // Complaints (restaurant dashboard)
 router.get('/complaints', authMiddleware, requireRestaurant, getRestaurantComplaintsController);

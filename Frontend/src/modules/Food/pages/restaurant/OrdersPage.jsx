@@ -12,7 +12,8 @@ import {
   Wallet,
   Menu,
   CheckCircle,
-  Loader2
+  Loader2,
+  Send
 } from "lucide-react"
 import { Card, CardContent } from "@food/components/ui/card"
 import { useNavigate } from "react-router-dom"
@@ -33,7 +34,10 @@ export default function OrdersPage() {
   const [activeFilterTab, setActiveFilterTab] = useState("all")
   const [showMenu, setShowMenu] = useState(false)
   const [orders, setOrders] = useState([])
+  const [subscriptionMeals, setSubscriptionMeals] = useState([])
   const [loading, setLoading] = useState(true)
+  const [subscriptionLoading, setSubscriptionLoading] = useState(true)
+  const [sendingScheduleIds, setSendingScheduleIds] = useState({})
   const [error, setError] = useState(null)
   const showOrdersSkeleton = useDelayedLoading(loading, { delay: 120, minDuration: 360 })
 
@@ -126,6 +130,45 @@ export default function OrdersPage() {
   }
   
   const summaryCards = calculateSummaryCards()
+
+  const fetchSubscriptionMeals = async () => {
+    try {
+      setSubscriptionLoading(true)
+      const response = await restaurantAPI.getTodaySubscriptionMeals()
+      const rows = response?.data?.data?.schedules || []
+      setSubscriptionMeals(rows)
+    } catch (err) {
+      debugError("Error fetching subscription meals:", err)
+      setSubscriptionMeals([])
+    } finally {
+      setSubscriptionLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchSubscriptionMeals()
+    const refreshInterval = setInterval(fetchSubscriptionMeals, 15000)
+    return () => clearInterval(refreshInterval)
+  }, [])
+
+  const handleSendSubscriptionMeal = async (schedule) => {
+    const scheduleId = schedule.scheduleId || schedule._id
+    if (!scheduleId || sendingScheduleIds[scheduleId]) return
+
+    try {
+      setSendingScheduleIds((prev) => ({ ...prev, [scheduleId]: true }))
+      await restaurantAPI.sendSubscriptionMealToDelivery(scheduleId)
+      await fetchSubscriptionMeals()
+    } catch (err) {
+      setError(err?.response?.data?.message || "Failed to send subscription meal")
+    } finally {
+      setSendingScheduleIds((prev) => {
+        const next = { ...prev }
+        delete next[scheduleId]
+        return next
+      })
+    }
+  }
 
   // Fetch orders from API
   useEffect(() => {
@@ -403,6 +446,71 @@ export default function OrdersPage() {
               transition={{ type: "spring", stiffness: 500, damping: 30 }}
             />
           </div>
+        </div>
+
+        {/* Subscription Meals */}
+        <div className="mb-6 rounded-2xl bg-white p-4 shadow-sm">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-base font-bold text-gray-900">Today&apos;s subscription meals</h2>
+              <p className="text-xs font-medium text-gray-500">Send each due meal to delivery when ready.</p>
+            </div>
+            {subscriptionLoading && <Loader2 className="h-4 w-4 animate-spin text-gray-400" />}
+          </div>
+
+          {subscriptionMeals.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-gray-200 px-4 py-6 text-center text-sm font-medium text-gray-400">
+              No subscription meals due today
+            </div>
+          ) : (
+            <div className="grid gap-3 md:grid-cols-2">
+              {subscriptionMeals.map((meal) => {
+                const scheduleId = meal.scheduleId || meal._id
+                const sent = meal.status === "sent_to_delivery"
+                const customerName =
+                  meal.subscription?.customerName ||
+                  meal.user?.name ||
+                  "Customer"
+                const address = meal.subscription?.deliveryAddress
+                const addressText = [
+                  address?.street,
+                  address?.additionalDetails,
+                  address?.city,
+                ].filter(Boolean).join(", ")
+
+                return (
+                  <div key={scheduleId} className="rounded-xl border border-gray-100 p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-bold text-gray-900">{meal.dishName}</p>
+                        <p className="mt-0.5 text-xs font-semibold text-[#ff8100]">{meal.mealName}</p>
+                        <p className="mt-1 text-xs text-gray-500">{customerName}</p>
+                        {addressText && (
+                          <p className="mt-1 line-clamp-1 text-xs text-gray-400">{addressText}</p>
+                        )}
+                      </div>
+                      <span className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-bold ${sent ? "bg-emerald-50 text-emerald-600" : "bg-orange-50 text-orange-600"}`}>
+                        {sent ? "Sent" : "Due"}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={sent || sendingScheduleIds[scheduleId]}
+                      onClick={() => handleSendSubscriptionMeal(meal)}
+                      className="mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-[#ff8100] text-sm font-bold text-white disabled:bg-gray-200 disabled:text-gray-500"
+                    >
+                      {sendingScheduleIds[scheduleId] ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Send className="h-4 w-4" />
+                      )}
+                      {sent ? "Already sent" : "Send to delivery boy"}
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </div>
 
         {/* Summary Cards */}

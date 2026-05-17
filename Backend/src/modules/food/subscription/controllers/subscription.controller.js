@@ -36,3 +36,29 @@ export async function listMySubscriptionsController(req, res, next) {
     next(err);
   }
 }
+
+export async function listTodaySubscriptionMealsRestaurantController(req, res, next) {
+  try {
+    const restaurantId = req.user?.userId;
+    const result = await subscriptionService.listTodaySubscriptionMealsForRestaurant(
+      restaurantId,
+      req.query || {},
+    );
+    return sendResponse(res, 200, 'Subscription meals retrieved', result);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function sendSubscriptionMealToDeliveryController(req, res, next) {
+  try {
+    const restaurantId = req.user?.userId;
+    const result = await subscriptionService.sendSubscriptionMealToDelivery(
+      req.params.scheduleId,
+      restaurantId,
+    );
+    return sendResponse(res, 200, 'Subscription meal sent to delivery', result);
+  } catch (err) {
+    next(err);
+  }
+}

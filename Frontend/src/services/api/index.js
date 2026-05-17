@@ -1137,6 +1137,17 @@ export const restaurantAPI = {
     apiClient.get(`/food/restaurant/orders/${String(orderId)}`, {
       contextModule: "restaurant",
     }),
+  getTodaySubscriptionMeals: (params = {}) =>
+    apiClient.get("/food/restaurant/subscription-meals/today", {
+      params,
+      contextModule: "restaurant",
+    }),
+  sendSubscriptionMealToDelivery: (scheduleId) =>
+    apiClient.post(
+      `/food/restaurant/subscription-meals/${String(scheduleId)}/send-to-delivery`,
+      {},
+      { contextModule: "restaurant" },
+    ),
   updateMenu: (body) =>
     apiClient.patch("/food/restaurant/menu", body ?? {}, {
       contextModule: "restaurant",

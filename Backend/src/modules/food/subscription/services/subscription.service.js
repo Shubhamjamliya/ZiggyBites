@@ -581,6 +581,239 @@ export async function verifySubscriptionPayment(userId, dto) {
   return { subscription: normalizeSubscriptionForClient(subscription) };
 }
 
+export async function listTodaySubscriptionMealsForRestaurant(
+  restaurantId,
+  query = {},
+) {
+  const rawDate = String(query.date || '').trim();
+  const date = rawDate ? new Date(rawDate) : new Date();
+  const { start, end } = getDayBounds(
+    Number.isNaN(date.getTime()) ? new Date() : date,
+  );
+
+  const schedules = await FoodSubscriptionSchedule.find({
+    restaurantId: new mongoose.Types.ObjectId(restaurantId),
+    serviceDate: { $gte: start, $lte: end },
+    status: { $in: ['scheduled', 'sent_to_delivery'] },
+  })
+    .populate('subscriptionId', 'customerName customerPhone deliveryAddress planTitle')
+    .populate('userId', 'name phone email')
+    .populate('orderId', 'order_id orderStatus dispatch pricing')
+    .sort({ serviceDate: 1, mealName: 1, createdAt: 1 })
+    .lean();
+
+  return {
+    schedules: schedules.map((schedule) => ({
+      ...schedule,
+      scheduleId: schedule._id?.toString?.() || String(schedule._id),
+      subscription: schedule.subscriptionId || null,
+      user: schedule.userId || null,
+      order: schedule.orderId || null,
+    })),
+  };
+}
+
+export async function sendSubscriptionMealToDelivery(scheduleId, restaurantId) {
+  if (!mongoose.isValidObjectId(scheduleId)) {
+    throw new ValidationError('Subscription schedule id is invalid');
+  }
+
+  const schedule = await FoodSubscriptionSchedule.findOne({
+    _id: new mongoose.Types.ObjectId(scheduleId),
+    restaurantId: new mongoose.Types.ObjectId(restaurantId),
+  });
+  if (!schedule) throw new NotFoundError('Subscription meal not found');
+  if (schedule.status === 'sent_to_delivery' && schedule.orderId) {
+    const existingOrder = await FoodOrder.findById(schedule.orderId);
+    return {
+      schedule,
+      order: existingOrder ? normalizeOrderForClient(existingOrder) : null,
+      alreadySent: true,
+    };
+  }
+  if (schedule.status !== 'scheduled') {
+    throw new ValidationError(`Cannot send meal with status ${schedule.status}`);
+  }
+
+  const today = getDayBounds(new Date());
+  if (new Date(schedule.serviceDate) > today.end) {
+    throw new ValidationError('This subscription meal is not due yet');
+  }
+
+  const subscription = await FoodSubscription.findOne({
+    _id: schedule.subscriptionId,
+    restaurantId: new mongoose.Types.ObjectId(restaurantId),
+    status: 'active',
+    paymentStatus: 'paid',
+  });
+  if (!subscription) throw new ValidationError('Subscription is not active');
+  if (!isSubscriptionActiveNow(subscription)) {
+    throw new ValidationError('Subscription is not active for today');
+  }
+
+  const [restaurant, user, foodItem] = await Promise.all([
+    FoodRestaurant.findById(restaurantId)
+      .select('restaurantName zoneId location isAcceptingOrders status')
+      .lean(),
+    FoodUser.findById(subscription.userId).select('name phone email').lean(),
+    mongoose.isValidObjectId(subscription.dishId)
+      ? FoodItem.findById(subscription.dishId).lean()
+      : null,
+  ]);
+
+  if (!restaurant) throw new ValidationError('Restaurant not found');
+  if (restaurant.status !== 'approved' || restaurant.isAcceptingOrders === false) {
+    throw new ValidationError('Restaurant is not accepting orders');
+  }
+
+  const deliveryAddress = normalizeDeliveryAddress(subscription.deliveryAddress, {
+    customerName: subscription.customerName || user?.name || '',
+    customerPhone: subscription.customerPhone || user?.phone || '',
+  });
+  if (!deliveryAddress.street || !deliveryAddress.city || !deliveryAddress.state) {
+    throw new ValidationError('Subscription delivery address is incomplete');
+  }
+
+  const itemPrice = Math.max(
+    0,
+    Number(foodItem?.price || subscription.creditPerOrder || 0),
+  );
+  const creditPerOrder = Math.max(0, Number(subscription.creditPerOrder || itemPrice));
+  const pricing = {
+    subtotal: creditPerOrder,
+    tax: 0,
+    packagingFee: 0,
+    deliveryFee: 0,
+    platformFee: 0,
+    restaurantCommission: 0,
+    discount: 0,
+    originalTotal: creditPerOrder,
+    payableTotal: 0,
+    subscriptionCreditApplied: creditPerOrder,
+    subscriptionWalletCredit: 0,
+    total: creditPerOrder,
+    currency: subscription.currency || 'INR',
+  };
+
+  let distanceKm = null;
+  if (
+    restaurant.location?.coordinates?.length === 2 &&
+    deliveryAddress.location?.coordinates?.length === 2
+  ) {
+    const [rLng, rLat] = restaurant.location.coordinates;
+    const [dLng, dLat] = deliveryAddress.location.coordinates;
+    const d = haversineKm(rLat, rLng, dLat, dLng);
+    distanceKm = Number.isFinite(d) ? d : null;
+  }
+
+  const riderEarning = Number(process.env.SUBSCRIPTION_RIDER_EARNING || 0);
+  const order = new FoodOrder({
+    userId: subscription.userId,
+    restaurantId: subscription.restaurantId,
+    zoneId: restaurant.zoneId || undefined,
+    items: [
+      {
+        itemId: String(subscription.dishId),
+        name: subscription.dishName,
+        price: itemPrice || creditPerOrder,
+        quantity: 1,
+        isVeg: String(foodItem?.foodType || '').toLowerCase() === 'veg',
+        image: foodItem?.image || '',
+        notes: `${schedule.mealName} subscription meal`,
+      },
+    ],
+    deliveryAddress,
+    customerName: subscription.customerName || user?.name || deliveryAddress.fullName || '',
+    customerPhone: subscription.customerPhone || user?.phone || deliveryAddress.phone || '',
+    pricing,
+    payment: {
+      method: 'subscription',
+      status: 'paid',
+      amountDue: 0,
+      razorpay: {},
+      qr: {},
+    },
+    subscriptionUsage: {
+      subscriptionId: subscription._id,
+      planId: subscription.planId || null,
+      planTitle: subscription.planTitle,
+      creditPerOrder,
+      subscriptionCreditApplied: creditPerOrder,
+      walletCreditAmount: 0,
+      payableTotal: 0,
+      status: 'applied',
+      appliedAt: new Date(),
+    },
+    orderStatus: 'preparing',
+    dispatch: { modeAtCreation: 'auto', status: 'unassigned' },
+    statusHistory: [
+      {
+        at: new Date(),
+        byRole: 'RESTAURANT',
+        byId: new mongoose.Types.ObjectId(restaurantId),
+        from: '',
+        to: 'preparing',
+        note: `Subscription meal sent to delivery${distanceKm != null ? ` (${distanceKm.toFixed(1)} km)` : ''}`,
+      },
+    ],
+    note: `Subscription meal: ${schedule.mealName}`,
+    restaurantNote: 'Created from subscription schedule',
+    sendCutlery: true,
+    deliveryFleet: 'standard',
+    scheduledAt: schedule.serviceDate,
+    riderEarning: Number.isFinite(riderEarning) ? Math.max(0, riderEarning) : 0,
+    platformProfit: 0,
+  });
+
+  await order.save();
+  await foodTransactionService.createInitialTransaction(order.toObject());
+
+  await consumeSubscriptionCredit({
+    subscriptionId: subscription._id,
+    userId: subscription.userId,
+    orderId: order._id,
+    orderTotal: pricing.total,
+  });
+
+  schedule.status = 'sent_to_delivery';
+  schedule.orderId = order._id;
+  schedule.sentAt = new Date();
+  await schedule.save();
+
+  try {
+    await dispatchService.tryAutoAssign(order._id);
+  } catch {
+    // Keep the created order visible; dispatch timeout job can retry.
+  }
+
+  await notifyOwnersSafely(
+    [{ ownerType: 'USER', ownerId: subscription.userId }],
+    {
+      title: 'Subscription meal is being prepared',
+      body: `${subscription.dishName} is being sent for delivery.`,
+      data: {
+        type: 'subscription_meal_sent',
+        orderId: String(order._id),
+        orderMongoId: String(order._id),
+      },
+    },
+  );
+
+  enqueueOrderEvent('subscription_meal_sent_to_delivery', {
+    subscriptionId: String(subscription._id),
+    scheduleId: String(schedule._id),
+    orderMongoId: String(order._id),
+    restaurantId: String(restaurantId),
+  });
+
+  const refreshed = await FoodOrder.findById(order._id);
+  return {
+    schedule,
+    order: normalizeOrderForClient(refreshed || order),
+    alreadySent: false,
+  };
+}
+
 export async function listSubscriptionsForUser(userId) {
   const subscriptions = await FoodSubscription.find({
     userId: new mongoose.Types.ObjectId(userId),

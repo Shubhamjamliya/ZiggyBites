@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Link, useNavigate } from "react-router-dom"
-import { Phone, ArrowRight, ShieldCheck, Loader2, Utensils, Star, Heart, ShieldQuestion } from "lucide-react"
+import { Phone, ArrowRight, Loader2, Mail, ShieldCheck, Heart, ShieldQuestion } from "lucide-react"
 import { toast } from "sonner"
 import { authAPI, userAPI } from "@food/api"
 import { setAuthData } from "@food/utils/auth"
@@ -280,10 +280,175 @@ export default function UnifiedOTPFastLogin() {
     return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`
   }
 
-  const primaryColor = "#7e3866" // Rebranded Plum color
-
   return (
-    <div className="min-h-screen bg-white dark:bg-[#0a0a0a] flex flex-col relative overflow-hidden font-['Poppins']">
+    <div className="min-h-screen bg-white flex flex-col relative overflow-hidden font-['Poppins'] text-[#202030]">
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="absolute left-8 top-14 h-8 w-8 rounded-full border border-red-100 opacity-70" />
+        <div className="absolute right-10 top-24 h-5 w-5 rotate-12 rounded border border-red-100 opacity-60" />
+        <div className="absolute left-6 top-44 h-4 w-4 rotate-45 rounded-sm border border-red-100 opacity-60" />
+        <div className="absolute bottom-0 left-0 right-0 h-28 bg-red-50" style={{ clipPath: "polygon(0 60%, 18% 78%, 38% 67%, 58% 84%, 78% 62%, 100% 48%, 100% 100%, 0 100%)" }} />
+        <div className="absolute bottom-0 left-0 right-0 h-20 bg-[#ff1f1f]" style={{ clipPath: "polygon(0 82%, 22% 70%, 46% 84%, 70% 64%, 100% 42%, 100% 100%, 0 100%)" }} />
+      </div>
+
+      <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-sm flex-col px-7 pb-24 pt-10">
+        <motion.div
+          initial={{ opacity: 0, y: 24 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.45, ease: "easeOut" }}
+          className="w-full"
+        >
+          <div className="text-center">
+            <div className="relative mx-auto mb-2 flex h-36 w-36 items-center justify-center rounded-full bg-[#fff7f2]">
+              {brand.logoUrl ? (
+                <img
+                  src={brand.logoUrl}
+                  alt={`${brand.companyName || "Company"} Logo`}
+                  className="h-32 w-32 object-contain"
+                  onError={() => setBrand((prev) => ({ ...prev, logoUrl: null }))}
+                />
+              ) : (
+                <div className="flex h-28 w-28 items-center justify-center rounded-full bg-red-50 text-5xl font-black text-[#ff1f1f]">
+                  {(brand.companyName || "Z").trim().charAt(0).toUpperCase()}
+                </div>
+              )}
+            </div>
+            <h1 className="text-4xl font-black italic tracking-tight text-[#ff1f1f] drop-shadow-sm">
+              {brand.companyName || "ZiggyBites"}
+            </h1>
+            <div className="mx-auto mt-2 h-1 w-16 rounded-full bg-[#ff1f1f]" />
+          </div>
+
+          <div className="mt-8">
+            <AnimatePresence mode="wait">
+              {step === 1 ? (
+                <motion.form
+                  key="new-step-1"
+                  initial={{ opacity: 0, x: -16 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: 16 }}
+                  onSubmit={handleSendOTP}
+                  className="space-y-4"
+                >
+                  <div className="relative rounded-xl bg-white shadow-[0_8px_28px_rgba(15,23,42,0.08)] ring-1 ring-gray-100">
+                    <div className="absolute inset-y-0 left-4 flex items-center">
+                      <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-red-50 text-[#ff1f1f]">
+                        <Phone className="h-4 w-4" />
+                      </span>
+                    </div>
+                    <span className="absolute left-16 top-[33px] -translate-y-1/2 text-sm font-black leading-none text-[#202030]">
+                      +91
+                    </span>
+                    <input
+                      type="tel"
+                      required
+                      autoFocus
+                      value={phoneNumber}
+                      onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                      maxLength={10}
+                      className="block h-14 w-full rounded-xl bg-transparent pl-[92px] pr-4 pt-4 text-sm font-black leading-none text-[#202030] outline-none placeholder:text-gray-300"
+                      placeholder="98765 43210"
+                    />
+                    <div className="pointer-events-none absolute left-16 top-2 text-[9px] font-semibold text-gray-400">
+                      Enter your phone number
+                    </div>
+                  </div>
+
+                  <label className="flex items-center gap-2 text-[10px] font-semibold text-[#5f5f6f]">
+                    <input type="checkbox" defaultChecked className="h-3.5 w-3.5 rounded border-red-200 accent-[#ff2727]" />
+                    Remember me for faster sign-in
+                  </label>
+
+                  <button
+                    type="submit"
+                    disabled={loading || phoneNumber.length < 10}
+                    className="relative flex h-12 w-full items-center justify-center rounded-xl bg-gradient-to-r from-[#ef1f1f] to-[#ff641f] text-sm font-black text-white shadow-[0_12px_24px_rgba(255,49,31,0.25)] transition active:scale-[0.98] disabled:opacity-60"
+                  >
+                    {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : "Continue"}
+                    {!loading && <ArrowRight className="absolute right-5 h-4 w-4" />}
+                  </button>
+                </motion.form>
+              ) : (
+                <motion.form
+                  key="new-step-2"
+                  initial={{ opacity: 0, x: 16 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -16 }}
+                  onSubmit={handleVerifyOTP}
+                  className="space-y-4"
+                >
+                  <p className="text-center text-xs font-semibold text-gray-500">
+                    Enter the code sent to +91 {phoneNumber}
+                  </p>
+                  <div className="flex justify-between gap-3">
+                    {[0, 1, 2, 3].map((index) => (
+                      <input
+                        key={index}
+                        id={`otp-${index}`}
+                        type="tel"
+                        inputMode="numeric"
+                        required
+                        autoFocus={index === 0}
+                        value={otp[index] || ""}
+                        onChange={(e) => {
+                          const val = e.target.value.replace(/\D/g, "").slice(-1)
+                          if (!val) return
+                          const newOtp = otp.split("")
+                          newOtp[index] = val
+                          const combined = newOtp.join("").slice(0, 4)
+                          setOtp(combined)
+                          if (index < 3 && val) document.getElementById(`otp-${index + 1}`)?.focus()
+                        }}
+                        className="h-14 w-full rounded-xl bg-white text-center text-2xl font-black text-[#202030] shadow-[0_8px_28px_rgba(15,23,42,0.08)] ring-1 ring-gray-100 outline-none focus:ring-[#ff2727]"
+                      />
+                    ))}
+                  </div>
+                  <div className="text-center text-[11px] font-semibold">
+                    {resendTimer > 0 ? (
+                      <span className="text-gray-400">Resend code in <span className="text-[#ff2727]">{formatResendTimer(resendTimer)}</span></span>
+                    ) : (
+                      <button type="button" onClick={handleResendOTP} className="text-[#ff2727]">Resend code</button>
+                    )}
+                    <button type="button" onClick={handleEditNumber} className="ml-4 text-gray-400">Edit number</button>
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={loading || otp.length < 4}
+                    className="flex h-12 w-full items-center justify-center rounded-xl bg-gradient-to-r from-[#ef1f1f] to-[#ff641f] text-sm font-black text-white shadow-[0_12px_24px_rgba(255,49,31,0.25)] transition active:scale-[0.98] disabled:opacity-60"
+                  >
+                    {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : "Verify & Continue"}
+                  </button>
+                </motion.form>
+              )}
+            </AnimatePresence>
+          </div>
+
+          <div className="mt-5 flex items-center gap-3">
+            <div className="h-px flex-1 bg-gray-100" />
+            <span className="text-[10px] font-semibold text-gray-400">or continue with</span>
+            <div className="h-px flex-1 bg-gray-100" />
+          </div>
+
+          <div className="mt-4 flex justify-center gap-6">
+            <button type="button" className="flex h-11 w-14 items-center justify-center rounded-full bg-white text-lg font-black text-[#4285f4] shadow-[0_8px_24px_rgba(15,23,42,0.08)] ring-1 ring-gray-100">
+              G
+            </button>
+            <button type="button" className="flex h-11 w-14 items-center justify-center rounded-full bg-white text-[#ff3027] shadow-[0_8px_24px_rgba(15,23,42,0.08)] ring-1 ring-gray-100">
+              <Mail className="h-5 w-5 fill-red-50" />
+            </button>
+          </div>
+
+          <p className="mx-auto mt-5 max-w-[260px] text-center text-[9px] font-semibold leading-4 text-gray-400">
+            By continuing, you agree to our<br />
+            <Link to="/food/user/profile/terms" className="font-black text-[#ff2727] underline">Terms of Service</Link>
+            <span> • </span>
+            <Link to="/food/user/profile/privacy" className="font-black text-[#ff2727] underline">Privacy Policy</Link>
+            <span> • </span>
+            <Link to="/food/user/profile/cancellation" className="font-black text-[#ff2727] underline">Content Policy</Link>
+          </p>
+        </motion.div>
+      </div>
+
+      <div className="hidden">
       {/* Decorative Background Elements */}
       <div className="absolute top-0 left-0 w-full h-[600px] bg-gradient-to-b from-[#7e3866]/10 via-[#7e3866]/5 to-transparent pointer-events-none" />
       <div className="absolute top-[-100px] right-[-100px] w-[500px] h-[500px] bg-[#7e3866]/5 rounded-full blur-[120px] pointer-events-none animate-pulse" />
@@ -502,6 +667,8 @@ export default function UnifiedOTPFastLogin() {
             </div>
           </div>
         </motion.div>
+      </div>
+
       </div>
 
       {/* Name Collection Modal */}

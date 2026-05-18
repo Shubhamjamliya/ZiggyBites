@@ -19,6 +19,7 @@ import { restaurantAPI, adminAPI } from "@food/api"
 import { isModuleAuthenticated } from "@food/utils/auth"
 import { flattenMenuItems, getMenuFromResponse } from "@food/utils/menuItems"
 import { calculateDistance, formatDistance } from "@food/utils/common"
+import { DEFAULT_APP_CUSTOMIZATION, loadAppCustomization } from "@food/utils/appCustomization"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -93,6 +94,7 @@ export default function Under250() {
   const [loadingRestaurants, setLoadingRestaurants] = useState(true)
   const [hasScrolledPastBanner, setHasScrolledPastBanner] = useState(false)
   const [under250PriceLimit, setUnder250PriceLimit] = useState(250)
+  const [appCustomization, setAppCustomization] = useState(DEFAULT_APP_CUSTOMIZATION)
   const bannerShellRef = useRef(null)
   const stickyHeaderRef = useRef(null)
   const autoSlideIntervalRef = useRef(null)
@@ -599,6 +601,41 @@ export default function Under250() {
   }, [])
 
   useEffect(() => {
+    let mounted = true
+    loadAppCustomization()
+      .then((settings) => {
+        if (mounted) setAppCustomization(settings)
+      })
+      .catch(() => {})
+    return () => {
+      mounted = false
+    }
+  }, [])
+
+  const openMealSelection = (item, restaurantName = null) => {
+    const itemId = item.itemId || item.id || ""
+    const restaurantId = item.mongoRestaurantId || item.restaurantMongoId || item.restaurantId || ""
+    const restaurant = restaurantName || item.restaurant || ""
+    const dish = { ...item, itemId, restaurantId, restaurantName: restaurant }
+    const params = new URLSearchParams()
+
+    if (item.name) params.set("dish", item.name)
+    if (itemId) params.set("dishId", itemId)
+    if (restaurant) params.set("restaurant", restaurant)
+    if (restaurantId) params.set("restaurantId", restaurantId)
+    if (item.categoryName) params.set("category", item.categoryName)
+    if (Number.isFinite(Number(item.price))) params.set("price", String(item.price))
+
+    navigate(
+      {
+        pathname: "/food/user/choose-meal",
+        search: params.toString() ? `?${params.toString()}` : "",
+      },
+      { state: { dish } },
+    )
+  }
+
+  useEffect(() => {
     const handleBannerScroll = () => {
       const bannerShell = bannerShellRef.current
       const stickyHeader = stickyHeaderRef.current
@@ -629,6 +666,11 @@ export default function Under250() {
     if (!isModuleAuthenticated('user')) {
       toast.error("Please login to add items to cart")
       navigate('/user/auth/login', { state: { from: location.pathname } })
+      return
+    }
+
+    if (appCustomization.normalOrderFlowEnabled === false) {
+      openMealSelection(item, restaurantName)
       return
     }
 

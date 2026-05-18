@@ -96,6 +96,7 @@ import api, { publicGetOnce, restaurantAPI, adminAPI } from "@food/api";
 import { API_BASE_URL } from "@food/api/config";
 import OptimizedImage from "@food/components/OptimizedImage";
 import { getRestaurantAvailabilityStatus } from "@food/utils/restaurantAvailability";
+import { DEFAULT_APP_CUSTOMIZATION, loadAppCustomization } from "@food/utils/appCustomization";
 import HomeHeader from "@food/components/user/home/HomeHeader";
 import QuickSection from "@food/components/user/home/QuickSection";
 import PromoRow from "@food/components/user/home/PromoRow";
@@ -1169,10 +1170,56 @@ export default function Home() {
     getDefaultAddress,
   } = profileContext;
   const { addToCart, cart } = useCart();
+  const [appCustomization, setAppCustomization] = useState(DEFAULT_APP_CUSTOMIZATION);
+  const openMealSelectionForHomeItem = useCallback(
+    (item) => {
+      const params = new URLSearchParams();
+      const itemId = item.itemId || item.id || "";
+      const restaurantId =
+        item.mongoRestaurantId ||
+        item.restaurantMongoId ||
+        item.restaurantId ||
+        "";
+
+      if (item.name) params.set("dish", item.name);
+      if (itemId) params.set("dishId", itemId);
+      if (item.restaurantName) params.set("restaurant", item.restaurantName);
+      if (restaurantId) params.set("restaurantId", restaurantId);
+      if (item.categoryName) params.set("category", item.categoryName);
+      if (Number.isFinite(Number(item.price))) params.set("price", String(item.price));
+
+      navigate(
+        {
+          pathname: "/food/user/choose-meal",
+          search: params.toString() ? `?${params.toString()}` : "",
+        },
+        { state: { dish: { ...item, itemId, restaurantId } } },
+      );
+    },
+    [navigate],
+  );
+
+  useEffect(() => {
+    let mounted = true;
+    loadAppCustomization()
+      .then((settings) => {
+        if (mounted) setAppCustomization(settings);
+      })
+      .catch(() => {});
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
   const handleAddHomeItemToCart = useCallback(
     (event, item) => {
       event.preventDefault();
       event.stopPropagation();
+
+      if (appCustomization.normalOrderFlowEnabled === false) {
+        openMealSelectionForHomeItem(item);
+        return;
+      }
 
       const cartPayload = {
         id: item.itemId || item.id,
@@ -1201,7 +1248,7 @@ export default function Home() {
 
       toast.success(`${item.name || "Item"} added to cart`);
     },
-    [addToCart],
+    [addToCart, appCustomization.normalOrderFlowEnabled, openMealSelectionForHomeItem],
   );
   const { location, loading, requestLocation } = useLocation();
   const {

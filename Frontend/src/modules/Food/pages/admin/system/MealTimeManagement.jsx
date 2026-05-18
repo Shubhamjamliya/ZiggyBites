@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowDown,
   ArrowUp,
@@ -43,14 +43,15 @@ export default function MealTimeManagement() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const fileInputRef = useRef(null);
 
   const isEditing = Boolean(form.id);
 
   const authConfig = useMemo(() => {
     const token = getModuleToken("admin");
     return token
-      ? { headers: { Authorization: `Bearer ${token}` } }
-      : {};
+      ? { contextModule: "admin", headers: { Authorization: `Bearer ${token}` } }
+      : { contextModule: "admin" };
   }, []);
 
   const loadSlots = async () => {
@@ -72,13 +73,20 @@ export default function MealTimeManagement() {
 
   const resetForm = () => {
     if (form.previewUrl && form.image) URL.revokeObjectURL(form.previewUrl);
+    if (fileInputRef.current) fileInputRef.current.value = "";
     setForm(emptyForm);
   };
 
   const handleFileChange = (event) => {
     const file = event.target.files?.[0] || null;
     if (!file) return;
+    if (!String(file.type || "").startsWith("image/")) {
+      setError("Please upload a valid image file");
+      event.target.value = "";
+      return;
+    }
     if (form.previewUrl && form.image) URL.revokeObjectURL(form.previewUrl);
+    setError("");
     setForm((current) => ({
       ...current,
       image: file,
@@ -126,7 +134,15 @@ export default function MealTimeManagement() {
       };
 
       if (isEditing) {
-        await api.patch(`/food/meal-slots/${form.id}`, body, config);
+        const response = await api.patch(`/food/meal-slots/${form.id}`, body, config);
+        const updatedSlot = response?.data?.data?.slot;
+        if (updatedSlot?.imageUrl) {
+          setSlots((current) =>
+            current.map((slot) =>
+              (slot._id || slot.id) === form.id ? { ...slot, ...updatedSlot } : slot,
+            ),
+          );
+        }
       } else {
         await api.post("/food/meal-slots", body, config);
       }
@@ -291,10 +307,17 @@ export default function MealTimeManagement() {
                 <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-bold text-slate-700">
                   <Upload className="h-4 w-4" />
                   Upload
-                  <input type="file" accept="image/*" onChange={handleFileChange} className="hidden" />
+                  <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileChange} className="hidden" />
                 </label>
                 {form.previewUrl && (
-                  <img src={form.previewUrl} alt="Meal preview" className="h-16 w-20 rounded-lg object-cover" />
+                  <div className="flex items-center gap-2">
+                    <img src={form.previewUrl} alt="Meal preview" className="h-16 w-20 rounded-lg object-cover" />
+                    {form.image && (
+                      <span className="max-w-[140px] truncate text-xs font-semibold text-slate-500">
+                        {form.image.name}
+                      </span>
+                    )}
+                  </div>
                 )}
               </div>
             </label>

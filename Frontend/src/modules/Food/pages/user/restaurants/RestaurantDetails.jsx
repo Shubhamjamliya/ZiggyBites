@@ -125,6 +125,32 @@ function RestaurantDetailsContent() {
     return quantities[lineItemId] || 0
   }
 
+  const openMealSelection = (item) => {
+    const restaurantId = restaurant?.restaurantId || restaurant?._id || restaurant?.id || ""
+    const dish = {
+      ...item,
+      id: item?.id || item?._id || "",
+      itemId: item?.itemId || item?.id || item?._id || "",
+      restaurantName: restaurant?.name || item?.restaurantName || "",
+      restaurantId,
+      categoryName: item?.categoryName || selectedMenuCategory || "",
+      price: getFoodDisplayPrice(item),
+    }
+
+    const params = new URLSearchParams()
+    if (dish.name) params.set("dish", dish.name)
+    if (dish.itemId) params.set("dishId", dish.itemId)
+    if (dish.restaurantName) params.set("restaurant", dish.restaurantName)
+    if (dish.restaurantId) params.set("restaurantId", dish.restaurantId)
+    if (dish.categoryName) params.set("category", dish.categoryName)
+    if (Number.isFinite(Number(dish.price))) params.set("price", String(dish.price))
+
+    navigate({
+      pathname: "/food/user/choose-meal",
+      search: params.toString() ? `?${params.toString()}` : "",
+    }, { state: { dish } })
+  }
+
   // Initialize filters from localStorage if available
   const [filters, setFilters] = useState(() => {
     if (typeof window === "undefined" || !slug) {
@@ -1137,7 +1163,7 @@ function RestaurantDetailsContent() {
     }
 
     if (appCustomization.normalOrderFlowEnabled === false) {
-      toast.error("Normal ordering is currently unavailable")
+      openMealSelection(item)
       return
     }
 
@@ -2027,8 +2053,7 @@ function RestaurantDetailsContent() {
 
   const availabilityStatus = getRestaurantAvailabilityStatus(restaurant, new Date(availabilityTick))
   const isRestaurantOffline = !availabilityStatus.isOpen
-  const isNormalOrderFlowPaused = appCustomization.normalOrderFlowEnabled === false
-  const shouldShowGrayscale = isOutOfService || isRestaurantOffline || isNormalOrderFlowPaused
+  const shouldShowGrayscale = isOutOfService || isRestaurantOffline
 
   return (
     <AnimatedPage

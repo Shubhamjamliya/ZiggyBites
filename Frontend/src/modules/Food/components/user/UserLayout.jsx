@@ -113,7 +113,7 @@ export default function UserLayout() {
   // Note: Authentication checks and redirects are handled by ProtectedRoute components
   // UserLayout should not interfere with authentication redirects
 
-  // Show bottom navigation only on home page, dining page, under-250 page, and profile page
+  // Show bottom navigation on the primary mobile app tabs.
   const path = location.pathname.startsWith("/food")
     ? location.pathname.substring(5) || "/"
     : location.pathname
@@ -122,18 +122,24 @@ export default function UserLayout() {
 
   const isProfileRoot =
     normalizedPath === "/profile" ||
-    normalizedPath === "/user/profile"
+    normalizedPath === "/user/profile" ||
+    normalizedPath.startsWith("/user/profile/")
+
+  const isSubscriptionRoute =
+    normalizedPath === "/user/choose-meal" ||
+    normalizedPath === "/user/subscription-plans" ||
+    normalizedPath === "/user/checkout"
+
+  const isHistoryRoute =
+    normalizedPath === "/user/orders" ||
+    normalizedPath.startsWith("/user/orders/")
 
   const showBottomNav = normalizedPath === "/" ||
     normalizedPath === "/user" ||
-    normalizedPath === "/dining" ||
-    normalizedPath === "/user/dining" ||
-    normalizedPath === "/under-250" ||
-    normalizedPath === "/user/under-250" ||
+    isSubscriptionRoute ||
+    isHistoryRoute ||
     isProfileRoot ||
     normalizedPath === "" // Handle empty string case for root relative to /food
-
-  const isUnder250 = normalizedPath === "/under-250" || normalizedPath === "/user/under-250"
 
   return (
     <div className="min-h-screen bg-[#f5f5f5] dark:bg-[#0a0a0a] transition-colors duration-200">
@@ -145,7 +151,7 @@ export default function UserLayout() {
                 {/* <Navbar /> */}
                 {/* Desktop Navbar - Hidden on mobile, visible on medium+ screens */}
                 <div className="hidden md:block">
-                  {showBottomNav && <DesktopNavbar showLogo={!isUnder250} />}
+                  {showBottomNav && <DesktopNavbar />}
                 </div>
                 <LocationPrompt />
                 <main className={showBottomNav ? "md:pt-40" : ""}>

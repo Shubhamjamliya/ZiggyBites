@@ -38,11 +38,36 @@ export default function AddToCartButton({ item, className = "" }) {
     }
 
     if (appCustomization.normalOrderFlowEnabled === false) {
-      toast.error("Normal ordering is currently unavailable")
+      openMealSelection()
       return
     }
 
     addToCart(item)
+  }
+
+  const openMealSelection = () => {
+    const itemId = item.itemId || item.id || ""
+    const restaurantId =
+      item.mongoRestaurantId ||
+      item.restaurantMongoId ||
+      item.restaurantId ||
+      ""
+    const params = new URLSearchParams()
+
+    if (item.name) params.set("dish", item.name)
+    if (itemId) params.set("dishId", itemId)
+    if (item.restaurantName || item.restaurant) params.set("restaurant", item.restaurantName || item.restaurant)
+    if (restaurantId) params.set("restaurantId", restaurantId)
+    if (item.categoryName) params.set("category", item.categoryName)
+    if (Number.isFinite(Number(item.price))) params.set("price", String(item.price))
+
+    navigate(
+      {
+        pathname: "/food/user/choose-meal",
+        search: params.toString() ? `?${params.toString()}` : "",
+      },
+      { state: { dish: { ...item, itemId, restaurantId } } },
+    )
   }
 
   const handleIncrease = (e) => {
@@ -60,7 +85,15 @@ export default function AddToCartButton({ item, className = "" }) {
   }
 
   if (appCustomization.normalOrderFlowEnabled === false) {
-    return null
+    return (
+      <Button
+        size="sm"
+        onClick={handleAddToCart}
+        className={`bg-[#7e3866] hover:bg-[#55254b] text-white font-bold shadow-md transition-all active:scale-95 ${className}`}
+      >
+        Add
+      </Button>
+    )
   }
 
   if (inCart) {

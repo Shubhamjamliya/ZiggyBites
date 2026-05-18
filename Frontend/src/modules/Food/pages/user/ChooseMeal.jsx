@@ -5,8 +5,6 @@ import {
   CalendarDays,
   ChefHat,
   Coffee,
-  MessageCircle,
-  Moon,
   Soup,
   UserCircle2,
   Utensils,
@@ -145,84 +143,61 @@ export default function ChooseMeal() {
     };
   }, []);
 
+  const continueToPlans = () => {
+    if (!canContinue) return;
+    const mealsToPass = mealSlots
+      .filter((slot) => selectedSlots.includes(slot.id))
+      .map(({ icon, ...rest }) => rest);
+    navigate("/food/user/subscription-plans", {
+      state: {
+        dish,
+        selectedMeals: mealsToPass,
+      },
+    });
+  };
+
   return (
-    <div className="min-h-screen bg-white text-gray-900 font-sans">
-      <div className="mx-auto flex min-h-screen w-full max-w-md flex-col px-4 pb-24 pt-4">
+    <div className="min-h-screen bg-white text-[#171724] font-['Poppins',sans-serif]">
+      <div className="mx-auto flex min-h-screen w-full max-w-md flex-col px-4 pb-28 pt-3">
         <header className="flex items-center justify-between">
           <button
             type="button"
             onClick={() => navigate(-1)}
-            className="flex h-10 w-10 items-center justify-center rounded-full text-gray-900 active:bg-gray-100"
+            className="flex h-9 w-9 items-center justify-center rounded-full text-[#171724] active:bg-gray-100"
             aria-label="Go back"
           >
-            <ArrowLeft className="h-6 w-6" />
+            <ArrowLeft className="h-5 w-5" strokeWidth={2.5} />
           </button>
-          <h1 className="flex-1 text-left text-lg font-bold">
+          <h1 className="flex-1 text-left text-xl font-black tracking-tight">
             Choose your meal
           </h1>
           <button
             type="button"
             onClick={() => navigate("/food/user/profile")}
-            className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-50 text-gray-700 shadow-sm"
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-50 text-gray-600 shadow-sm ring-1 ring-gray-200"
             aria-label="Profile"
           >
-            <UserCircle2 className="h-6 w-6" />
+            <UserCircle2 className="h-6 w-6" strokeWidth={2} />
           </button>
         </header>
 
-        <section className="mt-5 rounded-[16px] border border-gray-100 bg-gray-50 p-3">
-          <div className="flex gap-3">
-            <div className="h-16 w-20 shrink-0 overflow-hidden rounded-xl bg-red-50">
-              {dish.image ? (
-                <img
-                  src={dish.image}
-                  alt={dish.name}
-                  className="h-full w-full object-cover"
-                />
-              ) : (
-                <span className="flex h-full w-full items-center justify-center text-xl font-bold text-[#ef2b24]">
-                  {String(dish.name || "M").slice(0, 1).toUpperCase()}
-                </span>
-              )}
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-base font-bold">{dish.name}</p>
-              {[dish.restaurantName, dish.categoryName]
-                .filter(Boolean)
-                .map((line) => (
-                  <p
-                    key={line}
-                    className="mt-0.5 truncate text-xs font-medium text-gray-500"
-                  >
-                    {line}
-                  </p>
-                ))}
-              {dish.price && (
-                <p className="mt-1 text-sm font-bold text-[#ef2b24]">
-                  Rs. {dish.price}
-                </p>
-              )}
-            </div>
-          </div>
-        </section>
-
-        <p className="mt-5 text-sm font-medium leading-6 text-gray-600">
+        <p className="mt-4 pl-10 pr-6 text-[12px] font-semibold leading-5 text-[#6d6a7d]">
           Pick your preferred meal time to get started. Once you choose at
           least one meal, you can continue to the plan page.
         </p>
 
         <section className="mt-7">
           <div className="flex items-end justify-between">
-            <h2 className="text-lg font-bold">
+            <h2 className="text-lg font-black tracking-tight">
               Select Meal Time
             </h2>
-            <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-[#ef2b24]">
+            <span className="flex items-center gap-1 text-[9px] font-black uppercase tracking-wide text-[#e32c31]">
               Daily Schedule
-              <CalendarDays className="h-3.5 w-3.5" strokeWidth={2} />
+              <CalendarDays className="h-3.5 w-3.5" strokeWidth={2.4} />
             </span>
           </div>
 
-          <div className="mt-4 grid grid-cols-2 gap-4">
+          <div className="mt-4 grid grid-cols-2 gap-3">
             {mealSlots.map((slot) => {
               const Icon = slot.icon;
               const active = selectedSlots.includes(slot.id);
@@ -231,38 +206,40 @@ export default function ChooseMeal() {
                   key={slot.id}
                   type="button"
                   onClick={() => toggleSlot(slot.id)}
-                  className={`relative min-h-[160px] overflow-hidden rounded-[16px] border p-4 text-left shadow-sm transition active:scale-[0.98] ${
+                  className={`relative min-h-[164px] overflow-hidden rounded-[14px] border px-4 pb-3 pt-3 text-left shadow-sm transition active:scale-[0.98] ${
                     active
-                      ? "border-[#ef2b24] ring-2 ring-[#ef2b24]/10"
-                      : "border-transparent bg-[#f9f9f9]"
+                      ? "border-[#e32c31] ring-2 ring-[#e32c31]/10"
+                      : "border-transparent"
                   }`}
                   style={{
-                    backgroundColor: active ? "#fff1f1" : slot.backgroundColor,
+                    backgroundColor: slot.backgroundColor,
                   }}
                 >
-                  <span className="absolute right-3 top-3 h-5 w-5 rounded-full border-2 border-gray-300 bg-white">
+                  <span className="absolute right-3 top-3 h-4 w-4 rounded-full border-2 border-[#a4a0a5] bg-white">
                     {active && (
-                      <span className="absolute inset-0.5 rounded-full bg-[#ef2b24]" />
+                      <span className="absolute inset-[3px] rounded-full bg-[#e32c31]" />
                     )}
                   </span>
-                  <span className="flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm">
-                    <Icon className="h-5 w-5" style={{ color: slot.accentColor }} strokeWidth={2} />
-                  </span>
-                  <p className="mt-4 text-[15px] font-bold">{slot.title}</p>
-                  <p
-                    className="mt-1 text-[10px] font-bold uppercase tracking-wider"
-                    style={{ color: slot.accentColor }}
-                  >
-                    {slot.timeLabel}
-                  </p>
+                  <div className="absolute left-4 top-3 z-10 max-w-[76%]">
+                    <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white shadow-sm">
+                      <Icon className="h-5 w-5" style={{ color: slot.accentColor }} strokeWidth={2.3} />
+                    </span>
+                    <p className="mt-2 text-[14px] font-black leading-tight">{slot.title}</p>
+                    <p
+                      className="mt-1 text-[9px] font-black uppercase tracking-wide"
+                      style={{ color: slot.accentColor }}
+                    >
+                      {slot.timeLabel}
+                    </p>
+                  </div>
                   {slot.imageUrl ? (
                     <img
                       src={slot.imageUrl}
                       alt={slot.title}
-                      className="absolute bottom-0 right-0 h-20 w-[80%] object-contain mix-blend-multiply opacity-80"
+                      className="absolute bottom-0 left-1/2 h-[76px] w-[92%] -translate-x-1/2 object-contain"
                     />
                   ) : (
-                    <span className="absolute bottom-4 right-4 flex h-14 w-14 items-center justify-center rounded-full bg-white/60 text-xl font-bold opacity-70" style={{ color: slot.accentColor }}>
+                    <span className="absolute bottom-5 left-1/2 flex h-16 w-16 -translate-x-1/2 items-center justify-center rounded-full bg-white/70 text-2xl font-black opacity-80" style={{ color: slot.accentColor }}>
                       {String(slot.title).slice(0, 1).toUpperCase()}
                     </span>
                   )}
@@ -277,53 +254,42 @@ export default function ChooseMeal() {
           )}
         </section>
 
-        <section className="mt-7 overflow-hidden rounded-[16px] bg-gray-100">
-          {dish.image ? (
-            <img
-              src={dish.image}
-              alt={dish.name}
-              className="h-28 w-full object-cover grayscale opacity-50"
-            />
-          ) : (
-            <div className="flex h-28 w-full items-center justify-center text-gray-400">
-              <Moon className="h-8 w-8" />
+        <section className="mt-4 flex min-h-[88px] overflow-hidden rounded-[14px] bg-[#fff0ec]">
+          <div className="min-w-0 flex-1 px-4 py-3">
+            <p className="text-lg font-black leading-5 text-[#171724]">Good food.</p>
+            <p className="text-lg font-black leading-5 text-[#e32c31]">Made with care.</p>
+            <p className="mt-2 max-w-[170px] text-[9px] font-semibold leading-3 text-[#777184]">
+              Fresh ingredients, hygienic kitchens and on-time delivery every single day.
+            </p>
+          </div>
+          <div className="relative w-[42%] shrink-0">
+            {dish.image ? (
+              <img
+                src={dish.image}
+                alt={dish.name}
+                className="absolute bottom-0 right-2 h-24 w-28 rounded-full object-cover"
+              />
+            ) : (
+              <div className="absolute bottom-2 right-3 flex h-20 w-20 items-center justify-center rounded-full bg-white text-3xl font-black text-[#e32c31]">
+                {String(dish.name || "M").slice(0, 1).toUpperCase()}
+              </div>
+            )}
+            <div className="absolute right-3 top-3 flex h-12 w-12 rotate-12 items-center justify-center rounded-full bg-[#e32c31] text-center text-[8px] font-black uppercase leading-[9px] text-white shadow-md">
+              Fresh<br />Daily
             </div>
-          )}
+          </div>
         </section>
 
-        <button
-          type="button"
-          disabled={!canContinue}
-          onClick={() => {
-            const mealsToPass = mealSlots
-              .filter((slot) => selectedSlots.includes(slot.id))
-              .map(({ icon, ...rest }) => rest);
-            navigate("/food/user/subscription-plans", {
-              state: {
-                dish,
-                selectedMeals: mealsToPass,
-              },
-            });
-          }}
-          className={`mt-6 h-12 w-full rounded-xl text-sm font-bold text-white shadow-sm transition ${
-            canContinue
-              ? "bg-[#e3282c] active:scale-[0.98]"
-              : "bg-gray-300"
-          }`}
-        >
-          Continue
-        </button>
-
-        <div className="fixed bottom-24 right-5 z-20 md:right-[calc(50%-13rem)]">
+        {canContinue && (
           <button
             type="button"
-            onClick={() => navigate("/food/user/help")}
-            className="flex h-14 w-14 items-center justify-center rounded-full bg-[#e3282c] text-white shadow-xl"
-            aria-label="Help"
+            onClick={continueToPlans}
+            className="fixed bottom-[74px] left-4 right-4 z-30 mx-auto h-12 max-w-md rounded-xl bg-[#e32c31] text-sm font-black text-white shadow-lg shadow-red-200 active:scale-[0.98]"
           >
-            <MessageCircle className="h-6 w-6" />
+            Continue
           </button>
-        </div>
+        )}
+
       </div>
     </div>
   );

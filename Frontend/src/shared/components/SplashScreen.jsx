@@ -1,163 +1,132 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Zap, Clock, Star, ShoppingBasket, ShoppingBag } from 'lucide-react';
+import { Cookie, CupSoda, IceCreamBowl, Pizza, ShoppingBag } from 'lucide-react';
+import { getCachedSettings, loadBusinessSettings } from '@/modules/Food/utils/businessSettings';
 
 export default function SplashScreen({ onFinish }) {
   const [isFinishing, setIsFinishing] = useState(false);
+  const [brand, setBrand] = useState(() => {
+    const cached = getCachedSettings();
+    return {
+      logoUrl: cached?.logo?.url || '',
+      companyName: cached?.companyName || 'ZiggyBites',
+    };
+  });
 
   useEffect(() => {
-    // Show splash for 1.8 seconds then start finish animation
+    let mounted = true;
+    loadBusinessSettings()
+      .then((settings) => {
+        if (!mounted || !settings) return;
+        setBrand({
+          logoUrl: settings.logo?.url || '',
+          companyName: settings.companyName || 'ZiggyBites',
+        });
+      })
+      .catch(() => {});
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
     const timer = setTimeout(() => {
       setIsFinishing(true);
-      // Wait for the finish animation (zoom) to complete then unmount
       setTimeout(() => {
         if (onFinish) onFinish();
-      }, 600); // Duration of the zoom out
+      }, 550);
     }, 1800);
 
     return () => clearTimeout(timer);
   }, [onFinish]);
 
-  const foodIcons = [
-    { Icon: Zap, x: '10%', y: '20%', delay: 0.1 },
-    { Icon: Clock, x: '80%', y: '15%', delay: 0.3 },
-    { Icon: Star, x: '15%', y: '80%', delay: 0.5 },
-    { Icon: ShoppingBasket, x: '85%', y: '75%', delay: 0.2 },
-    { Icon: ShoppingBag, x: '50%', y: '10%', delay: 0.4 },
+  const doodles = [
+    { Icon: Pizza, x: '14%', y: '14%', rotate: -18 },
+    { Icon: Cookie, x: '78%', y: '13%', rotate: 15 },
+    { Icon: CupSoda, x: '12%', y: '42%', rotate: -8 },
+    { Icon: IceCreamBowl, x: '82%', y: '38%', rotate: 12 },
+    { Icon: ShoppingBag, x: '80%', y: '73%', rotate: -10 },
+    { Icon: Cookie, x: '16%', y: '78%', rotate: 20 },
   ];
 
   return (
-    <div className="fixed inset-0 z-[99999] flex items-center justify-center overflow-hidden bg-[#7e3866]">
+    <div className="fixed inset-0 z-[99999] flex items-center justify-center overflow-hidden bg-white">
       <AnimatePresence mode="wait">
         {!isFinishing && (
           <motion.div
             key="splash-content"
             initial={{ opacity: 0, scale: 0.98 }}
             animate={{ opacity: 1, scale: 1 }}
-            exit={{ 
-              scale: 8, 
-              opacity: 0,
+            exit={{ opacity: 0, scale: 1.08 }}
+            transition={{
+              exit: { duration: 0.45, ease: [0.45, 0, 0.55, 1] },
+              duration: 0.35,
+              ease: 'easeOut',
             }}
-            transition={{ 
-              exit: { duration: 0.5, ease: [0.45, 0, 0.55, 1] },
-              duration: 0.4,
-              ease: "easeOut"
-            }}
-            style={{ willChange: "transform, opacity" }}
-            className="relative flex items-center justify-center w-full h-full"
+            className="relative h-full w-full max-w-md overflow-hidden bg-white"
           >
-            {/* Pulsing Aura Background - Simplified for Performance */}
-            <motion.div 
-              animate={{ 
-                scale: [1, 1.1, 1],
-                opacity: [0.2, 0.4, 0.2]
-              }}
-              transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-              style={{ transform: 'translateZ(0)', willChange: "transform, opacity" }}
-              className="absolute w-[400px] h-[400px] bg-white/5 rounded-full blur-[80px]"
-            />
-
-            {/* Floating Food Icons Background - Reduced count for smoothness */}
-            {foodIcons.slice(0, 3).map(({ Icon, x, y, delay }, index) => (
+            {doodles.map(({ Icon, x, y, rotate }, index) => (
               <motion.div
                 key={index}
                 initial={{ opacity: 0 }}
-                animate={{ 
-                  opacity: [0, 0.15, 0],
-                  y: [0, -20, 0]
-                }}
-                transition={{ 
-                  duration: 5, 
-                  repeat: Infinity, 
-                  delay: delay,
-                  ease: "linear" 
-                }}
-                className="absolute text-white/5"
-                style={{ 
-                  transform: 'translateZ(0)', 
-                  willChange: "transform, opacity",
-                  left: x, 
-                  top: y 
-                }}
+                animate={{ opacity: [0.16, 0.28, 0.16], y: [0, -8, 0] }}
+                transition={{ duration: 4, repeat: Infinity, delay: index * 0.2 }}
+                className="absolute text-red-100"
+                style={{ left: x, top: y, rotate }}
               >
-                <Icon className="w-16 h-16 md:w-24 md:h-24" strokeWidth={0.5} />
+                <Icon className="h-8 w-8" strokeWidth={1.2} />
               </motion.div>
             ))}
- 
-            {/* Central Brand Logic */}
-            <div className="relative">
+
+            <div className="absolute left-1/2 top-[35%] flex w-full -translate-x-1/2 -translate-y-1/2 flex-col items-center px-8">
+              <motion.div
+                initial={{ y: 16, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ delay: 0.12, duration: 0.45 }}
+                className="relative flex h-48 w-48 items-center justify-center rounded-full bg-[#fff7f2]"
+              >
+                <div className="absolute left-2 top-1/2 h-0.5 w-14 -translate-y-8 rounded-full bg-gray-800/40" />
+                <div className="absolute left-0 top-1/2 h-0.5 w-20 -translate-y-3 rounded-full bg-gray-800/35" />
+                <div className="absolute left-6 top-1/2 h-0.5 w-12 translate-y-2 rounded-full bg-gray-800/30" />
+                {brand.logoUrl ? (
+                  <img
+                    src={brand.logoUrl}
+                    alt={`${brand.companyName} logo`}
+                    className="relative z-10 h-40 w-40 object-contain"
+                    onError={() => setBrand((current) => ({ ...current, logoUrl: '' }))}
+                  />
+                ) : (
+                  <div className="relative z-10 flex h-32 w-32 items-center justify-center rounded-full bg-red-50 text-6xl font-black text-[#f21d1d]">
+                    {String(brand.companyName || 'Z').charAt(0).toUpperCase()}
+                  </div>
+                )}
+              </motion.div>
+
               <motion.h1
-                initial={{ scale: 0.9, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                transition={{ 
-                  type: 'spring', 
-                  stiffness: 100, 
-                  damping: 15
-                }}
-                style={{ transform: 'translateZ(0)', willChange: "transform, opacity" }}
-                className="text-7xl md:text-9xl font-black tracking-tighter text-white relative font-['Outfit'] select-none"
-              >
-                ZIGGYBITES
-                
-                {/* Optimized Shine Effect Layer */}
-                <motion.div
-                  initial={{ x: '-150%' }}
-                  animate={{ x: '150%' }}
-                  transition={{ 
-                    duration: 1.8, 
-                    repeat: Infinity, 
-                    repeatDelay: 1,
-                    ease: "easeInOut"
-                  }}
-                  className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent skew-x-[-20deg] pointer-events-none"
-                  style={{ 
-                    mixBlendMode: 'overlay',
-                    willChange: "transform",
-                    transform: 'translateZ(0)'
-                  }}
-                />
-              </motion.h1>
- 
-              {/* Tagline */}
-              <motion.p
                 initial={{ y: 10, opacity: 0 }}
-                animate={{ y: 0, opacity: 0.8 }}
-                transition={{ delay: 0.5, duration: 0.6 }}
-                className="text-center text-white/90 font-black tracking-[0.5em] text-[10px] md:text-[12px] uppercase mt-5"
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ delay: 0.25, duration: 0.45 }}
+                className="mt-1 text-4xl font-black italic tracking-tight text-[#f21d1d]"
               >
-                Premium Food Delivery
-              </motion.p>
+                {brand.companyName || 'ZiggyBites'}
+              </motion.h1>
             </div>
- 
-            {/* Bottom Signature */}
-            <motion.div 
-               initial={{ opacity: 0 }}
-               animate={{ opacity: 0.4 }}
-               transition={{ delay: 0.8 }}
-               className="absolute bottom-12 text-white text-[9px] uppercase tracking-[0.2em] font-medium"
+
+            <motion.p
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.55, duration: 0.4 }}
+              className="absolute bottom-28 left-0 right-0 text-center text-xs font-black text-[#202030]"
             >
-              Powered by ZiggyBites Inc.
-            </motion.div>
+              Delivering Happiness, <span className="italic text-[#f21d1d]">Fast!</span>
+            </motion.p>
+
+            <div className="absolute bottom-0 left-0 right-0 h-32 bg-[#fff1e2]" style={{ clipPath: 'polygon(0 48%, 18% 68%, 42% 82%, 66% 70%, 86% 46%, 100% 34%, 100% 100%, 0 100%)' }} />
+            <div className="absolute bottom-0 left-0 right-0 h-28 bg-[#ff981f]" style={{ clipPath: 'polygon(0 58%, 18% 76%, 42% 86%, 66% 74%, 84% 48%, 100% 36%, 100% 100%, 0 100%)' }} />
+            <div className="absolute bottom-0 left-0 right-0 h-28 bg-[#f21d1d]" style={{ clipPath: 'polygon(0 28%, 18% 50%, 40% 68%, 64% 76%, 84% 62%, 100% 50%, 100% 100%, 0 100%)' }} />
           </motion.div>
         )}
       </AnimatePresence>
-
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@900&display=swap');
-        
-        .shine-text {
-          background: linear-gradient(90deg, #fff 0%, #fff 45%, #ffffff88 50%, #fff 55%, #fff 100%);
-          background-size: 200% 100%;
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
-          animation: shine 2s infinite linear;
-        }
-
-        @keyframes shine {
-          0% { background-position: 200% 0; }
-          100% { background-position: -200% 0; }
-        }
-      `}</style>
     </div>
   );
 }

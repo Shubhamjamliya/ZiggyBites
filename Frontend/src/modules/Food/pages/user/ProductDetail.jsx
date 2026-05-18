@@ -2,7 +2,7 @@
 
 
 
-import { useState, useMemo } from "react"
+import { useEffect, useState, useMemo } from "react"
 import { useParams, Link, useNavigate } from "react-router-dom"
 import useAppBackNavigation from "@food/hooks/useAppBackNavigation"
 
@@ -16,6 +16,7 @@ import { Button } from "@food/components/ui/button"
 import { Badge } from "@food/components/ui/badge"
 import { Textarea } from "@food/components/ui/textarea"
 import { Label } from "@food/components/ui/label"
+import { DEFAULT_APP_CUSTOMIZATION, loadAppCustomization } from "@food/utils/appCustomization"
 
 // Sample product data - in a real app, this would come from an API
 const productsData = {
@@ -110,11 +111,43 @@ export default function ProductDetail() {
   const [helpfulVotes, setHelpfulVotes] = useState(new Set())
   const [replyStates, setReplyStates] = useState({})
   const [replies, setReplies] = useState({})
+  const [appCustomization, setAppCustomization] = useState(DEFAULT_APP_CUSTOMIZATION)
 
   const restaurant = product ? restaurantsData[product.restaurantSlug] : null
   const inCart = product ? isInCart(product.id) : false
   const cartItem = product ? getCartItem(product.id) : null
   const orders = getAllOrders()
+
+  useEffect(() => {
+    let mounted = true
+    loadAppCustomization()
+      .then((settings) => {
+        if (mounted) setAppCustomization(settings)
+      })
+      .catch(() => {})
+    return () => {
+      mounted = false
+    }
+  }, [])
+
+  const openMealSelection = () => {
+    if (!product) return
+
+    const params = new URLSearchParams()
+    if (product.name) params.set("dish", product.name)
+    if (product.id) params.set("dishId", String(product.id))
+    if (product.restaurant) params.set("restaurant", product.restaurant)
+    if (product.category) params.set("category", product.category)
+    if (Number.isFinite(Number(product.price))) params.set("price", String(product.price))
+
+    navigate(
+      {
+        pathname: "/food/user/choose-meal",
+        search: params.toString() ? `?${params.toString()}` : "",
+      },
+      { state: { dish: { ...product, itemId: product.id, restaurantName: product.restaurant } } },
+    )
+  }
 
   // Get order history for this product
   const orderHistory = useMemo(() => {
@@ -133,6 +166,11 @@ export default function ProductDetail() {
 
   const handleAddToCart = () => {
     if (product) {
+      if (appCustomization.normalOrderFlowEnabled === false) {
+        openMealSelection()
+        return
+      }
+
       for (let i = 0; i < quantity; i++) {
         const result = addToCart(product)
         if (result?.ok === false) {

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   checkOnboardingStatus,
@@ -22,6 +22,7 @@ import {
   Users,
   MessageSquare,
   FileText,
+  Send,
 } from "lucide-react";
 import { toast } from "sonner";
 import BottomNavOrders from "@food/components/restaurant/BottomNavOrders";
@@ -32,6 +33,10 @@ import { useRestaurantNotifications } from "@food/hooks/useRestaurantNotificatio
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import ResendNotificationButton from "@food/components/restaurant/ResendNotificationButton";
+import {
+  DEFAULT_APP_CUSTOMIZATION,
+  loadAppCustomization,
+} from "@food/utils/appCustomization";
 const debugLog = (...args) => {};
 const debugWarn = (...args) => {};
 const debugError = (...args) => {};
@@ -47,6 +52,14 @@ const filterTabs = [
   { id: "scheduled", label: "Scheduled" },
   { id: "table-booking", label: "Table Booking" },
   { id: "completed", label: "Completed" },
+  { id: "cancelled", label: "Cancelled" },
+];
+
+const subscriptionFilterTabs = [
+  { id: "all", label: "All Orders" },
+  { id: "current", label: "Current" },
+  { id: "scheduled", label: "Scheduled" },
+  { id: "next", label: "Next" },
   { id: "cancelled", label: "Cancelled" },
 ];
 
@@ -1053,9 +1066,162 @@ const getInitialCountdown = (order) => {
   return Math.max(0, Math.min(180, remaining));
 }
 
+const formatSubscriptionDate = (value) => {
+  if (!value) return "No date";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "No date";
+  return date.toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+  });
+};
+
+function SubscriptionMealsPanel({ view }) {
+  const [meals, setMeals] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [sendingScheduleIds, setSendingScheduleIds] = useState({});
+
+  const fetchMeals = async () => {
+    try {
+      setLoading(true);
+      const response = await restaurantAPI.getTodaySubscriptionMeals({ view });
+      const rows = response?.data?.data?.schedules || [];
+      setMeals(rows);
+    } catch (error) {
+      debugError("Error fetching subscription meals:", error);
+      setMeals([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchMeals();
+    const interval = setInterval(fetchMeals, 15000);
+    return () => clearInterval(interval);
+  }, [view]);
+
+  const handleSendMeal = async (meal) => {
+    const scheduleId = meal.scheduleId || meal._id;
+    if (!scheduleId || sendingScheduleIds[scheduleId]) return;
+
+    try {
+      setSendingScheduleIds((prev) => ({ ...prev, [scheduleId]: true }));
+      await restaurantAPI.sendSubscriptionMealToDelivery(scheduleId);
+      toast.success("Subscription meal sent to delivery");
+      await fetchMeals();
+    } catch (error) {
+      toast.error(error?.response?.data?.message || "Failed to send subscription meal");
+    } finally {
+      setSendingScheduleIds((prev) => {
+        const next = { ...prev };
+        delete next[scheduleId];
+        return next;
+      });
+    }
+  };
+
+  const now = Date.now();
+
+  if (loading) {
+    return (
+      <div className="mt-4 flex items-center justify-center rounded-2xl bg-white py-12 shadow-sm">
+        <Loader2 className="h-6 w-6 animate-spin text-primary-orange" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="pt-4 pb-6">
+      <div className="mb-3 flex items-center justify-between">
+        <div>
+          <h2 className="text-base font-semibold text-black">Subscription orders</h2>
+          <p className="text-xs text-gray-500">Manage scheduled meals without normal order flow.</p>
+        </div>
+        <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-gray-600 shadow-sm">
+          {meals.length} total
+        </span>
+      </div>
+
+      {meals.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-gray-200 bg-white px-5 py-10 text-center shadow-sm">
+          <p className="text-sm font-bold text-gray-900">No subscription meals found</p>
+          <p className="mt-1 text-xs text-gray-500">Try another subscription filter above.</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {meals.map((meal) => {
+            const scheduleId = meal.scheduleId || meal._id;
+            const sent = meal.status === "sent_to_delivery";
+            const cancelled = ["cancelled", "skipped"].includes(String(meal.status || "").toLowerCase());
+            const serviceTime = meal.serviceDate ? new Date(meal.serviceDate).getTime() : 0;
+            const canSend = !sent && !cancelled && serviceTime <= now;
+            const address = meal.subscription?.deliveryAddress;
+            const customerName = meal.subscription?.customerName || meal.user?.name || "Customer";
+            const customerPhone = meal.subscription?.customerPhone || meal.user?.phone || "";
+            const addressText = [
+              address?.street,
+              address?.additionalDetails,
+              address?.city,
+            ].filter(Boolean).join(", ");
+
+            return (
+              <div key={scheduleId} className="rounded-2xl bg-white p-4 shadow-sm">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-sm font-bold text-gray-900">{meal.dishName || "Subscription meal"}</p>
+                      <span className="rounded-full bg-orange-50 px-2 py-0.5 text-[10px] font-black uppercase text-primary-orange">
+                        {meal.mealName || "Meal"}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-xs font-semibold text-gray-600">{customerName}</p>
+                    {customerPhone && <p className="mt-0.5 text-xs text-gray-400">{customerPhone}</p>}
+                    {addressText && <p className="mt-1 line-clamp-1 text-xs text-gray-400">{addressText}</p>}
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <p className="text-xs font-bold text-gray-700">{formatSubscriptionDate(meal.serviceDate)}</p>
+                    <span className={`mt-1 inline-flex rounded-full px-2 py-1 text-[10px] font-black uppercase ${
+                      sent
+                        ? "bg-emerald-50 text-emerald-600"
+                        : cancelled
+                          ? "bg-red-50 text-red-600"
+                          : "bg-amber-50 text-amber-700"
+                    }`}>
+                      {sent ? "Sent" : meal.status || "Scheduled"}
+                    </span>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  disabled={!canSend || sendingScheduleIds[scheduleId]}
+                  onClick={() => handleSendMeal(meal)}
+                  className="mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-primary-orange text-sm font-bold text-white disabled:bg-gray-200 disabled:text-gray-500"
+                >
+                  {sendingScheduleIds[scheduleId] ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Send className="h-4 w-4" />
+                  )}
+                  {sent ? "Already sent" : canSend ? "Send to delivery boy" : "Scheduled for later"}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function OrdersMain() {
   const navigate = useNavigate();
   const [activeFilter, setActiveFilter] = useState("all");
+  const [activeSubscriptionFilter, setActiveSubscriptionFilter] = useState("current");
+  const [appCustomization, setAppCustomization] = useState(
+    DEFAULT_APP_CUSTOMIZATION,
+  );
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
@@ -1104,6 +1270,48 @@ export default function OrdersMain() {
   const [pendingBookingsCount, setPendingBookingsCount] = useState(0);
   const [pendingOrdersCount, setPendingOrdersCount] = useState(0);
   const [pendingDiningRequest, setPendingDiningRequest] = useState(null);
+  const normalOrderFlowEnabled =
+    appCustomization.normalOrderFlowEnabled !== false;
+  const subscriptionFlowEnabled =
+    appCustomization.subscriptionFlowEnabled !== false;
+  const diningFlowEnabled = appCustomization.diningFlowEnabled !== false;
+  const showSubscriptionDashboard =
+    !normalOrderFlowEnabled && subscriptionFlowEnabled;
+  const visibleFilterTabs = useMemo(
+    () =>
+      filterTabs.filter((tab) => {
+        if (showSubscriptionDashboard) return false;
+        if (tab.id === "table-booking") return diningFlowEnabled;
+        return normalOrderFlowEnabled;
+      }),
+    [diningFlowEnabled, normalOrderFlowEnabled, showSubscriptionDashboard],
+  );
+
+  useEffect(() => {
+    let mounted = true;
+    loadAppCustomization()
+      .then((settings) => {
+        if (mounted) setAppCustomization(settings);
+      })
+      .catch(() => {});
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (showSubscriptionDashboard) return;
+    if (visibleFilterTabs.some((tab) => tab.id === activeFilter)) return;
+    setActiveFilter(visibleFilterTabs[0]?.id || "");
+  }, [activeFilter, showSubscriptionDashboard, visibleFilterTabs]);
+
+  useEffect(() => {
+    if (!normalOrderFlowEnabled) {
+      setShowNewOrderPopup(false);
+      setPopupOrder(null);
+    }
+  }, [normalOrderFlowEnabled]);
 
   // Fetch pending counts and settings
   useEffect(() => {
@@ -1140,16 +1348,20 @@ export default function OrdersMain() {
           }
         }
 
-        // 3. Fetch pending orders
-        const ordersRes = await restaurantAPI.getOrders({ page: 1, limit: 100 });
-        if (ordersRes.data.success) {
-          const orders = Array.isArray(ordersRes.data.data?.orders) ? ordersRes.data.data.orders : [];
-          const pending = orders.filter(o => 
-            String(o.status).toLowerCase() === 'pending' || 
-            String(o.status).toLowerCase() === 'created' ||
-            String(o.status).toLowerCase() === 'confirmed'
-          ).length;
-          setPendingOrdersCount(pending);
+        if (normalOrderFlowEnabled) {
+          // 3. Fetch pending regular orders
+          const ordersRes = await restaurantAPI.getOrders({ page: 1, limit: 100 });
+          if (ordersRes.data.success) {
+            const orders = Array.isArray(ordersRes.data.data?.orders) ? ordersRes.data.data.orders : [];
+            const pending = orders.filter(o => 
+              String(o.status).toLowerCase() === 'pending' || 
+              String(o.status).toLowerCase() === 'created' ||
+              String(o.status).toLowerCase() === 'confirmed'
+            ).length;
+            setPendingOrdersCount(pending);
+          }
+        } else {
+          setPendingOrdersCount(0);
         }
       } catch (error) {
         // Non-blocking
@@ -1159,7 +1371,7 @@ export default function OrdersMain() {
     fetchCounts();
     const interval = setInterval(fetchCounts, 30000); // Check every 30 seconds
     return () => clearInterval(interval);
-  }, []);
+  }, [normalOrderFlowEnabled]);
 
   // Global search state
   const [searchQuery, setSearchQuery] = useState("");
@@ -1414,6 +1626,11 @@ export default function OrdersMain() {
 
   // Show new order popup when real order notification arrives from Socket.IO
   useEffect(() => {
+    if (!normalOrderFlowEnabled) {
+      if (newOrder) clearNewOrder();
+      return;
+    }
+
     if (newOrder) {
       debugLog("?? New order received via Socket.IO:", newOrder);
 
@@ -1444,7 +1661,7 @@ export default function OrdersMain() {
         requestOrdersRefresh();
       }
     }
-  }, [newOrder]);
+  }, [clearNewOrder, newOrder, normalOrderFlowEnabled]);
 
   useEffect(() => {
     const onRestaurantOrderStatusUpdate = (event) => {
@@ -1584,6 +1801,8 @@ export default function OrdersMain() {
   // Check for confirmed orders that haven't been shown in popup yet, or scheduled orders whose time has come
   useEffect(() => {
     const checkOrdersToPopup = async () => {
+      if (!normalOrderFlowEnabled) return;
+
       // Skip if popup is already showing or Socket.IO order exists
       if (showNewOrderPopupRef.current || newOrderRef.current) return;
 
@@ -1664,7 +1883,7 @@ export default function OrdersMain() {
     const intervalId = setInterval(checkOrdersToPopup, 60000);
 
     return () => clearInterval(intervalId);
-  }, []);
+  }, [normalOrderFlowEnabled]);
 
   // Play audio when popup opens
   useEffect(() => {
@@ -2215,13 +2434,18 @@ export default function OrdersMain() {
     const minSwipeDistance = 50;
     const swipeVelocity = Math.abs(swipeDistance);
 
-    if (swipeVelocity > minSwipeDistance && !isTransitioning) {
-      const currentIndex = filterTabs.findIndex(
+    if (
+      swipeVelocity > minSwipeDistance &&
+      !isTransitioning &&
+      !showSubscriptionDashboard &&
+      visibleFilterTabs.length > 0
+    ) {
+      const currentIndex = visibleFilterTabs.findIndex(
         (tab) => tab.id === activeFilter,
       );
       let newIndex = currentIndex;
 
-      if (swipeDistance > 0 && currentIndex < filterTabs.length - 1) {
+      if (swipeDistance > 0 && currentIndex < visibleFilterTabs.length - 1) {
         // Swipe left - go to next filter (right side)
         newIndex = currentIndex + 1;
       } else if (swipeDistance < 0 && currentIndex > 0) {
@@ -2234,7 +2458,7 @@ export default function OrdersMain() {
 
         // Smooth transition with animation
         setTimeout(() => {
-          setActiveFilter(filterTabs[newIndex].id);
+          setActiveFilter(visibleFilterTabs[newIndex].id);
           scrollToFilter(newIndex);
 
           // Reset transition state after animation
@@ -2274,7 +2498,7 @@ export default function OrdersMain() {
 
   // Scroll to active filter on change with smooth animation
   useEffect(() => {
-    const index = filterTabs.findIndex((tab) => tab.id === activeFilter);
+    const index = visibleFilterTabs.findIndex((tab) => tab.id === activeFilter);
     if (index >= 0) {
       // Use requestAnimationFrame for smoother scrolling
       requestAnimationFrame(() => {
@@ -2289,6 +2513,21 @@ export default function OrdersMain() {
   };
 
   const renderContent = () => {
+    if (showSubscriptionDashboard) {
+      return <SubscriptionMealsPanel view={activeSubscriptionFilter} />;
+    }
+
+    if (visibleFilterTabs.length === 0) {
+      return (
+        <div className="mt-5 rounded-2xl border border-dashed border-gray-200 bg-white px-5 py-8 text-center shadow-sm">
+          <p className="text-base font-bold text-gray-900">Restaurant flows are paused</p>
+          <p className="mt-1 text-sm text-gray-500">
+            Normal orders and dining bookings are currently off from admin app customization.
+          </p>
+        </div>
+      );
+    }
+
     if (searchQuery.trim() !== "") {
       return (
         <SearchResults
@@ -2393,7 +2632,62 @@ export default function OrdersMain() {
         }
       </AnimatePresence>
 
+      {showSubscriptionDashboard && (
+      <div className="sticky top-[50px] z-40 pb-2 bg-gray-100">
+        <div
+          className="flex gap-2 overflow-x-auto scrollbar-hide bg-transparent rounded-full px-3 py-2 mt-2"
+          style={{
+            scrollbarWidth: "none",
+            msOverflowStyle: "none",
+            WebkitOverflowScrolling: "touch",
+          }}>
+          <style>{`
+            .scrollbar-hide::-webkit-scrollbar {
+              display: none;
+            }
+          `}</style>
+          {subscriptionFilterTabs.map((tab) => {
+            const isActive = activeSubscriptionFilter === tab.id;
+
+            return (
+              <motion.button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveSubscriptionFilter(tab.id)}
+                className={`shrink-0 px-6 py-3.5 rounded-full font-medium text-sm whitespace-nowrap relative overflow-hidden ${
+                  isActive ? "text-white" : "bg-white text-black"
+                }`}
+                animate={{
+                  scale: isActive ? 1.05 : 1,
+                  opacity: isActive ? 1 : 0.7,
+                }}
+                transition={{
+                  duration: 0.3,
+                  ease: [0.25, 0.1, 0.25, 1],
+                }}
+                whileTap={{ scale: 0.95 }}>
+                {isActive && (
+                  <motion.div
+                    layoutId="activeSubscriptionFilterBackground"
+                    className="absolute inset-0 bg-primary-orange rounded-full -z-10"
+                    initial={false}
+                    transition={{
+                      type: "spring",
+                      stiffness: 500,
+                      damping: 30,
+                    }}
+                  />
+                )}
+                <span className="relative z-10">{tab.label}</span>
+              </motion.button>
+            );
+          })}
+        </div>
+      </div>
+      )}
+
       {/* Top Filter Bar - Sticky below navbar */}
+      {!showSubscriptionDashboard && visibleFilterTabs.length > 0 && (
       <div className="sticky top-[50px] z-40 pb-2 bg-gray-100">
         <div
           ref={filterBarRef}
@@ -2408,7 +2702,7 @@ export default function OrdersMain() {
               display: none;
             }
           `}</style>
-          {filterTabs.map((tab, index) => {
+          {visibleFilterTabs.map((tab, index) => {
             const isActive = activeFilter === tab.id;
 
             return (
@@ -2470,6 +2764,7 @@ export default function OrdersMain() {
           })}
         </div>
       </div>
+      )}
 
       {/* Content Area - Scrollable */}
       <div
@@ -2504,14 +2799,16 @@ export default function OrdersMain() {
 
             if (
               Math.abs(swipeDistance) > minSwipeDistance &&
-              !isTransitioning
+              !isTransitioning &&
+              !showSubscriptionDashboard &&
+              visibleFilterTabs.length > 0
             ) {
-              const currentIndex = filterTabs.findIndex(
+              const currentIndex = visibleFilterTabs.findIndex(
                 (tab) => tab.id === activeFilter,
               );
               let newIndex = currentIndex;
 
-              if (swipeDistance > 0 && currentIndex < filterTabs.length - 1) {
+              if (swipeDistance > 0 && currentIndex < visibleFilterTabs.length - 1) {
                 newIndex = currentIndex + 1;
               } else if (swipeDistance < 0 && currentIndex > 0) {
                 newIndex = currentIndex - 1;
@@ -2520,7 +2817,7 @@ export default function OrdersMain() {
               if (newIndex !== currentIndex) {
                 setIsTransitioning(true);
                 setTimeout(() => {
-                  setActiveFilter(filterTabs[newIndex].id);
+                  setActiveFilter(visibleFilterTabs[newIndex].id);
                   scrollToFilter(newIndex);
                   setTimeout(() => setIsTransitioning(false), 300);
                 }, 50);

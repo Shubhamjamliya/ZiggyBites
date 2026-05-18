@@ -48,6 +48,7 @@ import { getCompanyNameAsync } from "@food/utils/businessSettings"
 import { isModuleAuthenticated } from "@food/utils/auth"
 import { getRestaurantAvailabilityStatus } from "@food/utils/restaurantAvailability"
 import useAppBackNavigation from "@food/hooks/useAppBackNavigation"
+import { DEFAULT_APP_CUSTOMIZATION, loadAppCustomization } from "@food/utils/appCustomization"
 import {
   buildCartLineId,
   getDefaultFoodVariant,
@@ -106,6 +107,7 @@ function RestaurantDetailsContent() {
   const [highlightedDishId, setHighlightedDishId] = useState(null)
   const [loadingMenuItems, setLoadingMenuItems] = useState(true)
   const [selectedMenuCategory, setSelectedMenuCategory] = useState("all")
+  const [appCustomization, setAppCustomization] = useState(DEFAULT_APP_CUSTOMIZATION)
   const dishCardRefs = useRef({})
 
   const getLineItemIdForDish = (item, variant = null) =>
@@ -1105,6 +1107,18 @@ function RestaurantDetailsContent() {
   }, [restaurant?.name, cart])
 
   useEffect(() => {
+    let mounted = true
+    loadAppCustomization()
+      .then((settings) => {
+        if (mounted) setAppCustomization(settings)
+      })
+      .catch((error) => debugWarn("Failed to load app customization:", error?.message || error))
+    return () => {
+      mounted = false
+    }
+  }, [])
+
+  useEffect(() => {
     if (!selectedItem) {
       setSelectedVariantId("")
       return
@@ -1119,6 +1133,11 @@ function RestaurantDetailsContent() {
     if (!isModuleAuthenticated('user')) {
       toast.error("Please login to add items to cart")
       navigate('/user/auth/login', { state: { from: location.pathname } })
+      return
+    }
+
+    if (appCustomization.normalOrderFlowEnabled === false) {
+      toast.error("Normal ordering is currently unavailable")
       return
     }
 
@@ -2008,7 +2027,8 @@ function RestaurantDetailsContent() {
 
   const availabilityStatus = getRestaurantAvailabilityStatus(restaurant, new Date(availabilityTick))
   const isRestaurantOffline = !availabilityStatus.isOpen
-  const shouldShowGrayscale = isOutOfService || isRestaurantOffline
+  const isNormalOrderFlowPaused = appCustomization.normalOrderFlowEnabled === false
+  const shouldShowGrayscale = isOutOfService || isRestaurantOffline || isNormalOrderFlowPaused
 
   return (
     <AnimatedPage

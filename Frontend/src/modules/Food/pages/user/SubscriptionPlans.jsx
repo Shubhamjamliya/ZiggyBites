@@ -11,6 +11,7 @@ import {
   UserCircle2,
 } from "lucide-react";
 import api from "@food/api";
+import { loadAppCustomization } from "@food/utils/appCustomization";
 
 const featureIcons = [Clock3, CalendarCheck, ShieldCheck];
 
@@ -20,6 +21,20 @@ export default function SubscriptionPlans() {
   const [searchParams] = useSearchParams();
   const [plans, setPlans] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let mounted = true;
+    loadAppCustomization()
+      .then((settings) => {
+        if (mounted && settings.subscriptionFlowEnabled === false) {
+          navigate("/food/user", { replace: true });
+        }
+      })
+      .catch(() => {});
+    return () => {
+      mounted = false;
+    };
+  }, [navigate]);
 
   const dish = useMemo(() => {
     const stateDish = location.state?.dish || {};

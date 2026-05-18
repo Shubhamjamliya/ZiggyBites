@@ -839,6 +839,14 @@ export const adminAPI = {
     apiClient.put("/food/admin/referral-settings", body ?? {}, {
       contextModule: "admin",
     }),
+  getAppCustomization: () =>
+    apiClient.get("/food/admin/app-customization", {
+      contextModule: "admin",
+    }),
+  updateAppCustomization: (body) =>
+    apiClient.put("/food/admin/app-customization", body ?? {}, {
+      contextModule: "admin",
+    }),
 
   /** Safety / Emergency Reports (admin) */
   getSafetyEmergencyReports: (params) =>
@@ -2213,6 +2221,11 @@ export const userAPI = {
   deleteAccount: () =>
     apiClient.delete("/food/user/account", { contextModule: "user" }),
 };
+
+export const appCustomizationAPI = {
+  getPublic: () => apiClient.get("/food/app-customization/public"),
+};
+
 export const locationAPI = createStubAPI();
 export const zoneAPI = {
   /** Public: detect active service zone for a lat/lng point. */

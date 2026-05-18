@@ -95,6 +95,18 @@ export const adminSidebarMenu = [
   },
   {
     type: "section",
+    label: "APP CUSTOMIZATION",
+    items: [
+      {
+        type: "link",
+        label: "App Customization",
+        path: "/admin/food/app-customization",
+        icon: "Settings2",
+      },
+    ],
+  },
+  {
+    type: "section",
     label: "PROMOTIONS MANAGEMENT",
     items: [
       {

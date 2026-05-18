@@ -39,6 +39,11 @@ import {
   getApplicableActiveSubscription,
 } from '../../subscription/services/subscription.service.js';
 import {
+  assertNormalOrderFlowAllowed,
+  assertScheduledAtAllowed,
+  getAppCustomizationSettings,
+} from '../../shared/appCustomization.service.js';
+import {
   enqueueOrderEvent,
   haversineKm,
   generateFourDigitDeliveryOtp,
@@ -132,6 +137,10 @@ export async function calculateOrder(userId, dto) {
 
 // ----- Create order -----
 export async function createOrder(userId, dto) {
+  const appSettings = await getAppCustomizationSettings();
+  assertNormalOrderFlowAllowed(appSettings);
+  assertScheduledAtAllowed(dto.scheduledAt, appSettings);
+
   const restaurant = await FoodRestaurant.findById(dto.restaurantId)
     .select("status restaurantName zoneId location isAcceptingOrders")
     .lean();

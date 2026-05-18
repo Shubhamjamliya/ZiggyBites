@@ -12,6 +12,7 @@ import {
   Utensils,
 } from "lucide-react";
 import api from "@food/api";
+import { loadAppCustomization } from "@food/utils/appCustomization";
 
 const fallbackMealSlots = [
   {
@@ -62,6 +63,22 @@ export default function ChooseMeal() {
   const [searchParams] = useSearchParams();
   const [selectedSlots, setSelectedSlots] = useState([]);
   const [mealSlots, setMealSlots] = useState(fallbackMealSlots);
+
+  useEffect(() => {
+    let mounted = true;
+    loadAppCustomization()
+      .then((settings) => {
+        if (!mounted) return;
+        const enabled = settings.subscriptionFlowEnabled !== false;
+        if (!enabled) {
+          navigate("/food/user", { replace: true });
+        }
+      })
+      .catch(() => {});
+    return () => {
+      mounted = false;
+    };
+  }, [navigate]);
   const [loadingSlots, setLoadingSlots] = useState(true);
 
   const dish = useMemo(() => {

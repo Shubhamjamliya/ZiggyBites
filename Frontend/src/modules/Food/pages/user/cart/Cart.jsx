@@ -22,6 +22,7 @@ import { calculateDistance } from "@food/utils/common"
 import { useCompanyName } from "@food/hooks/useCompanyName"
 import { getRestaurantAvailabilityStatus } from "@food/utils/restaurantAvailability"
 import useAppBackNavigation from "@food/hooks/useAppBackNavigation"
+import { DEFAULT_APP_CUSTOMIZATION, loadAppCustomization } from "@food/utils/appCustomization"
 const zoopSound = "/zomato_sms.mp3"
 const debugLog = (...args) => { }
 const debugWarn = (...args) => { }
@@ -174,6 +175,7 @@ export default function Cart() {
   const [orderSuccessSavingsAmount, setOrderSuccessSavingsAmount] = useState(0)
   const [placedOrderId, setPlacedOrderId] = useState(null)
   const [selectedAddressId, setSelectedAddressId] = useState(null)
+  const [appCustomization, setAppCustomization] = useState(DEFAULT_APP_CUSTOMIZATION)
   const [deliveryAddressMode, setDeliveryAddressMode] = useState(() => {
     try {
       if (typeof window === "undefined") return "saved"
@@ -194,6 +196,20 @@ export default function Cart() {
         orderSuccessAudioRef.current.pause()
         orderSuccessAudioRef.current = null
       }
+    }
+  }, [])
+
+  useEffect(() => {
+    let mounted = true
+    loadAppCustomization()
+      .then((settings) => {
+        if (mounted) setAppCustomization(settings)
+      })
+      .catch((error) => {
+        debugWarn("Failed to load app customization:", error?.message || error)
+      })
+    return () => {
+      mounted = false
     }
   }, [])
 
@@ -1688,6 +1704,11 @@ export default function Cart() {
 
 
   const handlePlaceOrder = async () => {
+    if (appCustomization.normalOrderFlowEnabled === false) {
+      toast.error("Normal ordering is currently unavailable")
+      return
+    }
+
     if (!hasSavedAddress) {
       toast.error("Please choose a delivery location to continue")
       openLocationSelector()
@@ -2269,6 +2290,25 @@ export default function Cart() {
     setCongratssSavingsItems([])
     setOrderSuccessSavingsAmount(0)
     navigate(`/user/orders/${placedOrderId}?confirmed=true`)
+  }
+
+  if (appCustomization.normalOrderFlowEnabled === false && !showOrderSuccess && !showPlacingOrder && !showSavingsCongrats) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#f5f5f5] dark:bg-[#0a0a0a] px-4">
+        <div className="max-w-sm rounded-2xl border border-gray-200 bg-white p-6 text-center shadow-sm dark:border-gray-800 dark:bg-[#1a1a1a]">
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Ordering is paused</h2>
+          <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+            Normal restaurant orders are currently unavailable.
+          </p>
+          <button
+            onClick={() => navigate("/food/user")}
+            className="mt-5 rounded-xl bg-[#7e3866] px-5 py-2.5 text-sm font-bold text-white"
+          >
+            Back to home
+          </button>
+        </div>
+      </div>
+    )
   }
 
   // Empty cart state - but don't show if order success or placing order modal is active

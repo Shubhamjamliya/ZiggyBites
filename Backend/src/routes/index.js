@@ -19,8 +19,22 @@ import { requireRoles } from '../core/roles/role.middleware.js';
 import { getQueuesController } from '../controllers/admin.controller.js';
 import webhookRoutes from '../core/payments/routes/webhook.routes.js';
 import searchRoutes from '../modules/food/search/routes/search.routes.js';
+import {
+    assertDiningFlowAllowed,
+    getAppCustomizationSettings,
+} from '../modules/food/shared/appCustomization.service.js';
 
 const router = express.Router();
+
+const requireDiningFlow = async (_req, _res, next) => {
+    try {
+        const settings = await getAppCustomizationSettings();
+        assertDiningFlowAllowed(settings);
+        next();
+    } catch (err) {
+        next(err);
+    }
+};
 
 router.get('/v1/health', (req, res) => {
     res.status(200).json({ status: 'UP', message: 'Server is healthy' });
@@ -35,14 +49,14 @@ router.use('/v1/food/delivery', deliveryRoutes);
 router.use('/v1/food/restaurant', restaurantRoutes);
 router.use('/v1/food', landingRoutes);
 router.use('/v1/food/search', searchRoutes);
-router.get('/v1/food/dining/categories/public', getPublicDiningCategories);
-router.get('/v1/food/dining/restaurants/public', getPublicDiningRestaurants);
-router.get('/v1/food/dining/restaurants/:restaurantId/occupied-seats/public', getPublicRestaurantOccupiedSeats);
+router.get('/v1/food/dining/categories/public', requireDiningFlow, getPublicDiningCategories);
+router.get('/v1/food/dining/restaurants/public', requireDiningFlow, getPublicDiningRestaurants);
+router.get('/v1/food/dining/restaurants/:restaurantId/occupied-seats/public', requireDiningFlow, getPublicRestaurantOccupiedSeats);
 
 // Dining Booking Routes
-router.post('/v1/food/dining/bookings', authMiddleware, requireRoles('USER'), createBooking);
-router.get('/v1/food/dining/bookings/my', authMiddleware, requireRoles('USER'), getMyBookings);
-router.post('/v1/food/dining/bookings/:bookingId/review', authMiddleware, requireRoles('USER'), createReview);
+router.post('/v1/food/dining/bookings', requireDiningFlow, authMiddleware, requireRoles('USER'), createBooking);
+router.get('/v1/food/dining/bookings/my', requireDiningFlow, authMiddleware, requireRoles('USER'), getMyBookings);
+router.post('/v1/food/dining/bookings/:bookingId/review', requireDiningFlow, authMiddleware, requireRoles('USER'), createReview);
 router.get('/v1/food/dining/bookings/restaurant/:restaurantId', authMiddleware, requireRoles('RESTAURANT', 'ADMIN'), getRestaurantBookings);
 router.patch('/v1/food/dining/bookings/:bookingId/status', authMiddleware, requireRoles('RESTAURANT', 'ADMIN'), updateBookingStatus);
 

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   ArrowLeft,
@@ -16,6 +16,7 @@ import { initRazorpayPayment } from "@food/utils/razorpay";
 import { getCompanyNameAsync } from "@food/utils/businessSettings";
 import { useProfile } from "@food/context/ProfileContext";
 import { useLocation as useUserLocation } from "@food/hooks/useLocation";
+import { DEFAULT_APP_CUSTOMIZATION, loadAppCustomization } from "@food/utils/appCustomization";
 
 const RUPEE_SYMBOL = "\u20B9";
 
@@ -46,8 +47,25 @@ export default function SubscriptionCheckout() {
 
   const [autoPay, setAutoPay] = useState(true);
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
+  const [appCustomization, setAppCustomization] = useState(DEFAULT_APP_CUSTOMIZATION);
 
   const { dish, selectedMeals = [], subscriptionPlan } = location.state || {};
+
+  useEffect(() => {
+    let mounted = true;
+    loadAppCustomization()
+      .then((settings) => {
+        if (!mounted) return;
+        setAppCustomization(settings);
+        if (settings.subscriptionFlowEnabled === false) {
+          navigate("/food/user", { replace: true });
+        }
+      })
+      .catch(() => {});
+    return () => {
+      mounted = false;
+    };
+  }, [navigate]);
 
   const basePrice = Number.parseFloat(dish?.price || 0) || 319;
   const mealCount = selectedMeals.length || 1;
@@ -105,6 +123,11 @@ export default function SubscriptionCheckout() {
   }, [autoPay, days, selectedMealLabel, subscriptionPlan?.title]);
 
   const handlePlaceOrder = async () => {
+    if (appCustomization.subscriptionFlowEnabled === false) {
+      toast.error("Subscription ordering is currently unavailable.");
+      return;
+    }
+
     console.log("[SubscriptionCheckout] Proceed to pay clicked", {
       rawState: location.state || null,
       dish,

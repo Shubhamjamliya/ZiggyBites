@@ -4,6 +4,8 @@ import { useCart } from "@food/context/CartContext"
 import { isModuleAuthenticated } from "@food/utils/auth"
 import { useNavigate, useLocation } from "react-router-dom"
 import { toast } from "sonner"
+import { useEffect, useState } from "react"
+import { DEFAULT_APP_CUSTOMIZATION, loadAppCustomization } from "@food/utils/appCustomization"
 
 export default function AddToCartButton({ item, className = "" }) {
   const { addToCart, isInCart, getCartItem, updateQuantity } = useCart()
@@ -11,6 +13,19 @@ export default function AddToCartButton({ item, className = "" }) {
   const cartItem = getCartItem(item.id)
   const navigate = useNavigate()
   const location = useLocation()
+  const [appCustomization, setAppCustomization] = useState(DEFAULT_APP_CUSTOMIZATION)
+
+  useEffect(() => {
+    let mounted = true
+    loadAppCustomization()
+      .then((settings) => {
+        if (mounted) setAppCustomization(settings)
+      })
+      .catch(() => {})
+    return () => {
+      mounted = false
+    }
+  }, [])
 
   const handleAddToCart = (e) => {
     e.preventDefault()
@@ -22,19 +37,30 @@ export default function AddToCartButton({ item, className = "" }) {
       return
     }
 
+    if (appCustomization.normalOrderFlowEnabled === false) {
+      toast.error("Normal ordering is currently unavailable")
+      return
+    }
+
     addToCart(item)
   }
 
   const handleIncrease = (e) => {
     e.preventDefault()
     e.stopPropagation()
+    if (appCustomization.normalOrderFlowEnabled === false) return
     updateQuantity(item.id, (cartItem?.quantity || 0) + 1)
   }
 
   const handleDecrease = (e) => {
     e.preventDefault()
     e.stopPropagation()
+    if (appCustomization.normalOrderFlowEnabled === false) return
     updateQuantity(item.id, (cartItem?.quantity || 0) - 1)
+  }
+
+  if (appCustomization.normalOrderFlowEnabled === false) {
+    return null
   }
 
   if (inCart) {

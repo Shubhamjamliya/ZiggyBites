@@ -359,6 +359,19 @@ const settingsSchema = new mongoose.Schema(
     {
         key: { type: String, required: true, unique: true, trim: true },
         dispatchMode: { type: String, enum: ['auto'], default: 'auto' },
+        normalOrderFlowEnabled: { type: Boolean, default: true },
+        subscriptionFlowEnabled: { type: Boolean, default: true },
+        diningFlowEnabled: { type: Boolean, default: true },
+        subscriptionOrders: {
+            startFrom: { type: String, enum: ['today', 'tomorrow'], default: 'tomorrow' },
+            devModePlaceNow: { type: Boolean, default: false }
+        },
+        scheduledOrders: {
+            enabled: { type: Boolean, default: true },
+            allowToday: { type: Boolean, default: true },
+            allowTomorrow: { type: Boolean, default: true },
+            minLeadTimeMinutes: { type: Number, min: 0, default: 60 }
+        },
         updatedBy: {
             role: { type: String },
             adminId: { type: mongoose.Schema.Types.ObjectId },

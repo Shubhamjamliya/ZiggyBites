@@ -2,11 +2,13 @@ import { Link, useLocation } from "react-router-dom"
 import { Tag, User, Truck, UtensilsCrossed } from "lucide-react"
 import { useState, useEffect } from "react"
 import api from "@food/api"
+import { DEFAULT_APP_CUSTOMIZATION, loadAppCustomization } from "@food/utils/appCustomization"
 
 export default function BottomNavigation() {
   const location = useLocation()
   const pathname = location.pathname
   const [under250PriceLimit, setUnder250PriceLimit] = useState(250)
+  const [appCustomization, setAppCustomization] = useState(DEFAULT_APP_CUSTOMIZATION)
 
   // Fetch landing settings to get dynamic price limit
   useEffect(() => {
@@ -25,8 +27,21 @@ export default function BottomNavigation() {
     return () => { cancelled = true }
   }, [])
 
+  useEffect(() => {
+    let mounted = true
+    loadAppCustomization()
+      .then((settings) => {
+        if (mounted) setAppCustomization(settings)
+      })
+      .catch(() => {})
+    return () => {
+      mounted = false
+    }
+  }, [])
+
   // Check active routes - support both /user/* and /* paths
   const isDining = pathname === "/food/dining" || pathname.startsWith("/food/user/dining")
+  const diningEnabled = appCustomization.diningFlowEnabled !== false
   const isUnder250 = pathname === "/food/under-250" || pathname.startsWith("/food/user/under-250")
   const isProfile = pathname.startsWith("/food/profile") || pathname.startsWith("/food/user/profile")
   const isDelivery =
@@ -63,25 +78,29 @@ export default function BottomNavigation() {
           )}
         </Link>
 
-        {/* Divider */}
-        <div className="h-8 w-px bg-gray-300 dark:bg-gray-700" />
+        {diningEnabled && (
+          <>
+            {/* Divider */}
+            <div className="h-8 w-px bg-gray-300 dark:bg-gray-700" />
 
-        {/* Dining Tab */}
-        <Link
-          to="/food/user/dining"
-          className={`flex flex-1 flex-col items-center gap-1.5 px-2 sm:px-3 py-2 transition-all duration-200 relative ${isDining
-              ? "text-[#7e3866]"
-              : "text-gray-600 dark:text-gray-400"
-            }`}
-        >
-          <UtensilsCrossed className={`h-5 w-5 ${isDining ? "text-[#7e3866]" : "text-gray-600 dark:text-gray-400"}`} strokeWidth={2} />
-          <span className={`text-xs sm:text-sm font-medium ${isDining ? "text-[#7e3866] font-bold" : "text-gray-600 dark:text-gray-400"}`}>
-            Dining
-          </span>
-          {isDining && (
-            <div className="absolute top-0 left-0 right-0 h-0.5 bg-[#7e3866] rounded-b-full" />
-          )}
-        </Link>
+            {/* Dining Tab */}
+            <Link
+              to="/food/user/dining"
+              className={`flex flex-1 flex-col items-center gap-1.5 px-2 sm:px-3 py-2 transition-all duration-200 relative ${isDining
+                  ? "text-[#7e3866]"
+                  : "text-gray-600 dark:text-gray-400"
+                }`}
+            >
+              <UtensilsCrossed className={`h-5 w-5 ${isDining ? "text-[#7e3866]" : "text-gray-600 dark:text-gray-400"}`} strokeWidth={2} />
+              <span className={`text-xs sm:text-sm font-medium ${isDining ? "text-[#7e3866] font-bold" : "text-gray-600 dark:text-gray-400"}`}>
+                Dining
+              </span>
+              {isDining && (
+                <div className="absolute top-0 left-0 right-0 h-0.5 bg-[#7e3866] rounded-b-full" />
+              )}
+            </Link>
+          </>
+        )}
 
         {/* Divider */}
         <div className="h-8 w-px bg-gray-300 dark:bg-gray-700" />

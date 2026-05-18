@@ -72,6 +72,7 @@ import {
 } from '../controllers/top10GourmetAdmin.controller.js';
 import { getPublicPageController } from '../../admin/controllers/pageContent.controller.js';
 import { getPublicReferralSettingsController } from '../controllers/publicReferralSettings.controller.js';
+import { getAppCustomizationController } from '../../shared/appCustomization.controller.js';
 
 const router = express.Router();
 
@@ -79,6 +80,7 @@ const router = express.Router();
 router.get('/pages/:key', getPublicPageController);
 // Public referral settings (no auth required).
 router.get('/referral-settings', getPublicReferralSettingsController);
+router.get('/app-customization/public', getAppCustomizationController);
 
 // Admin hero banner management (DEV: auth temporarily disabled for faster integration)
 router.get('/hero-banners', listHeroBannersController);

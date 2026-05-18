@@ -25,6 +25,10 @@ import {
   normalizeOrderForClient,
 } from '../../orders/services/order.helpers.js';
 import { getIO, rooms } from '../../../../config/socket.js';
+import {
+  assertSubscriptionFlowAllowed,
+  getAppCustomizationSettings,
+} from '../../shared/appCustomization.service.js';
 
 function normalizeMeals(meals = []) {
   return meals
@@ -32,10 +36,21 @@ function normalizeMeals(meals = []) {
     .filter(Boolean);
 }
 
-function buildSubscriptionDates(planDays) {
+function buildSubscriptionDates(planDays, options = {}) {
   const startDate = new Date();
-  startDate.setDate(startDate.getDate() + 1);
-  startDate.setHours(0, 0, 0, 0);
+  const startFromToday = options.startFrom === 'today';
+  const devModePlaceNow =
+    options.devModePlaceNow === true && process.env.NODE_ENV !== 'production';
+
+  if (devModePlaceNow) {
+    startDate.setSeconds(0, 0);
+  } else {
+    if (!startFromToday) {
+      startDate.setDate(startDate.getDate() + 1);
+    }
+    startDate.setHours(0, 0, 0, 0);
+  }
+
   const endDate = new Date(startDate);
   endDate.setDate(endDate.getDate() + Number(planDays || 0) - 1);
   endDate.setHours(23, 59, 59, 999);
@@ -168,7 +183,6 @@ async function createSubscriptionSchedules(subscriptionDoc) {
   const startDate = subscription.startDate
     ? new Date(subscription.startDate)
     : buildSubscriptionDates(subscription.planDays).startDate;
-  startDate.setHours(0, 0, 0, 0);
 
   const rows = [];
   const planDays = Math.max(1, Number(subscription.planDays || 0));
@@ -244,7 +258,11 @@ async function notifyRestaurantSubscriptionStarted(subscriptionDoc) {
     [{ ownerType: 'RESTAURANT', ownerId: subscription.restaurantId }],
     {
       title: 'New subscription received',
-      body: `${subscription.dishName || 'A dish'} subscription starts from tomorrow.`,
+      body: `${subscription.dishName || 'A dish'} subscription starts from ${
+        subscription.startDate
+          ? new Date(subscription.startDate).toLocaleDateString('en-IN')
+          : 'the selected start date'
+      }.`,
       data: {
         type: 'subscription_started',
         subscriptionId: String(subscription._id),
@@ -374,6 +392,9 @@ export async function consumeSubscriptionCredit({
 }
 
 export async function createSubscriptionOrder(userId, dto) {
+  const appSettings = await getAppCustomizationSettings();
+  assertSubscriptionFlowAllowed(appSettings);
+
   if (!isRazorpayConfigured()) {
     throw new ValidationError('Razorpay is not configured');
   }
@@ -560,7 +581,12 @@ export async function verifySubscriptionPayment(userId, dto) {
     throw new ValidationError('Razorpay subscription is not active');
   }
 
-  const { startDate, endDate } = buildSubscriptionDates(subscription.planDays);
+  const appSettings = await getAppCustomizationSettings();
+  assertSubscriptionFlowAllowed(appSettings);
+  const { startDate, endDate } = buildSubscriptionDates(
+    subscription.planDays,
+    appSettings.subscriptionOrders,
+  );
   const totalCredits = getTotalCredits(subscription.planDays, subscription.meals);
   const creditPerOrder = getCreditPerOrder(subscription.totalAmount, totalCredits);
   subscription.razorpaySubscriptionId = dto.razorpaySubscriptionId;
@@ -585,16 +611,36 @@ export async function listTodaySubscriptionMealsForRestaurant(
   restaurantId,
   query = {},
 ) {
+  const view = String(query.view || 'current').trim().toLowerCase();
   const rawDate = String(query.date || '').trim();
   const date = rawDate ? new Date(rawDate) : new Date();
-  const { start, end } = getDayBounds(
-    Number.isNaN(date.getTime()) ? new Date() : date,
-  );
+  const baseDate = Number.isNaN(date.getTime()) ? new Date() : date;
+  const todayBounds = getDayBounds(baseDate);
+  const tomorrowBounds = getDayBounds(addDays(baseDate, 1));
+  const rangeStart = getDayBounds(addDays(baseDate, -30)).start;
+  const rangeEnd = getDayBounds(addDays(baseDate, 30)).end;
+
+  let serviceDateFilter = { $gte: todayBounds.start, $lte: todayBounds.end };
+  let statusFilter = { $in: ['scheduled', 'sent_to_delivery'] };
+
+  if (view === 'all') {
+    serviceDateFilter = { $gte: todayBounds.start, $lte: rangeEnd };
+    statusFilter = { $in: ['scheduled', 'sent_to_delivery', 'skipped', 'cancelled'] };
+  } else if (view === 'scheduled') {
+    serviceDateFilter = { $gte: todayBounds.start, $lte: rangeEnd };
+    statusFilter = 'scheduled';
+  } else if (view === 'next') {
+    serviceDateFilter = { $gte: tomorrowBounds.start, $lte: tomorrowBounds.end };
+    statusFilter = { $in: ['scheduled', 'sent_to_delivery'] };
+  } else if (view === 'cancelled') {
+    serviceDateFilter = { $gte: rangeStart, $lte: rangeEnd };
+    statusFilter = { $in: ['cancelled', 'skipped'] };
+  }
 
   const schedules = await FoodSubscriptionSchedule.find({
     restaurantId: new mongoose.Types.ObjectId(restaurantId),
-    serviceDate: { $gte: start, $lte: end },
-    status: { $in: ['scheduled', 'sent_to_delivery'] },
+    serviceDate: serviceDateFilter,
+    status: statusFilter,
   })
     .populate('subscriptionId', 'customerName customerPhone deliveryAddress planTitle')
     .populate('userId', 'name phone email')

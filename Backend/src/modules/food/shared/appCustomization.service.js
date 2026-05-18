@@ -1,0 +1,155 @@
+import { ValidationError } from '../../../core/auth/errors.js';
+import { FoodSettings } from '../orders/models/order.model.js';
+
+export const DEFAULT_APP_CUSTOMIZATION_SETTINGS = {
+  normalOrderFlowEnabled: true,
+  subscriptionFlowEnabled: true,
+  diningFlowEnabled: true,
+  subscriptionOrders: {
+    startFrom: 'tomorrow',
+    devModePlaceNow: false,
+  },
+  scheduledOrders: {
+    enabled: true,
+    allowToday: true,
+    allowTomorrow: true,
+    minLeadTimeMinutes: 60,
+  },
+};
+
+function normalizeScheduledOrderSettings(settings = {}) {
+  return {
+    enabled: settings.enabled !== false,
+    allowToday: settings.allowToday !== false,
+    allowTomorrow: settings.allowTomorrow !== false,
+    minLeadTimeMinutes: Math.max(
+      0,
+      Number.isFinite(Number(settings.minLeadTimeMinutes))
+        ? Number(settings.minLeadTimeMinutes)
+        : DEFAULT_APP_CUSTOMIZATION_SETTINGS.scheduledOrders.minLeadTimeMinutes,
+    ),
+  };
+}
+
+function normalizeAppCustomizationSettings(settings = {}) {
+  const startFrom = String(settings.subscriptionOrders?.startFrom || settings.subscriptionStartFrom || 'tomorrow').toLowerCase();
+  return {
+    normalOrderFlowEnabled: settings.normalOrderFlowEnabled !== false,
+    subscriptionFlowEnabled: settings.subscriptionFlowEnabled !== false,
+    diningFlowEnabled: settings.diningFlowEnabled !== false,
+    subscriptionOrders: {
+      startFrom: startFrom === 'today' ? 'today' : 'tomorrow',
+      devModePlaceNow: Boolean(settings.subscriptionOrders?.devModePlaceNow),
+    },
+    scheduledOrders: normalizeScheduledOrderSettings(settings.scheduledOrders),
+  };
+}
+
+function localDateKey(date) {
+  const d = new Date(date);
+  if (Number.isNaN(d.getTime())) return "";
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+export async function getAppCustomizationSettings() {
+  const doc = await FoodSettings.findOne({ key: "app-customization" }).lean();
+  return normalizeAppCustomizationSettings(doc || DEFAULT_APP_CUSTOMIZATION_SETTINGS);
+}
+
+export async function updateAppCustomizationSettings(payload = {}, adminId) {
+  const current = await getAppCustomizationSettings();
+  const next = normalizeAppCustomizationSettings({
+    ...current,
+    ...payload,
+    subscriptionOrders: {
+      ...current.subscriptionOrders,
+      ...(payload.subscriptionOrders || {}),
+    },
+    scheduledOrders: {
+      ...current.scheduledOrders,
+      ...(payload.scheduledOrders || {}),
+    },
+  });
+
+  if (
+    next.scheduledOrders.enabled &&
+    !next.scheduledOrders.allowToday &&
+    !next.scheduledOrders.allowTomorrow
+  ) {
+    throw new ValidationError("Enable at least Today or Tomorrow for scheduled orders");
+  }
+
+  const doc = await FoodSettings.findOneAndUpdate(
+    { key: "app-customization" },
+    {
+      $set: {
+        normalOrderFlowEnabled: next.normalOrderFlowEnabled,
+        subscriptionFlowEnabled: next.subscriptionFlowEnabled,
+        diningFlowEnabled: next.diningFlowEnabled,
+        subscriptionOrders: next.subscriptionOrders,
+        scheduledOrders: next.scheduledOrders,
+        updatedBy: { role: "ADMIN", adminId, at: new Date() },
+      },
+    },
+    { upsert: true, new: true },
+  ).lean();
+
+  return normalizeAppCustomizationSettings(doc || next);
+}
+
+export function assertNormalOrderFlowAllowed(settings) {
+  if (settings?.normalOrderFlowEnabled === false) {
+    throw new ValidationError("Normal order flow is currently disabled");
+  }
+}
+
+export function assertSubscriptionFlowAllowed(settings) {
+  if (settings?.subscriptionFlowEnabled === false) {
+    throw new ValidationError("Subscription flow is currently disabled");
+  }
+}
+
+export function assertDiningFlowAllowed(settings) {
+  if (settings?.diningFlowEnabled === false) {
+    throw new ValidationError("Dining flow is currently disabled");
+  }
+}
+
+export function assertScheduledAtAllowed(scheduledAt, settings) {
+  if (!scheduledAt) return;
+
+  const scheduledDate = new Date(scheduledAt);
+  if (Number.isNaN(scheduledDate.getTime())) {
+    throw new ValidationError("Scheduled time is invalid");
+  }
+
+  const scheduledSettings = normalizeScheduledOrderSettings(settings?.scheduledOrders || settings);
+
+  if (!scheduledSettings.enabled) {
+    throw new ValidationError("Scheduled orders are currently disabled");
+  }
+
+  const now = new Date();
+  const minimumDate = new Date(
+    now.getTime() + Math.max(0, Number(scheduledSettings.minLeadTimeMinutes || 0)) * 60000,
+  );
+  if (scheduledDate < minimumDate) {
+    throw new ValidationError(
+      `Scheduled time must be at least ${scheduledSettings.minLeadTimeMinutes} minutes from now`,
+    );
+  }
+
+  const todayKey = localDateKey(now);
+  const tomorrow = new Date(now);
+  tomorrow.setDate(now.getDate() + 1);
+  const tomorrowKey = localDateKey(tomorrow);
+  const scheduledKey = localDateKey(scheduledDate);
+
+  if (scheduledKey === todayKey && scheduledSettings.allowToday) return;
+  if (scheduledKey === tomorrowKey && scheduledSettings.allowTomorrow) return;
+
+  throw new ValidationError("Scheduled orders are allowed only for the enabled dates");
+}

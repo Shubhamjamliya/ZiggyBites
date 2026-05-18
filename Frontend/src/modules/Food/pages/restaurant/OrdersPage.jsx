@@ -23,6 +23,7 @@ import { formatCurrency, usdToInr } from "@food/utils/currency"
 import { restaurantAPI } from "@food/api"
 import { RestaurantGridSkeleton } from "@food/components/ui/loading-skeletons"
 import { useDelayedLoading } from "@food/hooks/useDelayedLoading"
+import { DEFAULT_APP_CUSTOMIZATION, loadAppCustomization } from "@food/utils/appCustomization"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -38,8 +39,10 @@ export default function OrdersPage() {
   const [loading, setLoading] = useState(true)
   const [subscriptionLoading, setSubscriptionLoading] = useState(true)
   const [sendingScheduleIds, setSendingScheduleIds] = useState({})
+  const [appCustomization, setAppCustomization] = useState(DEFAULT_APP_CUSTOMIZATION)
   const [error, setError] = useState(null)
   const showOrdersSkeleton = useDelayedLoading(loading, { delay: 120, minDuration: 360 })
+  const normalOrderFlowEnabled = appCustomization.normalOrderFlowEnabled !== false
 
   // Restaurant notifications hook
   const { newOrder, clearNewOrder, isConnected } = useRestaurantNotifications()
@@ -151,6 +154,19 @@ export default function OrdersPage() {
     return () => clearInterval(refreshInterval)
   }, [])
 
+  useEffect(() => {
+    let mounted = true
+    loadAppCustomization()
+      .then((settings) => {
+        if (mounted) setAppCustomization(settings)
+      })
+      .catch(() => {})
+
+    return () => {
+      mounted = false
+    }
+  }, [])
+
   const handleSendSubscriptionMeal = async (schedule) => {
     const scheduleId = schedule.scheduleId || schedule._id
     if (!scheduleId || sendingScheduleIds[scheduleId]) return
@@ -173,6 +189,13 @@ export default function OrdersPage() {
   // Fetch orders from API
   useEffect(() => {
     const fetchOrders = async () => {
+      if (!normalOrderFlowEnabled) {
+        setOrders([])
+        setLoading(false)
+        setError(null)
+        return
+      }
+
       try {
         setLoading(true)
         setError(null)
@@ -241,11 +264,11 @@ export default function OrdersPage() {
     return () => {
       clearInterval(refreshInterval)
     }
-  }, [])
+  }, [normalOrderFlowEnabled])
 
   // Refresh orders when new order notification is received
   useEffect(() => {
-    if (newOrder) {
+    if (newOrder && normalOrderFlowEnabled) {
       debugLog('?? New order notification received, refreshing orders list')
       const fetchOrders = async () => {
         try {
@@ -295,11 +318,11 @@ export default function OrdersPage() {
       }
       fetchOrders()
     }
-  }, [newOrder])
+  }, [newOrder, normalOrderFlowEnabled])
 
   // Refresh orders when new order notification is cleared
   useEffect(() => {
-    if (!newOrder) {
+    if (!newOrder && normalOrderFlowEnabled) {
       const fetchOrders = async () => {
         try {
           const response = await restaurantAPI.getOrders()
@@ -348,7 +371,7 @@ export default function OrdersPage() {
       }
       fetchOrders()
     }
-  }, [newOrder])
+  }, [newOrder, normalOrderFlowEnabled])
 
   // Calculate filter tab counts dynamically from actual orders
   // Show active orders (pending, confirmed, preparing, ready) and history orders (delivered, cancelled)
@@ -436,17 +459,18 @@ export default function OrdersPage() {
           Orders
         </h1>
 
-        {/* Main Navigation Tabs */}
-        <div className="flex gap-4 mb-6 border-b border-gray-200">
-          <div className="pb-3 px-2 text-sm md:text-base font-medium text-[#ff8100] relative">
-            Regular Order
-            <motion.div
-              layoutId="activeMainTab"
-              className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#ff8100]"
-              transition={{ type: "spring", stiffness: 500, damping: 30 }}
-            />
+        {normalOrderFlowEnabled && (
+          <div className="flex gap-4 mb-6 border-b border-gray-200">
+            <div className="pb-3 px-2 text-sm md:text-base font-medium text-[#ff8100] relative">
+              Regular Order
+              <motion.div
+                layoutId="activeMainTab"
+                className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#ff8100]"
+                transition={{ type: "spring", stiffness: 500, damping: 30 }}
+              />
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Subscription Meals */}
         <div className="mb-6 rounded-2xl bg-white p-4 shadow-sm">
@@ -513,64 +537,77 @@ export default function OrdersPage() {
           )}
         </div>
 
-        {/* Summary Cards */}
-        <div className="grid grid-cols-3 gap-3 md:gap-4 mb-6">
-          {summaryCards.map((card, index) => (
-            <motion.div
-              key={card.label}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, delay: index * 0.1, ease: [0.4, 0, 0.2, 1] }}
-              whileHover={{ y: -4, scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-            >
-              <Card className="bg-white shadow-md border-0 overflow-hidden">
-                <CardContent className="p-2 md:p-3 text-center flex flex-col justify-center min-h-[60px] md:min-h-[70px]">
-                  <p className="text-gray-900 text-sm md:text-base font-bold mb-0.5 leading-tight">
-                    {card.count}
-                  </p>
-                  <p className="text-gray-600 text-sm md:text-base font-medium">
-                    {card.label}
-                  </p>
-                </CardContent>
-              </Card>
-            </motion.div>
-          ))}
-        </div>
+        {normalOrderFlowEnabled && (
+          <>
+            {/* Summary Cards */}
+            <div className="grid grid-cols-3 gap-3 md:gap-4 mb-6">
+              {summaryCards.map((card, index) => (
+                <motion.div
+                  key={card.label}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.4, delay: index * 0.1, ease: [0.4, 0, 0.2, 1] }}
+                  whileHover={{ y: -4, scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                >
+                  <Card className="bg-white shadow-md border-0 overflow-hidden">
+                    <CardContent className="p-2 md:p-3 text-center flex flex-col justify-center min-h-[60px] md:min-h-[70px]">
+                      <p className="text-gray-900 text-sm md:text-base font-bold mb-0.5 leading-tight">
+                        {card.count}
+                      </p>
+                      <p className="text-gray-600 text-sm md:text-base font-medium">
+                        {card.label}
+                      </p>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              ))}
+            </div>
 
-        {/* Filter Tabs */}
-        <div className="mb-6 overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0 scrollbar-hide">
-          <div className="flex gap-3 min-w-max md:flex-wrap md:min-w-0 relative">
-            {filterTabs.map((tab, index) => (
-              <motion.button
-                key={tab.id}
-                initial={{ opacity: 0, scale: 0.8 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ duration: 0.3, delay: index * 0.05 }}
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={() => setActiveFilterTab(tab.id)}
-                className={`relative z-10 shrink-0 px-4 py-2 rounded-full text-sm md:text-base font-medium transition-colors ${
-                  activeFilterTab === tab.id
-                    ? "text-white"
-                    : "bg-white text-gray-600 hover:bg-gray-100"
-                }`}
-              >
-                {activeFilterTab === tab.id && (
-                  <motion.div
-                    layoutId="activeFilterTab"
-                    className="absolute inset-0 bg-[#ff8100] rounded-full z-0"
-                    transition={{ type: "spring", stiffness: 500, damping: 30 }}
-                  />
-                )}
-                <span className="relative z-10">{tab.label} {tab.count}</span>
-              </motion.button>
-            ))}
+            {/* Filter Tabs */}
+            <div className="mb-6 overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0 scrollbar-hide">
+              <div className="flex gap-3 min-w-max md:flex-wrap md:min-w-0 relative">
+                {filterTabs.map((tab, index) => (
+                  <motion.button
+                    key={tab.id}
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ duration: 0.3, delay: index * 0.05 }}
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => setActiveFilterTab(tab.id)}
+                    className={`relative z-10 shrink-0 px-4 py-2 rounded-full text-sm md:text-base font-medium transition-colors ${
+                      activeFilterTab === tab.id
+                        ? "text-white"
+                        : "bg-white text-gray-600 hover:bg-gray-100"
+                    }`}
+                  >
+                    {activeFilterTab === tab.id && (
+                      <motion.div
+                        layoutId="activeFilterTab"
+                        className="absolute inset-0 bg-[#ff8100] rounded-full z-0"
+                        transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                      />
+                    )}
+                    <span className="relative z-10">{tab.label} {tab.count}</span>
+                  </motion.button>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
+
+        {!normalOrderFlowEnabled && (
+          <div className="mb-6 rounded-2xl border border-dashed border-orange-200 bg-white px-4 py-5 text-center shadow-sm">
+            <p className="text-sm font-bold text-gray-900">Regular order flow is off</p>
+            <p className="mt-1 text-xs font-medium text-gray-500">
+              Only subscription meals are shown here until admin enables normal orders again.
+            </p>
           </div>
-        </div>
+        )}
 
         {/* Orders List */}
-        <div className="space-y-3 md:space-y-4">
+        {normalOrderFlowEnabled && <div className="space-y-3 md:space-y-4">
           {showOrdersSkeleton ? (
             <RestaurantGridSkeleton
               count={4}
@@ -649,7 +686,7 @@ export default function OrdersPage() {
             </motion.div>
             ))
           )}
-        </div>
+        </div>}
       </div>
 
       {/* Bottom Navigation Bar - Mobile Only */}
@@ -659,13 +696,15 @@ export default function OrdersPage() {
       <MenuOverlay showMenu={showMenu} setShowMenu={setShowMenu} />
 
       {/* New Order Notification */}
-      <NewOrderNotification
-        order={notificationOrder}
-        onClose={clearNewOrder}
-        onViewOrder={(order) => {
-          navigate(`/restaurant/orders/${order.orderMongoId || order.orderId}`)
-        }}
-      />
+      {normalOrderFlowEnabled && (
+        <NewOrderNotification
+          order={notificationOrder}
+          onClose={clearNewOrder}
+          onViewOrder={(order) => {
+            navigate(`/restaurant/orders/${order.orderMongoId || order.orderId}`)
+          }}
+        />
+      )}
     </div>
   )
 }

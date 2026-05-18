@@ -1,8 +1,9 @@
 import { Routes, Route, Navigate } from "react-router-dom"
 import UserLayout from "./UserLayout"
-import { Suspense, lazy } from "react"
+import { Suspense, lazy, useEffect, useState } from "react"
 import Loader from "@food/components/Loader"
 import ProtectedRoute from "@food/components/ProtectedRoute"
+import { DEFAULT_APP_CUSTOMIZATION, loadAppCustomization } from "@food/utils/appCustomization"
 
 // Lazy Loading Pages
 
@@ -96,6 +97,31 @@ const Wallet = lazy(() => import("@food/pages/user/Wallet"))
 // Complaints
 const SubmitComplaint = lazy(() => import("@food/pages/user/complaints/SubmitComplaint"))
 
+function DiningFlowGate({ children }) {
+  const [settings, setSettings] = useState(null)
+
+  useEffect(() => {
+    let mounted = true
+    loadAppCustomization()
+      .then((nextSettings) => {
+        if (mounted) setSettings(nextSettings)
+      })
+      .catch(() => {
+        if (mounted) setSettings(DEFAULT_APP_CUSTOMIZATION)
+      })
+
+    return () => {
+      mounted = false
+    }
+  }, [])
+
+  if (!settings) return <Loader />
+  if (settings.diningFlowEnabled === false) return <Navigate to="/food/user" replace />
+  return children
+}
+
+const diningElement = (element) => <DiningFlowGate>{element}</DiningFlowGate>
+
 export default function UserRouter() {
   return (
     <Suspense fallback={<Loader />}>
@@ -103,23 +129,23 @@ export default function UserRouter() {
         <Route element={<UserLayout />}>
           {/* Home & Discovery */}
           <Route path="" element={<Home />} />
-          <Route path="dining" element={<Dining />} />
-          <Route path="dining/:category" element={<DiningCategory />} />
-          <Route path="dining/explore/upto50" element={<DiningExplore50 />} />
-          <Route path="dining/explore/near-rated" element={<DiningExploreNear />} />
-          <Route path="dining/coffee" element={<Coffee />} />
-          <Route path="dining/:diningType/:slug" element={<DiningRestaurantDetails />} />
-          <Route path="dining/book/:slug" element={<TableBooking />} />
-          <Route path="dining/book-confirmation" element={<TableBookingConfirmation />} />
-          <Route path="dining/book-success" element={<TableBookingSuccess />} />
-          <Route path="dining/modification-policy" element={<TableModificationPolicy />} />
-          <Route path="dining/cancellation-policy" element={<TableCancellationPolicy />} />
-          <Route path="dining/edit-user" element={<TableEditUserPage />} />
+          <Route path="dining" element={diningElement(<Dining />)} />
+          <Route path="dining/explore/upto50" element={diningElement(<DiningExplore50 />)} />
+          <Route path="dining/explore/near-rated" element={diningElement(<DiningExploreNear />)} />
+          <Route path="dining/coffee" element={diningElement(<Coffee />)} />
+          <Route path="dining/book/:slug" element={diningElement(<TableBooking />)} />
+          <Route path="dining/book-confirmation" element={diningElement(<TableBookingConfirmation />)} />
+          <Route path="dining/book-success" element={diningElement(<TableBookingSuccess />)} />
+          <Route path="dining/modification-policy" element={diningElement(<TableModificationPolicy />)} />
+          <Route path="dining/cancellation-policy" element={diningElement(<TableCancellationPolicy />)} />
+          <Route path="dining/edit-user" element={diningElement(<TableEditUserPage />)} />
+          <Route path="dining/:diningType/:slug" element={diningElement(<DiningRestaurantDetails />)} />
+          <Route path="dining/:category" element={diningElement(<DiningCategory />)} />
           <Route
             path="bookings"
             element={
               <ProtectedRoute requiredRole="user" loginPath="/user/auth/login">
-                <MyBookings />
+                {diningElement(<MyBookings />)}
               </ProtectedRoute>
             }
           />
@@ -305,7 +331,7 @@ export default function UserRouter() {
             path="profile/dining-bookings"
             element={
               <ProtectedRoute requiredRole="user" loginPath="/user/auth/login">
-                <MyBookings />
+                {diningElement(<MyBookings />)}
               </ProtectedRoute>
             }
           />

@@ -5,7 +5,7 @@ import { Phone, ArrowRight, ShieldCheck, Loader2, Utensils, Star, Heart, ShieldQ
 import { toast } from "sonner"
 import { authAPI, userAPI } from "@food/api"
 import { setAuthData } from "@food/utils/auth"
-import logoNew from "@/assets/logo.png"
+import { getCachedSettings, loadBusinessSettings } from "@food/utils/businessSettings"
 import {
   Dialog,
   DialogContent,
@@ -30,9 +30,44 @@ export default function UnifiedOTPFastLogin() {
   const [isUpdatingName, setIsUpdatingName] = useState(false)
   const [tempAuth, setTempAuth] = useState(null)
   const [pendingVerify, setPendingVerify] = useState(null)
+  const [brand, setBrand] = useState(() => {
+    const cached = getCachedSettings()
+    return {
+      logoUrl: cached?.logo?.url || null,
+      companyName: cached?.companyName || "ZiggyBites",
+    }
+  })
   const navigate = useNavigate()
   const submitting = useRef(false)
   const goToFoodPreference = () => navigate("/user/auth/portal", { replace: true })
+
+  useEffect(() => {
+    let cancelled = false
+
+    const applySettings = (settings) => {
+      if (!settings || cancelled) return
+      setBrand({
+        logoUrl: settings.logo?.url || null,
+        companyName: settings.companyName || "ZiggyBites",
+      })
+    }
+
+    applySettings(getCachedSettings())
+
+    loadBusinessSettings()
+      .then(applySettings)
+      .catch(() => {})
+
+    const handleSettingsUpdate = () => {
+      applySettings(getCachedSettings())
+    }
+
+    window.addEventListener("businessSettingsUpdated", handleSettingsUpdate)
+    return () => {
+      cancelled = true
+      window.removeEventListener("businessSettingsUpdated", handleSettingsUpdate)
+    }
+  }, [])
 
   const normalizedPhone = () => {
     const digits = String(phoneNumber).replace(/\D/g, "").slice(-15)
@@ -279,11 +314,18 @@ export default function UnifiedOTPFastLogin() {
               transition={{ type: "spring", stiffness: 200, damping: 20 }}
               className="relative inline-block mb-4"
             >
-              <img 
-                src={logoNew} 
-                alt="ZiggyBites Logo" 
-                className="w-40 h-40 md:w-48 md:h-48 object-contain mx-auto"
-              />
+              {brand.logoUrl ? (
+                <img 
+                  src={brand.logoUrl} 
+                  alt={`${brand.companyName || "Company"} Logo`} 
+                  className="w-40 h-40 md:w-48 md:h-48 object-contain mx-auto"
+                  onError={() => setBrand((prev) => ({ ...prev, logoUrl: null }))}
+                />
+              ) : (
+                <div className="w-40 h-40 md:w-48 md:h-48 mx-auto rounded-full bg-[#7e3866]/10 text-[#7e3866] flex items-center justify-center text-5xl md:text-6xl font-black">
+                  {(brand.companyName || "Z").trim().charAt(0).toUpperCase()}
+                </div>
+              )}
             </motion.div>
 
             <motion.p

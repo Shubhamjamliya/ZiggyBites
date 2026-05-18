@@ -1,4 +1,4 @@
-import { useState, useRef } from "react"
+import { useEffect, useState, useRef } from "react"
 import { useNavigate, Link } from "react-router-dom"
 import { motion } from "framer-motion"
 import { ShieldCheck, Truck, Star, Heart, ArrowRight, Loader2, ShieldQuestion } from "lucide-react"
@@ -6,7 +6,7 @@ import { Button } from "@food/components/ui/button"
 import { toast } from "sonner"
 import { deliveryAPI } from "@food/api"
 import { clearModuleAuth } from "@food/utils/auth"
-import logoNew from "@/assets/logo.png"
+import { getCachedSettings, loadBusinessSettings } from "@food/utils/businessSettings"
 
 const DEFAULT_COUNTRY_CODE = "+91"
 
@@ -23,7 +23,42 @@ export default function DeliverySignIn() {
     return ""
   })
   const [loading, setLoading] = useState(false)
+  const [brand, setBrand] = useState(() => {
+    const cached = getCachedSettings()
+    return {
+      logoUrl: cached?.logo?.url || null,
+      companyName: cached?.companyName || "ZiggyBites",
+    }
+  })
   const submitting = useRef(false)
+
+  useEffect(() => {
+    let cancelled = false
+
+    const applySettings = (settings) => {
+      if (!settings || cancelled) return
+      setBrand({
+        logoUrl: settings.logo?.url || null,
+        companyName: settings.companyName || "ZiggyBites",
+      })
+    }
+
+    applySettings(getCachedSettings())
+
+    loadBusinessSettings()
+      .then(applySettings)
+      .catch(() => {})
+
+    const handleSettingsUpdate = () => {
+      applySettings(getCachedSettings())
+    }
+
+    window.addEventListener("businessSettingsUpdated", handleSettingsUpdate)
+    return () => {
+      cancelled = true
+      window.removeEventListener("businessSettingsUpdated", handleSettingsUpdate)
+    }
+  }, [])
 
   const validatePhone = (num) => {
     const digits = num.replace(/\D/g, "")
@@ -97,11 +132,18 @@ export default function DeliverySignIn() {
               transition={{ type: "spring", stiffness: 200, damping: 20 }}
               className="relative inline-block mb-4"
             >
-              <img 
-                src={logoNew} 
-                alt="ZiggyBites Logo" 
-                className="w-32 h-32 md:w-36 md:h-36 object-contain mx-auto"
-              />
+              {brand.logoUrl ? (
+                <img 
+                  src={brand.logoUrl} 
+                  alt={`${brand.companyName || "Company"} Logo`} 
+                  className="w-32 h-32 md:w-36 md:h-36 object-contain mx-auto"
+                  onError={() => setBrand((prev) => ({ ...prev, logoUrl: null }))}
+                />
+              ) : (
+                <div className="w-32 h-32 md:w-36 md:h-36 mx-auto rounded-full bg-[#7e3866]/10 text-[#7e3866] flex items-center justify-center text-4xl md:text-5xl font-black">
+                  {(brand.companyName || "Z").trim().charAt(0).toUpperCase()}
+                </div>
+              )}
             </motion.div>
 
             <motion.p
@@ -172,7 +214,7 @@ export default function DeliverySignIn() {
 
           <div className="mt-8 text-center">
             <p className="text-[11px] text-gray-400 font-medium leading-relaxed max-w-[320px] mx-auto">
-              By continuing, you agree to ZiggyBites's <br />
+              By continuing, you agree to {brand.companyName || "ZiggyBites"}'s <br />
               <Link to="/food/delivery/profile/terms" className="text-gray-900 dark:text-white font-bold hover:text-[#7e3866] transition-colors">Terms of Service</Link>
               <span className="mx-1">&</span>
               <Link to="/food/delivery/profile/privacy" className="text-gray-900 dark:text-white font-bold hover:text-[#7e3866] transition-colors">Privacy Policy</Link>

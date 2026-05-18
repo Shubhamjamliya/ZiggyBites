@@ -1,8 +1,8 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { motion } from "framer-motion"
 import { ArrowRight, Info, Leaf, UtensilsCrossed } from "lucide-react"
 import { useNavigate } from "react-router-dom"
-import logoNew from "@/assets/logo.png"
+import { getCachedSettings, loadBusinessSettings } from "@food/utils/businessSettings"
 
 const FOOD_PREFERENCE_KEY = "userHomeFoodPreference"
 
@@ -33,6 +33,41 @@ export default function FoodPreference() {
     const saved = localStorage.getItem(FOOD_PREFERENCE_KEY)
     return saved === "healthy" || saved === "all" ? saved : "healthy"
   })
+  const [brand, setBrand] = useState(() => {
+    const cached = getCachedSettings()
+    return {
+      logoUrl: cached?.logo?.url || null,
+      companyName: cached?.companyName || "ZiggyBites",
+    }
+  })
+
+  useEffect(() => {
+    let cancelled = false
+
+    const applySettings = (settings) => {
+      if (!settings || cancelled) return
+      setBrand({
+        logoUrl: settings.logo?.url || null,
+        companyName: settings.companyName || "ZiggyBites",
+      })
+    }
+
+    applySettings(getCachedSettings())
+
+    loadBusinessSettings()
+      .then(applySettings)
+      .catch(() => {})
+
+    const handleSettingsUpdate = () => {
+      applySettings(getCachedSettings())
+    }
+
+    window.addEventListener("businessSettingsUpdated", handleSettingsUpdate)
+    return () => {
+      cancelled = true
+      window.removeEventListener("businessSettingsUpdated", handleSettingsUpdate)
+    }
+  }, [])
 
   const savePreference = (preference = selected) => {
     localStorage.setItem(FOOD_PREFERENCE_KEY, preference)
@@ -50,7 +85,18 @@ export default function FoodPreference() {
           transition={{ duration: 0.35 }}
           className="bg-white dark:bg-[#111111] border border-orange-100 dark:border-white/10 rounded-[2rem] shadow-xl shadow-orange-100/60 dark:shadow-none px-5 py-6"
         >
-          <img src={logoNew} alt="ZiggyBites" className="h-10 w-10 object-contain mb-6" />
+          {brand.logoUrl ? (
+            <img
+              src={brand.logoUrl}
+              alt={brand.companyName || "Company"}
+              className="h-10 w-10 object-contain mb-6"
+              onError={() => setBrand((prev) => ({ ...prev, logoUrl: null }))}
+            />
+          ) : (
+            <div className="h-10 w-10 rounded-full bg-[#7e3866]/10 text-[#7e3866] flex items-center justify-center font-black mb-6">
+              {(brand.companyName || "Z").trim().charAt(0).toUpperCase()}
+            </div>
+          )}
 
           <h1 className="text-3xl font-black leading-tight text-gray-950 dark:text-white tracking-tight">
             Help us serve you better

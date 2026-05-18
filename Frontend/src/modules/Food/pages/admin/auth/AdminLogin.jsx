@@ -3,9 +3,9 @@ import { useNavigate, Link } from "react-router-dom"
 import { motion, AnimatePresence } from "framer-motion"
 import { adminAPI } from "@food/api"
 import { setAuthData } from "@food/utils/auth"
+import { getCachedSettings, loadBusinessSettings } from "@food/utils/businessSettings"
 import { ShieldCheck, UserCog, Star, Heart, ArrowRight, Loader2, Mail, Lock, Eye, EyeOff, ShieldQuestion } from "lucide-react"
 import { Button } from "@food/components/ui/button"
-import logoNew from "@/assets/logo.png"
 import { toast } from "sonner"
 
 export default function AdminLogin() {
@@ -14,7 +14,42 @@ export default function AdminLogin() {
   const [password, setPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [brand, setBrand] = useState(() => {
+    const cached = getCachedSettings()
+    return {
+      logoUrl: cached?.logo?.url || null,
+      companyName: cached?.companyName || "ZiggyBites",
+    }
+  })
   const submitting = useRef(false)
+
+  useEffect(() => {
+    let cancelled = false
+
+    const applySettings = (settings) => {
+      if (!settings || cancelled) return
+      setBrand({
+        logoUrl: settings.logo?.url || null,
+        companyName: settings.companyName || "ZiggyBites",
+      })
+    }
+
+    applySettings(getCachedSettings())
+
+    loadBusinessSettings()
+      .then(applySettings)
+      .catch(() => {})
+
+    const handleSettingsUpdate = () => {
+      applySettings(getCachedSettings())
+    }
+
+    window.addEventListener("businessSettingsUpdated", handleSettingsUpdate)
+    return () => {
+      cancelled = true
+      window.removeEventListener("businessSettingsUpdated", handleSettingsUpdate)
+    }
+  }, [])
 
   const handleLogin = async (e) => {
     e.preventDefault()
@@ -82,11 +117,18 @@ export default function AdminLogin() {
               transition={{ type: "spring", stiffness: 200, damping: 20 }}
               className="relative inline-block mb-4"
             >
-              <img 
-                src={logoNew} 
-                alt="ZiggyBites Logo" 
-                className="w-32 h-32 md:w-36 md:h-36 object-contain mx-auto"
-              />
+              {brand.logoUrl ? (
+                <img 
+                  src={brand.logoUrl} 
+                  alt={`${brand.companyName || "Company"} Logo`} 
+                  className="w-32 h-32 md:w-36 md:h-36 object-contain mx-auto"
+                  onError={() => setBrand((prev) => ({ ...prev, logoUrl: null }))}
+                />
+              ) : (
+                <div className="w-32 h-32 md:w-36 md:h-36 mx-auto rounded-full bg-[#7e3866]/10 text-[#7e3866] flex items-center justify-center text-4xl md:text-5xl font-black">
+                  {(brand.companyName || "Z").trim().charAt(0).toUpperCase()}
+                </div>
+              )}
             </motion.div>
 
             <motion.p

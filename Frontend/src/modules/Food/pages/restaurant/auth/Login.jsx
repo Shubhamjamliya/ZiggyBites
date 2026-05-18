@@ -5,7 +5,7 @@ import { ShieldCheck, Utensils, Star, Heart, ArrowRight, Loader2, Store, ShieldQ
 import { Button } from "@food/components/ui/button"
 import { toast } from "sonner"
 import { restaurantAPI } from "@food/api"
-import logoNew from "@/assets/logo.png"
+import { getCachedSettings, loadBusinessSettings } from "@food/utils/businessSettings"
 
 const DEFAULT_COUNTRY_CODE = "+91"
 
@@ -14,7 +14,42 @@ export default function RestaurantLogin() {
   const phoneInputRef = useRef(null)
   const [phone, setPhone] = useState(() => sessionStorage.getItem("restaurantLoginPhone") || "")
   const [loading, setLoading] = useState(false)
+  const [brand, setBrand] = useState(() => {
+    const cached = getCachedSettings()
+    return {
+      logoUrl: cached?.logo?.url || null,
+      companyName: cached?.companyName || "ZiggyBites",
+    }
+  })
   const submitting = useRef(false)
+
+  useEffect(() => {
+    let cancelled = false
+
+    const applySettings = (settings) => {
+      if (!settings || cancelled) return
+      setBrand({
+        logoUrl: settings.logo?.url || null,
+        companyName: settings.companyName || "ZiggyBites",
+      })
+    }
+
+    applySettings(getCachedSettings())
+
+    loadBusinessSettings()
+      .then(applySettings)
+      .catch(() => {})
+
+    const handleSettingsUpdate = () => {
+      applySettings(getCachedSettings())
+    }
+
+    window.addEventListener("businessSettingsUpdated", handleSettingsUpdate)
+    return () => {
+      cancelled = true
+      window.removeEventListener("businessSettingsUpdated", handleSettingsUpdate)
+    }
+  }, [])
 
   const validatePhone = (num) => {
     const digits = num.replace(/\D/g, "")
@@ -89,11 +124,18 @@ export default function RestaurantLogin() {
               transition={{ type: "spring", stiffness: 200, damping: 20 }}
               className="relative inline-block mb-4"
             >
-              <img 
-                src={logoNew} 
-                alt="ZiggyBites Logo" 
-                className="w-32 h-32 md:w-36 md:h-36 object-contain mx-auto"
-              />
+              {brand.logoUrl ? (
+                <img 
+                  src={brand.logoUrl} 
+                  alt={`${brand.companyName || "Company"} Logo`} 
+                  className="w-32 h-32 md:w-36 md:h-36 object-contain mx-auto"
+                  onError={() => setBrand((prev) => ({ ...prev, logoUrl: null }))}
+                />
+              ) : (
+                <div className="w-32 h-32 md:w-36 md:h-36 mx-auto rounded-full bg-[#7e3866]/10 text-[#7e3866] flex items-center justify-center text-4xl md:text-5xl font-black">
+                  {(brand.companyName || "Z").trim().charAt(0).toUpperCase()}
+                </div>
+              )}
             </motion.div>
 
             <motion.p
@@ -165,7 +207,7 @@ export default function RestaurantLogin() {
 
           <div className="mt-8 text-center">
             <p className="text-[11px] text-gray-400 font-medium leading-relaxed max-w-[320px] mx-auto">
-              By continuing, you agree to ZiggyBites's <br />
+              By continuing, you agree to {brand.companyName || "ZiggyBites"}'s <br />
               <Link to="/food/restaurant/profile/terms" className="text-gray-900 dark:text-white font-bold hover:text-[#7e3866] transition-colors">Terms of Service</Link> & <Link to="/food/restaurant/profile/privacy" className="text-gray-900 dark:text-white font-bold hover:text-[#7e3866] transition-colors">Privacy Policy</Link>
             </p>
           </div>

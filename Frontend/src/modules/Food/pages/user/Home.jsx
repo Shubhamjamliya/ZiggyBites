@@ -1,4 +1,7 @@
-﻿import { useSearchParams, Link, useNavigate } from "react-router-dom";
+
+import HomeCategories from "@food/components/user/home/HomeCategories";
+import { useHome } from "@food/hooks/useHome";
+import MobileHeader from "@food/components/user/home/MobileHeader";import { useSearchParams, Link, useNavigate } from "react-router-dom";
 import React, {
   useRef,
   useEffect,
@@ -148,260 +151,20 @@ const getRestaurantDisplayName = (restaurant) => {
   return resolvedName ? resolvedName.trim() : "Restaurant";
 };
 
-// Restaurant Image Carousel Component
-const RestaurantImageCarousel = React.memo(
-  ({
-    restaurant,
-    priority = false,
-    backendOrigin = "",
-    className = "h-48 sm:h-56 md:h-60 lg:h-64 xl:h-72",
-    roundedClass = "rounded-t-md",
-  }) => {
-    const webviewSessionKeyRef = useRef(WEBVIEW_SESSION_CACHE_BUSTER);
-    const imageElementRef = useRef(null);
-
-    const withCacheBuster = useCallback(
-      (url) => {
-        if (typeof url !== "string" || !url) return "";
-        if (/^data:/i.test(url) || /^blob:/i.test(url)) return url;
-
-        // Resolve relative URLs (e.g. /uploads/...) so they load on mobile when backend is different from frontend.
-        const isRelative = !/^(https?:|\/\/|data:|blob:)/i.test(url.trim());
-        const resolvedUrl =
-          backendOrigin && isRelative
-            ? `${backendOrigin.replace(/\/$/, "")}${url.startsWith("/") ? url : `/${url}`}`
-            : url;
-
-        // Do not mutate signed URLs (legacy S3/Cloudfront/Firebase links can break if query changes).
-        const hasSignedParams =
-          /[?&](X-Amz-|Signature=|Expires=|AWSAccessKeyId=|GoogleAccessId=|token=|sig=|se=|sp=|sv=)/i.test(
-            resolvedUrl,
-          );
-        if (hasSignedParams) return resolvedUrl;
-
-        try {
-          const parsed = new URL(resolvedUrl, window.location.origin);
-
-          // Apply cache-buster only to app/backend-hosted URLs to avoid third-party CDN signature issues.
-          const currentHost =
-            typeof window !== "undefined" ? window.location.hostname : "";
-          const isLocalHost = /^(localhost|127\.0\.0\.1)$/i.test(
-            parsed.hostname,
-          );
-          const isSameHost = currentHost && parsed.hostname === currentHost;
-
-          if (isLocalHost || isSameHost) {
-            parsed.searchParams.set("_wv", webviewSessionKeyRef.current);
-          }
-          return parsed.toString();
-        } catch {
-          return resolvedUrl;
-        }
-      },
-      [backendOrigin],
-    );
-
-    const images = useMemo(() => {
-      const sourceImages =
-        Array.isArray(restaurant.images) && restaurant.images.length > 0
-          ? restaurant.images
-          : [restaurant.image];
-
-      const validImages = sourceImages
-        .filter((img) => typeof img === "string")
-        .map((img) => img.trim())
-        .filter(Boolean);
-
-      return validImages.map((img) => withCacheBuster(img));
-    }, [restaurant.images, restaurant.image, withCacheBuster]);
-    const [currentIndex, setCurrentIndex] = useState(0);
-    const [loadedBySrc, setLoadedBySrc] = useState({});
-    const [, setAttemptedSrcs] = useState({});
-    const [isImageUnavailable, setIsImageUnavailable] = useState(false);
-    const [showShimmer, setShowShimmer] = useState(true);
-    const [lastGoodSrc, setLastGoodSrc] = useState("");
-    const touchStartX = useRef(0);
-    const touchEndX = useRef(0);
-    const isSwiping = useRef(false);
-
-    const safeIndex =
-      images.length > 0
-        ? ((currentIndex % images.length) + images.length) % images.length
-        : 0;
-    const primarySrc = images[safeIndex] || "";
-    const displaySrc = primarySrc;
-    const renderSrc = displaySrc || lastGoodSrc;
-    const isImageLoaded = Boolean(loadedBySrc[renderSrc] || lastGoodSrc);
-
-    // Reset transient image state when restaurant or source list changes.
-    useEffect(() => {
-      setCurrentIndex(0);
-      setLoadedBySrc({});
-      setAttemptedSrcs({});
-      setIsImageUnavailable(images.length === 0);
-      setShowShimmer(images.length > 0);
-    }, [restaurant?.id, restaurant?.slug, restaurant?.updatedAt, images]);
-
-    // Clear sticky successful source only when card identity changes.
-    useEffect(() => {
-      setLastGoodSrc("");
-    }, [restaurant?.id, restaurant?.slug]);
-
-    // WebView can serve from cache without firing onLoad; handle already-complete images.
-    useEffect(() => {
-      if (!renderSrc) return;
-      const imgEl = imageElementRef.current;
-      if (!imgEl) return;
-
-      setShowShimmer(true);
-      const shimmerTimeout = setTimeout(() => {
-        setShowShimmer(false);
-      }, 2500);
-
-      if (imgEl.complete) {
-        if (imgEl.naturalWidth > 0) {
-          setLoadedBySrc((prev) =>
-            prev[renderSrc] ? prev : { ...prev, [renderSrc]: true },
-          );
-          setLastGoodSrc(renderSrc);
-          setShowShimmer(false);
-        } else {
-          setAttemptedSrcs((prev) => ({ ...prev, [renderSrc]: true }));
-        }
-      }
-      return () => clearTimeout(shimmerTimeout);
-    }, [renderSrc]);
-
-    // Handle touch events for swipe
-    const handleTouchStart = (e) => {
-      touchStartX.current = e.touches[0].clientX;
-      isSwiping.current = false;
-    };
-
-    const handleTouchMove = (e) => {
-      const currentX = e.touches[0].clientX;
-      const diff = touchStartX.current - currentX;
-
-      // If swipe distance is significant, mark as swiping
-      if (Math.abs(diff) > 10) {
-        isSwiping.current = true;
-      }
-    };
-
-    const handleTouchEnd = (e) => {
-      if (!isSwiping.current) return;
-
-      touchEndX.current = e.changedTouches[0].clientX;
-      const diff = touchStartX.current - touchEndX.current;
-      const minSwipeDistance = 85; // Keep card swipe less sensitive on mobile
-
-      if (Math.abs(diff) > minSwipeDistance) {
-        if (diff > 0) {
-          // Swipe left - next image
-          setCurrentIndex((prev) => (prev + 1) % images.length);
-        } else {
-          // Swipe right - previous image
-          setCurrentIndex((prev) => (prev - 1 + images.length) % images.length);
-        }
-      }
-
-      // Reset
-      isSwiping.current = false;
-      touchStartX.current = 0;
-      touchEndX.current = 0;
-    };
-
-    const showMultipleImages = images.length > 1;
-
-    return (
-      <div
-        className={`relative ${className} w-full overflow-hidden ${roundedClass} flex-shrink-0 group`}
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}>
-        {showShimmer && !isImageUnavailable && Boolean(renderSrc) && (
-          <div className="absolute inset-0 z-[1] overflow-hidden bg-gray-200">
-            <div className="h-full w-full animate-pulse bg-gradient-to-r from-gray-200 via-gray-100 to-gray-200" />
-          </div>
-        )}
-
-        <div className="absolute inset-0 transition-transform duration-700 ease-out group-hover:scale-110">
-          {renderSrc && (
-            <img
-              ref={imageElementRef}
-              src={renderSrc}
-              alt={`${restaurant.name} - Image ${safeIndex + 1}`}
-              className="w-full h-full object-cover"
-              loading={priority ? "eager" : "lazy"}
-              fetchPriority={priority ? "high" : "auto"}
-              decoding="async"
-              onLoad={() => {
-                setLoadedBySrc((prev) => ({ ...prev, [renderSrc]: true }));
-                setLastGoodSrc(renderSrc);
-                setShowShimmer(false);
-              }}
-              onError={() => {
-                setAttemptedSrcs((prev) => {
-                  const next = { ...prev, [primarySrc]: true };
-                  const attemptedCount = Object.keys(next).length;
-
-                  if (attemptedCount >= images.length) {
-                    setIsImageUnavailable(true);
-                  } else if (images.length > 1) {
-                    setCurrentIndex(
-                      (prevIndex) => (prevIndex + 1) % images.length,
-                    );
-                  }
-
-                  return next;
-                });
-                if (images.length === 1) {
-                  setIsImageUnavailable(true);
-                }
-              }}
-            />
-          )}
-        </div>
-
-        {isImageUnavailable && (
-          <div className="absolute inset-0 z-[2] flex items-center justify-center bg-gray-100">
-            <span className="text-xs text-gray-500">Image unavailable</span>
-          </div>
-        )}
-
-        {/* Image Indicators - only show if more than 1 image */}
-        {showMultipleImages && (
-          <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 flex items-center z-10 -space-x-2">
-            {images.map((_, index) => (
-              <button
-                key={index}
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  setCurrentIndex(index);
-                }}
-                className="w-10 h-10 flex items-center justify-center focus:outline-none group/btn rounded-full"
-                aria-label={`Go to image ${index + 1}`}>
-                <div
-                  className={`h-1.5 rounded-full transition-all duration-300 ${index === currentIndex
-                    ? "w-6 bg-white"
-                    : "w-1.5 bg-white/50 group-hover/btn:bg-white/75"
-                    }`}
-                />
-              </button>
-            ))}
-          </div>
-        )}
-
-        {/* Gradient Overlay on Hover */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
-
-        {/* Shine Effect */}
-        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full transition-transform duration-1000 group-hover:animate-shine" />
-      </div>
-    );
-  },
-);
+import RestaurantImageCarousel from "@food/components/user/RestaurantImageCarousel";
+import SubscriptionHero from "@food/components/user/home/SubscriptionHero";
+import OffersBanner from "@food/components/user/home/OffersBanner";
+import RecommendedItems from "@food/components/user/home/RecommendedItems";
+import CategoryRailSection from "@food/components/user/home/CategoryRailSection";
+import FilterBar from "@food/components/user/home/FilterBar";
+import MindCategories from "@food/components/user/home/MindCategories";
+import StickyHeader from "@food/components/user/home/StickyHeader";
+import ExploreMoreSection from "@food/components/user/home/ExploreMoreSection";
+import RecommendedRestaurants from "@food/components/user/home/RecommendedRestaurants";
+import RestaurantsSection from "@food/components/user/home/RestaurantsSection";
+import AllCategoriesModal from "@food/components/user/home/AllCategoriesModal";
+import ManageCollectionsModal from "@food/components/user/home/ManageCollectionsModal";
+import VegModeOverlay from "@food/components/user/home/VegModeOverlay";
 
 export default function Home() {
   const HERO_BANNER_AUTO_SLIDE_MS = 3500;
@@ -430,6 +193,148 @@ export default function Home() {
   const [isStickyHeaderVisible, setIsStickyHeaderVisible] = useState(false);
   const [showStickySearch, setShowStickySearch] = useState(false);
   const lastScrollY = useRef(0);
+
+  // Profile, Cart, Customization setup
+  let profileContext = null;
+  try {
+    profileContext = useProfile();
+  } catch (error) {
+    debugWarn("ProfileProvider not available, using fallback:", error.message);
+    profileContext = {
+      addFavorite: () => debugWarn("ProfileProvider not available"),
+      removeFavorite: () => debugWarn("ProfileProvider not available"),
+      isFavorite: () => false,
+      getFavorites: () => [],
+      getDefaultAddress: () => null,
+    };
+  }
+
+  const {
+    addFavorite,
+    removeFavorite,
+    isFavorite,
+    getFavorites,
+    getDefaultAddress,
+  } = profileContext;
+  const { addToCart, cart } = useCart();
+
+  // Location and Zone resolution
+  const { location, loading, requestLocation } = useLocation();
+  const {
+    zoneId,
+    zoneStatus,
+    isInService,
+    isOutOfService,
+    loading: zoneLoading,
+    error: zoneError,
+  } = useZone(location);
+
+  const formatSavedAddress = useCallback((address) => {
+    if (!address) return "";
+    if (address.formattedAddress && address.formattedAddress !== "Select location") {
+      return address.formattedAddress;
+    }
+    const parts = [];
+    if (address.additionalDetails) parts.push(address.additionalDetails);
+    if (address.street) parts.push(address.street);
+    if (address.city) parts.push(address.city);
+    if (address.state) parts.push(address.state);
+    if (address.zipCode) parts.push(address.zipCode);
+    if (parts.length > 0) return parts.join(", ");
+    if (address.address && address.address !== "Select location") return address.address;
+    return "";
+  }, []);
+
+  const savedAddressText = useMemo(() => {
+    const defaultAddress = getDefaultAddress?.();
+    return formatSavedAddress(defaultAddress);
+  }, [getDefaultAddress, formatSavedAddress]);
+
+  const defaultSavedAddress = useMemo(
+    () => getDefaultAddress?.() || null,
+    [getDefaultAddress],
+  );
+
+  const defaultSavedAddressLocation = useMemo(() => {
+    const coords = defaultSavedAddress?.location?.coordinates;
+    if (Array.isArray(coords) && coords.length >= 2) {
+      const lng = parseFloat(coords[0]);
+      const lat = parseFloat(coords[1]);
+      if (Number.isFinite(lat) && Number.isFinite(lng)) {
+        return { latitude: lat, longitude: lng };
+      }
+    }
+    const lat = parseFloat(defaultSavedAddress?.latitude || defaultSavedAddress?.lat);
+    const lng = parseFloat(defaultSavedAddress?.longitude || defaultSavedAddress?.lng);
+    if (Number.isFinite(lat) && Number.isFinite(lng)) {
+      return { latitude: lat, longitude: lng };
+    }
+    return null;
+  }, [defaultSavedAddress]);
+
+  const effectiveLocation = useMemo(() => {
+    let deliveryAddressMode = "saved";
+    try {
+      deliveryAddressMode = localStorage.getItem("deliveryAddressMode") || "saved";
+    } catch {
+      deliveryAddressMode = "saved";
+    }
+    if (deliveryAddressMode === "current") {
+      return location;
+    }
+    if (
+      defaultSavedAddressLocation &&
+      Number.isFinite(defaultSavedAddressLocation.latitude) &&
+      Number.isFinite(defaultSavedAddressLocation.longitude)
+    ) {
+      const resolvedAddress = formatSavedAddress(defaultSavedAddress);
+      return {
+        ...(location || {}),
+        latitude: defaultSavedAddressLocation.latitude,
+        longitude: defaultSavedAddressLocation.longitude,
+        area:
+          defaultSavedAddress?.additionalDetails ||
+          defaultSavedAddress?.street ||
+          defaultSavedAddress?.area ||
+          location?.area ||
+          "",
+        city: defaultSavedAddress?.city || location?.city || "",
+        state: defaultSavedAddress?.state || location?.state || "",
+        address: resolvedAddress || defaultSavedAddress?.address || location?.address || "",
+        formattedAddress: resolvedAddress || defaultSavedAddress?.formattedAddress || location?.formattedAddress || "",
+      };
+    }
+    return location;
+  }, [defaultSavedAddress, defaultSavedAddressLocation, formatSavedAddress, location]);
+
+  const {
+    zoneId: effectiveZoneId,
+    isOutOfService: isEffectiveLocationOutOfService,
+    loading: effectiveZoneLoading,
+    error: effectiveZoneError,
+  } = useZone(effectiveLocation);
+
+  const {
+    heroBannerImages,
+    heroBannersData,
+    loadingBanners,
+    landingExploreMore,
+    exploreMoreHeading,
+    festBannerVideoUrl,
+    loadingLandingConfig,
+    realCategories,
+    loadingRealCategories,
+    restaurantsData,
+    loadingRestaurants,
+    fetchRestaurants,
+    recommendedRestaurantIds,
+    under250PriceLimit,
+    recommendedRestaurantsFromSettings,
+  } = useHome({
+    effectiveLocation,
+    effectiveZoneId,
+    hasUsableUserCity: !!effectiveLocation?.city,
+  });
   useEffect(() => {
     const handleScrollHeader = () => {
       const currentScrollY = window.scrollY;
@@ -464,25 +369,8 @@ export default function Home() {
   }, []);
 
   const [currentBannerIndex, setCurrentBannerIndex] = useState(0);
-  const [heroBannerImages, setHeroBannerImages] = useState([]);
-  const [heroBannersData, setHeroBannersData] = useState([]); // Store full banner data with linked restaurants
-  const [loadingBanners, setLoadingBanners] = useState(true);
   const [hasScrolledPastBanner, setHasScrolledPastBanner] = useState(false);
   const [landingCategories, setLandingCategories] = useState([]);
-  const [landingExploreMore, setLandingExploreMore] = useState([]);
-  const [exploreMoreHeading, setExploreMoreHeading] = useState("Explore More");
-  const [festBannerVideoUrl, setFestBannerVideoUrl] = useState("");
-  const [recommendedRestaurantIds, setRecommendedRestaurantIds] = useState([]);
-  const [under250PriceLimit, setUnder250PriceLimit] = useState(250);
-  const [
-    recommendedRestaurantsFromSettings,
-    setRecommendedRestaurantsFromSettings,
-  ] = useState([]);
-  const [loadingLandingConfig, setLoadingLandingConfig] = useState(true);
-  const [restaurantsData, setRestaurantsData] = useState([]);
-  const [loadingRestaurants, setLoadingRestaurants] = useState(true);
-  const [realCategories, setRealCategories] = useState([]);
-  const [loadingRealCategories, setLoadingRealCategories] = useState(true);
   const [menuCategories, setMenuCategories] = useState([]);
   const [loadingMenuCategories, setLoadingMenuCategories] = useState(false);
   const [, setRestaurantDietMeta] = useState({});
@@ -493,8 +381,7 @@ export default function Home() {
     RESTAURANTS_BATCH_SIZE,
   );
   const restaurantLoadMoreRef = useRef(null);
-  const publicCategoriesCacheRef = useRef(new Map());
-  const publicCategoriesInFlightRef = useRef(new Map());
+
   const isHandlingSwitchOff = useRef(false);
   const heroShellRef = useRef(null);
   const stickyHeaderRef = useRef(null);
@@ -506,19 +393,7 @@ export default function Home() {
         .replace(/(^-|-$)/g, ""),
     [],
   );
-  const festVideoActive =
-    typeof festBannerVideoUrl === "string" && festBannerVideoUrl.trim().length > 0;
 
-  // Stable list of restaurant ids for menu-category union so we don't refetch menus
-  // when `restaurantsData` changes for reasons like distance recalculation or outletTimings enrichment.
-  const menuUnionRestaurantIdsKey = useMemo(() => {
-    if (!Array.isArray(restaurantsData) || restaurantsData.length === 0) return "";
-    return restaurantsData
-      .map((r) => String(r?.restaurantId || r?.id || "").trim())
-      .filter(Boolean)
-      .sort()
-      .join(",");
-  }, [restaurantsData]);
 
   const normalizeImageUrl = useCallback(
     (imageUrl) => {
@@ -901,97 +776,6 @@ export default function Home() {
     };
   }, [showVegModePopup]);
 
-  // Fetch hero banners from public API (no auth required)
-  useEffect(() => {
-    let cancelled = false;
-    setLoadingBanners(true);
-    publicGetOnce("/food/hero-banners/public")
-      .then((response) => {
-        if (cancelled) return;
-        const data = response?.data?.data;
-        const list = Array.isArray(data?.banners)
-          ? data.banners
-          : Array.isArray(data)
-            ? data
-            : [];
-        const images = list
-          .map((b) => (b && typeof b.imageUrl === "string" ? b.imageUrl : ""))
-          .filter(Boolean);
-        setHeroBannerImages(images);
-        setHeroBannersData(list);
-        setCurrentBannerIndex(0);
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        debugError("Failed to fetch hero banners", err);
-        setHeroBannerImages([]);
-        setHeroBannersData([]);
-      })
-      .finally(() => {
-        if (!cancelled) setLoadingBanners(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  // Old backend endpoint removed: keep UI stable with empty categories.
-  useEffect(() => {
-    setLoadingRealCategories(true);
-    setRealCategories([]);
-    setLoadingRealCategories(false);
-  }, []);
-
-  // Fetch explore icons and landing settings from public APIs
-  useEffect(() => {
-    let cancelled = false;
-    setLoadingLandingConfig(true);
-    Promise.all([
-      publicGetOnce("/food/explore-icons/public")
-        .catch(() => ({ data: { data: {} } })),
-      publicGetOnce("/food/landing/settings/public")
-        .catch(() => ({ data: { data: {} } })),
-    ])
-      .then(([exploreRes, settingsRes]) => {
-        if (cancelled) return;
-        const exploreData = exploreRes?.data?.data;
-        const items = Array.isArray(exploreData?.items)
-          ? exploreData.items
-          : Array.isArray(exploreData)
-            ? exploreData
-            : [];
-        setLandingExploreMore(
-          items.map((it) => ({
-            ...it,
-            imageUrl: it.imageUrl || it.iconUrl,
-            label: it.label || it.name,
-          })),
-        );
-        const settings = settingsRes?.data?.data || {};
-        setExploreMoreHeading(settings.exploreMoreHeading || "Explore More");
-        setRecommendedRestaurantIds(settings.recommendedRestaurantIds || []);
-        setUnder250PriceLimit(Number(settings.under250PriceLimit) || 250);
-        setRecommendedRestaurantsFromSettings(
-          settings.recommendedRestaurants || [],
-        );
-        setFestBannerVideoUrl(typeof settings.festBannerVideoUrl === "string" ? settings.festBannerVideoUrl : "");
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setLandingExploreMore([]);
-          setExploreMoreHeading("Explore More");
-          setRecommendedRestaurantsFromSettings([]);
-          setFestBannerVideoUrl("");
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setLoadingLandingConfig(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
   // Keep index within current banner bounds after admin updates/reloads.
   useEffect(() => {
     setCurrentBannerIndex((prev) => {
@@ -1146,30 +930,7 @@ export default function Home() {
   const showCategorySkeleton = loadingRealCategories || loadingMenuCategories;
   const showExploreSkeleton = loadingLandingConfig;
   const showRestaurantSkeleton = isLoadingFilterResults || loadingRestaurants;
-  // Safely get profile context - handle case when ProfileProvider is not available
-  let profileContext = null;
-  try {
-    profileContext = useProfile();
-  } catch (error) {
-    debugWarn("ProfileProvider not available, using fallback:", error.message);
-    // Fallback values when ProfileProvider is not available
-    profileContext = {
-      addFavorite: () => debugWarn("ProfileProvider not available"),
-      removeFavorite: () => debugWarn("ProfileProvider not available"),
-      isFavorite: () => false,
-      getFavorites: () => [],
-      getDefaultAddress: () => null,
-    };
-  }
 
-  const {
-    addFavorite,
-    removeFavorite,
-    isFavorite,
-    getFavorites,
-    getDefaultAddress,
-  } = profileContext;
-  const { addToCart, cart } = useCart();
   const [appCustomization, setAppCustomization] = useState(DEFAULT_APP_CUSTOMIZATION);
   const openMealSelectionForHomeItem = useCallback(
     (item) => {
@@ -1250,80 +1011,10 @@ export default function Home() {
     },
     [addToCart, appCustomization.normalOrderFlowEnabled, openMealSelectionForHomeItem],
   );
-  const { location, loading, requestLocation } = useLocation();
-  const {
-    zoneId,
-    zoneStatus,
-    isInService,
-    isOutOfService,
-    loading: zoneLoading,
-    error: zoneError,
-  } = useZone(location);
+
   const [showToast, setShowToast] = useState(false);
   const [showManageCollections, setShowManageCollections] = useState(false);
   const [selectedRestaurantSlug, setSelectedRestaurantSlug] = useState(null);
-
-  // Fetch categories (zone-aware) for the homepage category rail.
-  useEffect(() => {
-    let cancelled = false
-    const run = async () => {
-      const zoneKey = String(zoneId || "global")
-      try {
-        // Dedupe repeated calls (StrictMode + zone settling). Cache per zoneKey and share in-flight request.
-        const cached = publicCategoriesCacheRef.current.get(zoneKey)
-        if (cached) {
-          if (!cancelled) setRealCategories(cached)
-          return
-        }
-
-        const inFlight = publicCategoriesInFlightRef.current.get(zoneKey)
-        if (inFlight) {
-          const categories = await inFlight
-          if (!cancelled) setRealCategories(categories)
-          return
-        }
-
-        setLoadingRealCategories(true)
-        const promise = (async () => {
-          const res = await adminAPI.getPublicCategories(zoneId ? { zoneId } : {})
-          const list =
-            res?.data?.data?.categories ||
-            res?.data?.categories ||
-            []
-          const categories = Array.isArray(list)
-            ? list.map((cat, idx) => ({
-              id: String(cat?.id || cat?._id || cat?.slug || idx),
-              name: cat?.name || "",
-              slug: cat?.slug || String(cat?.name || "").toLowerCase().replace(/\s+/g, "-"),
-              image:
-                normalizeImageUrl(cat?.image || cat?.imageUrl) ||
-                "",
-              type: cat?.type || "",
-              healthy: normalizeHealthyFlag(cat?.healthy),
-            }))
-            : []
-
-          publicCategoriesCacheRef.current.set(zoneKey, categories)
-          return categories
-        })()
-
-        publicCategoriesInFlightRef.current.set(zoneKey, promise)
-        const categories = await promise
-        publicCategoriesInFlightRef.current.delete(zoneKey)
-
-        if (!cancelled) setRealCategories(categories)
-      } catch (err) {
-        debugWarn("Failed to fetch categories:", err)
-        if (!cancelled) setRealCategories([])
-      } finally {
-        if (!cancelled) setLoadingRealCategories(false)
-      }
-    }
-    run()
-    return () => {
-      cancelled = true
-    }
-  }, [zoneId, normalizeImageUrl])
 
   // Memoize cartCount to prevent recalculation on every render - use cart directly
   const cartCount = useMemo(
@@ -1355,121 +1046,23 @@ export default function Home() {
     return hasAddressText || hasCityState;
   }, [location]);
 
-  const formatSavedAddress = useCallback((address) => {
-    if (!address) return "";
 
-    if (
-      address.formattedAddress &&
-      address.formattedAddress !== "Select location"
-    ) {
-      return address.formattedAddress;
-    }
 
-    const parts = [];
-    if (address.additionalDetails) parts.push(address.additionalDetails);
-    if (address.street) parts.push(address.street);
-    if (address.city) parts.push(address.city);
-    if (address.state) parts.push(address.state);
-    if (address.zipCode) parts.push(address.zipCode);
 
-    if (parts.length > 0) return parts.join(", ");
-    if (address.address && address.address !== "Select location")
-      return address.address;
 
-    return "";
-  }, []);
+  const festVideoActive =
+    typeof festBannerVideoUrl === "string" && festBannerVideoUrl.trim().length > 0;
 
-  const savedAddressText = useMemo(() => {
-    const defaultAddress = getDefaultAddress?.();
-    return formatSavedAddress(defaultAddress);
-  }, [getDefaultAddress, formatSavedAddress]);
-
-  const defaultSavedAddress = useMemo(
-    () => getDefaultAddress?.() || null,
-    [getDefaultAddress],
-  );
-
-  const defaultSavedAddressLocation = useMemo(() => {
-    const coords = defaultSavedAddress?.location?.coordinates;
-    if (Array.isArray(coords) && coords.length >= 2) {
-      const lng = parseFloat(coords[0]);
-      const lat = parseFloat(coords[1]);
-      if (Number.isFinite(lat) && Number.isFinite(lng)) {
-        return { latitude: lat, longitude: lng };
-      }
-    }
-
-    const lat = parseFloat(
-      defaultSavedAddress?.latitude || defaultSavedAddress?.lat,
-    );
-    const lng = parseFloat(
-      defaultSavedAddress?.longitude || defaultSavedAddress?.lng,
-    );
-    if (Number.isFinite(lat) && Number.isFinite(lng)) {
-      return { latitude: lat, longitude: lng };
-    }
-
-    return null;
-  }, [defaultSavedAddress]);
-
-  const effectiveLocation = useMemo(() => {
-    let deliveryAddressMode = "saved";
-    try {
-      deliveryAddressMode =
-        localStorage.getItem("deliveryAddressMode") || "saved";
-    } catch {
-      deliveryAddressMode = "saved";
-    }
-
-    if (deliveryAddressMode === "current") {
-      return location;
-    }
-
-    if (
-      defaultSavedAddressLocation &&
-      Number.isFinite(defaultSavedAddressLocation.latitude) &&
-      Number.isFinite(defaultSavedAddressLocation.longitude)
-    ) {
-      const resolvedAddress = formatSavedAddress(defaultSavedAddress);
-      return {
-        ...(location || {}),
-        latitude: defaultSavedAddressLocation.latitude,
-        longitude: defaultSavedAddressLocation.longitude,
-        area:
-          defaultSavedAddress?.additionalDetails ||
-          defaultSavedAddress?.street ||
-          defaultSavedAddress?.area ||
-          location?.area ||
-          "",
-        city: defaultSavedAddress?.city || location?.city || "",
-        state: defaultSavedAddress?.state || location?.state || "",
-        address:
-          resolvedAddress ||
-          defaultSavedAddress?.address ||
-          location?.address ||
-          "",
-        formattedAddress:
-          resolvedAddress ||
-          defaultSavedAddress?.formattedAddress ||
-          location?.formattedAddress ||
-          "",
-      };
-    }
-
-    return location;
-  }, [
-    defaultSavedAddress,
-    defaultSavedAddressLocation,
-    formatSavedAddress,
-    location,
-  ]);
-
-  const {
-    zoneId: effectiveZoneId,
-    isOutOfService: isEffectiveLocationOutOfService,
-    loading: effectiveZoneLoading,
-    error: effectiveZoneError,
-  } = useZone(effectiveLocation);
+  // Stable list of restaurant ids for menu-category union so we don't refetch menus
+  // when `restaurantsData` changes for reasons like distance recalculation or outletTimings enrichment.
+  const menuUnionRestaurantIdsKey = useMemo(() => {
+    if (!Array.isArray(restaurantsData) || restaurantsData.length === 0) return "";
+    return restaurantsData
+      .map((r) => String(r?.restaurantId || r?.id || "").trim())
+      .filter(Boolean)
+      .sort()
+      .join(",");
+  }, [restaurantsData]);
 
   const shouldShowOutOfZoneHome =
     !effectiveZoneLoading &&
@@ -1542,429 +1135,6 @@ export default function Home() {
     return () => observer.disconnect();
   }, [isFilterOpen]);
 
-  // Fetch restaurants from API with filters
-  const fetchRestaurants = useCallback(
-    async (filters = {}) => {
-      const requestSeq = ++restaurantsRequestSeqRef.current;
-      try {
-        setLoadingRestaurants(true);
-
-        // Backend disconnected - new backend in progress. Skip health check.
-
-        // Build query parameters from filters
-        const params = {};
-
-        // Always send user coordinates when available so backend can compute distance/sort.
-        if (
-          Number.isFinite(effectiveLocation?.latitude) &&
-          Number.isFinite(effectiveLocation?.longitude)
-        ) {
-          params.lat = effectiveLocation.latitude;
-          params.lng = effectiveLocation.longitude;
-        }
-
-        // Sort by
-        if (filters.sortBy) {
-          params.sortBy = filters.sortBy;
-        }
-
-        // Cuisine
-        if (filters.selectedCuisine) {
-          params.cuisine = filters.selectedCuisine;
-        }
-
-        // Rating filters
-        if (filters.activeFilters?.has("rating-45-plus")) {
-          params.minRating = 4.5;
-        } else if (filters.activeFilters?.has("rating-4-plus")) {
-          params.minRating = 4.0;
-        } else if (filters.activeFilters?.has("rating-35-plus")) {
-          params.minRating = 3.5;
-        }
-
-        // Delivery time filters
-        if (filters.activeFilters?.has("delivery-under-30")) {
-          params.maxDeliveryTime = 30;
-        } else if (filters.activeFilters?.has("delivery-under-45")) {
-          params.maxDeliveryTime = 45;
-        }
-
-        // Distance filters
-        if (filters.activeFilters?.has("distance-under-1km")) {
-          params.radiusKm = 1.0;
-        } else if (filters.activeFilters?.has("distance-under-2km")) {
-          params.radiusKm = 2.0;
-        }
-
-        // Price filters
-        if (filters.activeFilters?.has("price-under-200")) {
-          params.maxPrice = 200;
-        } else if (filters.activeFilters?.has("price-under-500")) {
-          params.maxPrice = 500;
-        }
-
-        // Offers filter
-        if (filters.activeFilters?.has("has-offers")) {
-          params.hasOffers = "true";
-        }
-
-        // Trust filters
-        if (filters.activeFilters?.has("top-rated")) {
-          params.topRated = "true";
-        } else if (filters.activeFilters?.has("trusted")) {
-          params.trusted = "true";
-        }
-
-        if (effectiveZoneId) {
-          params.zoneId = effectiveZoneId;
-        }
-
-        const normalizedUserCity = String(effectiveLocation?.city || "")
-          .trim()
-          .toLowerCase();
-        const hasUsableUserCity =
-          normalizedUserCity &&
-          normalizedUserCity !== "current location" &&
-          normalizedUserCity !== "unknown city" &&
-          normalizedUserCity !== "select location";
-        if (hasUsableUserCity) {
-          params.city = String(effectiveLocation.city).trim();
-        }
-
-        debugLog("Fetching restaurants with params:", params);
-        const response = await restaurantAPI.getRestaurants(params);
-        debugLog("Restaurants API response:", response.data);
-
-        // If a newer request started, ignore this response to avoid races/flicker.
-        if (requestSeq !== restaurantsRequestSeqRef.current) return;
-
-        if (
-          response.data &&
-          response.data.success &&
-          response.data.data &&
-          response.data.data.restaurants
-        ) {
-          const restaurantsArray = response.data.data.restaurants;
-          debugLog(`Fetched ${restaurantsArray.length} restaurants from API`);
-
-          if (restaurantsArray.length === 0) {
-            debugWarn("No restaurants found in API response");
-            setRestaurantsData([]);
-            return;
-          }
-
-          // Calculate distance helper function
-          const calculateDistance = (lat1, lng1, lat2, lng2) => {
-            const R = 6371; // Earth's radius in kilometers
-            const dLat = ((lat2 - lat1) * Math.PI) / 180;
-            const dLng = ((lng2 - lng1) * Math.PI) / 180;
-            const a =
-              Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-              Math.cos((lat1 * Math.PI) / 180) *
-              Math.cos((lat2 * Math.PI) / 180) *
-              Math.sin(dLng / 2) *
-              Math.sin(dLng / 2);
-            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-            return R * c; // Distance in kilometers
-          };
-
-          // Get user coordinates
-          const userLat = effectiveLocation?.latitude;
-          const userLng = effectiveLocation?.longitude;
-
-          // Transform API data to match expected format
-          const normalizeCityValue = (value) =>
-            String(value || "")
-              .trim()
-              .split(",")[0]
-              .toLowerCase()
-              .replace(/[^a-z0-9\s]/g, "")
-              .replace(/\s+/g, " ")
-              .trim();
-
-          const strictCityRestaurants = restaurantsArray.filter((restaurant) => {
-            if (!hasUsableUserCity) return true;
-
-            const cityCandidates = [
-              restaurant?.city,
-              restaurant?.location?.city,
-              restaurant?.address?.city,
-              restaurant?.onboarding?.step1?.city,
-              restaurant?.onboarding?.step1?.location?.city,
-            ];
-
-            const restaurantCity = cityCandidates
-              .map((candidate) => normalizeCityValue(candidate))
-              .find(Boolean);
-
-            if (!restaurantCity) return false;
-
-            const userCity = normalizeCityValue(effectiveLocation?.city);
-            return restaurantCity === userCity;
-          });
-
-          const transformedRestaurants = strictCityRestaurants
-            .filter((restaurant) => {
-              const name = (restaurant.restaurantName || restaurant.name || "").toLowerCase()
-              return true
-            })
-            .map((restaurant, index) => {
-              // Use restaurant data if available, otherwise use defaults
-              const deliveryTime =
-                restaurant.estimatedDeliveryTime || "25-30 mins";
-
-              // Calculate distance from user to restaurant
-              let distance = restaurant.distance || "1.2 km";
-
-              // Get restaurant coordinates
-              const restaurantLocation = restaurant.location;
-              const restaurantLat =
-                restaurantLocation?.latitude ||
-                (restaurantLocation?.coordinates &&
-                  Array.isArray(restaurantLocation.coordinates)
-                  ? restaurantLocation.coordinates[1]
-                  : null);
-              const restaurantLng =
-                restaurantLocation?.longitude ||
-                (restaurantLocation?.coordinates &&
-                  Array.isArray(restaurantLocation.coordinates)
-                  ? restaurantLocation.coordinates[0]
-                  : null);
-
-              // Calculate distance if both user and restaurant coordinates are available
-              let distanceInKm = null;
-              if (
-                userLat &&
-                userLng &&
-                restaurantLat &&
-                restaurantLng &&
-                !isNaN(userLat) &&
-                !isNaN(userLng) &&
-                !isNaN(restaurantLat) &&
-                !isNaN(restaurantLng)
-              ) {
-                distanceInKm = calculateDistance(
-                  userLat,
-                  userLng,
-                  restaurantLat,
-                  restaurantLng,
-                );
-                // Format distance: show 1 decimal place if >= 1km, otherwise show in meters
-                if (distanceInKm >= 1) {
-                  distance = `${distanceInKm.toFixed(1)} km`;
-                } else {
-                  const distanceInMeters = Math.round(distanceInKm * 1000);
-                  distance = `${distanceInMeters} m`;
-                }
-              }
-
-              // Get first cuisine or default
-              const cuisine =
-                restaurant.cuisines && restaurant.cuisines.length > 0
-                  ? restaurant.cuisines[0]
-                  : "Multi-cuisine";
-
-              // Legacy-safe image extraction (supports old schema variants).
-              const coverImages = extractImages([
-                ...(Array.isArray(restaurant.coverImages) ? restaurant.coverImages : [restaurant.coverImages]).filter(Boolean),
-                restaurant.coverImage,
-              ]);
-
-              const profileImageCandidates = extractImages([
-                ...buildRestaurantImageCandidates(restaurant.profileImage),
-                ...buildRestaurantImageCandidates(
-                  restaurant.onboarding?.step2?.profileImageUrl,
-                ),
-                ...buildRestaurantImageCandidates(restaurant.image),
-                ...buildRestaurantImageCandidates(restaurant.imageUrl),
-              ]);
-              const profileImageUrl = profileImageCandidates[0] || "";
-
-              const allImages = Array.from(
-                new Set(
-                  [
-                    ...coverImages,
-                    ...profileImageCandidates,
-                  ].filter(Boolean),
-                ),
-              );
-
-              // Keep single image for backward compatibility
-              const image = allImages[0] || profileImageUrl || "";
-              const offerText = restaurant.offer || null;
-
-              return {
-                id: restaurant.restaurantId || restaurant._id,
-                mongoId: restaurant._id || null,
-                name: getRestaurantDisplayName(restaurant),
-                cuisine: cuisine,
-                cuisines: Array.isArray(restaurant.cuisines)
-                  ? restaurant.cuisines
-                  : [],
-                rating: Number(restaurant.rating) || 0,
-                deliveryTime:
-                  restaurant.deliveryTime ||
-                  restaurant.estimatedDeliveryTime ||
-                  (restaurant.estimatedDeliveryTimeMinutes
-                    ? `${restaurant.estimatedDeliveryTimeMinutes} mins`
-                    : deliveryTime),
-                distance: distance,
-                distanceInKm: distanceInKm, // Store numeric distance for sorting
-                image: image,
-                images: allImages, // Array of cover images for carousel (separate from menu images)
-                priceRange: restaurant.priceRange || "",
-                featuredDish: restaurant.featuredDish || "",
-                featuredPrice: Number.isFinite(Number(restaurant.featuredPrice))
-                  ? Number(restaurant.featuredPrice)
-                  : null,
-                offer: offerText,
-                slug: restaurant.slug,
-                restaurantId: restaurant.restaurantId,
-                pureVegRestaurant: restaurant.pureVegRestaurant === true,
-                location: restaurant.location, // Store location for distance recalculation
-                isActive: restaurant.isActive !== false, // Default to true if not specified
-                isAcceptingOrders: restaurant.isAcceptingOrders !== false, // Default to true if not specified
-                openDays: Array.isArray(restaurant.openDays)
-                  ? restaurant.openDays
-                  : [],
-                deliveryTimings: restaurant.deliveryTimings || null,
-                outletTimings: restaurant.outletTimings || null,
-                openingTime: restaurant.openingTime || restaurant?.deliveryTimings?.openingTime || null,
-                closingTime: restaurant.closingTime || restaurant?.deliveryTimings?.closingTime || null,
-              };
-            },
-            );
-
-          const sortRestaurantsForDisplay = (restaurants) => {
-            if (!userLat || !userLng) return restaurants;
-            return [...restaurants].sort((a, b) => {
-              // Available restaurants first, then unavailable
-              const aAvailable = getRestaurantAvailabilityStatus(
-                a,
-                new Date(),
-                { ignoreOperationalStatus: true },
-              ).isOpen;
-              const bAvailable = getRestaurantAvailabilityStatus(
-                b,
-                new Date(),
-                { ignoreOperationalStatus: true },
-              ).isOpen;
-
-              if (aAvailable !== bAvailable) {
-                return aAvailable ? -1 : 1; // Available restaurants come first
-              }
-
-              // Apply secondary sort based on sortBy filter
-              if (filters.sortBy === "price-low") {
-                return (a.featuredPrice || 0) - (b.featuredPrice || 0);
-              }
-              if (filters.sortBy === "price-high") {
-                return (b.featuredPrice || 0) - (a.featuredPrice || 0);
-              }
-              if (filters.sortBy === "rating-high") {
-                return (b.rating || 0) - (a.rating || 0);
-              }
-              if (filters.sortBy === "rating-low") {
-                return (a.rating || 0) - (b.rating || 0);
-              }
-
-              // Default: sort by distance
-              const aDistance =
-                a.distanceInKm !== null ? a.distanceInKm : Infinity;
-              const bDistance =
-                b.distanceInKm !== null ? b.distanceInKm : Infinity;
-              return aDistance - bDistance;
-            });
-          };
-
-          debugLog(
-            "Transformed and sorted restaurants:",
-            transformedRestaurants,
-          );
-          startTransition(() => {
-            setRestaurantsData(sortRestaurantsForDisplay(transformedRestaurants));
-          });
-
-          const restaurantsNeedingOutletTimings = transformedRestaurants.filter(
-            (restaurant) => restaurant.mongoId && !restaurant.outletTimings,
-          );
-
-          if (restaurantsNeedingOutletTimings.length > 0) {
-            void (async () => {
-              const resolvedOutletTimings = new Map();
-
-              for (const restaurant of restaurantsNeedingOutletTimings) {
-                try {
-                  const outletResponse =
-                    await restaurantAPI.getOutletTimingsByRestaurantId(
-                      restaurant.mongoId,
-                      { noCache: true },
-                    );
-                  const outletTimings =
-                    outletResponse?.data?.data?.outletTimings ||
-                    outletResponse?.data?.outletTimings ||
-                    null;
-
-                  if (outletTimings) {
-                    resolvedOutletTimings.set(restaurant.mongoId, outletTimings);
-                  }
-                } catch (_) {
-                  // Keep the existing restaurant data if enrichment fails.
-                }
-              }
-
-              if (
-                requestSeq !== restaurantsRequestSeqRef.current ||
-                resolvedOutletTimings.size === 0
-              ) {
-                return;
-              }
-
-              startTransition(() => {
-                setRestaurantsData((currentRestaurants) => {
-                  let hasChanges = false;
-                  const nextRestaurants = currentRestaurants.map((restaurant) => {
-                    if (!restaurant.mongoId) return restaurant;
-                    const outletTimings = resolvedOutletTimings.get(
-                      restaurant.mongoId,
-                    );
-                    if (!outletTimings) return restaurant;
-                    hasChanges = true;
-                    return { ...restaurant, outletTimings };
-                  });
-
-                  return hasChanges
-                    ? sortRestaurantsForDisplay(nextRestaurants)
-                    : currentRestaurants;
-                });
-              });
-            })();
-          }
-        } else {
-          debugWarn("Invalid API response structure:", response.data);
-          setRestaurantsData([]);
-        }
-      } catch (error) {
-        debugError("Error fetching restaurants:", error);
-        debugError("Error details:", error.response?.data || error.message);
-        // Don't set hardcoded data here - let the useMemo fallback handle it
-        // This way, if API succeeds later, it will show the real data
-        setRestaurantsData([]);
-      } finally {
-        if (requestSeq === restaurantsRequestSeqRef.current) {
-          setLoadingRestaurants(false);
-        }
-      }
-    },
-    [
-      extractImages,
-      buildRestaurantImageCandidates,
-      effectiveLocation?.latitude,
-      effectiveLocation?.longitude,
-      effectiveZoneId,
-    ],
-  );
-
   const applyFiltersAndRefetch = useCallback(
     async (
       nextActiveFilters = activeFilters,
@@ -1995,94 +1165,6 @@ export default function Home() {
   useEffect(() => {
     fetchRestaurants(appliedFilters);
   }, [appliedFilters, fetchRestaurants]);
-
-  // Recalculate distances when user location updates
-  useEffect(() => {
-    if (!effectiveLocation?.latitude || !effectiveLocation?.longitude) return;
-
-    setRestaurantsData((prevData) => {
-      if (!prevData || prevData.length === 0) return prevData;
-
-      const calculateDistance = (lat1, lng1, lat2, lng2) => {
-        const R = 6371; // Earth's radius in kilometers
-        const dLat = ((lat2 - lat1) * Math.PI) / 180;
-        const dLng = ((lng2 - lng1) * Math.PI) / 180;
-        const a =
-          Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-          Math.cos((lat1 * Math.PI) / 180) *
-          Math.cos((lat2 * Math.PI) / 180) *
-          Math.sin(dLng / 2) *
-          Math.sin(dLng / 2);
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-        return R * c; // Distance in kilometers
-      };
-
-      const userLat = effectiveLocation.latitude;
-      const userLng = effectiveLocation.longitude;
-
-      let hasChanges = false;
-      const updatedRestaurants = prevData.map((restaurant) => {
-        if (!restaurant.location) return restaurant;
-
-        const restaurantLat =
-          restaurant.location?.latitude ||
-          (restaurant.location?.coordinates &&
-            Array.isArray(restaurant.location.coordinates)
-            ? restaurant.location.coordinates[1]
-            : null);
-        const restaurantLng =
-          restaurant.location?.longitude ||
-          (restaurant.location?.coordinates &&
-            Array.isArray(restaurant.location.coordinates)
-            ? restaurant.location.coordinates[0]
-            : null);
-
-        if (
-          !restaurantLat ||
-          !restaurantLng ||
-          isNaN(restaurantLat) ||
-          isNaN(restaurantLng)
-        ) {
-          return restaurant;
-        }
-
-        const distanceInKm = calculateDistance(
-          userLat,
-          userLng,
-          restaurantLat,
-          restaurantLng,
-        );
-        let calculatedDistance = null;
-
-        // Format distance: show 1 decimal place if >= 1km, otherwise show in meters
-        if (distanceInKm >= 1) {
-          calculatedDistance = `${distanceInKm.toFixed(1)} km`;
-        } else {
-          const distanceInMeters = Math.round(distanceInKm * 1000);
-          calculatedDistance = `${distanceInMeters} m`;
-        }
-
-        if (
-          restaurant.distance !== calculatedDistance ||
-          restaurant.distanceInKm !== distanceInKm
-        ) {
-          hasChanges = true;
-          return {
-            ...restaurant,
-            distance: calculatedDistance,
-            distanceInKm: distanceInKm, // Preserve numeric distance for sorting
-          };
-        }
-        return restaurant;
-      });
-
-      return hasChanges ? updatedRestaurants : prevData;
-    });
-
-    debugLog(
-      "?? Recalculated distances for all restaurants based on user location",
-    );
-  }, [effectiveLocation?.latitude, effectiveLocation?.longitude]);
 
   // IMPORTANT:
   // Homepage should avoid eager N+1 menu requests. We only resolve menu metadata
@@ -2830,70 +1912,7 @@ export default function Home() {
     );
   }, [heroBannerImages, currentBannerIndex, showBannerSkeleton, heroBannersData, navigate]);
 
-  // Memoized Category Rail Component
-  const CategoryRailSection = useMemo(() => {
-    return (
-      <section className="space-y-1 sm:space-y-1.5 lg:space-y-2 min-h-[108px] sm:min-h-[120px]">
-        <div
-          ref={categoryScrollRef}
-          className="flex gap-3 sm:gap-4 lg:gap-5 overflow-x-auto overflow-y-visible scrollbar-hide scroll-smooth px-2 sm:px-3 py-2 sm:py-3"
-          style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
-        >
-          {/* Meals Under 200 Card */}
-          <div
-            className="flex-shrink-0 flex flex-col items-center gap-2 cursor-pointer transition-transform hover:scale-105 active:scale-95"
-            onClick={() => navigate("/user/under-250")}
-          >
-            <div className="w-16 h-16 sm:w-20 sm:h-20 bg-[#7e3866] rounded-b-full rounded-t-sm shadow-md border-t-4 border-orange-200 flex flex-col items-center justify-center p-1">
-              <span className="text-[10px] sm:text-xs font-bold text-white text-center leading-tight">UNDER</span>
-              <span className="text-sm sm:text-base font-extrabold text-white">â‚¹200</span>
-              <div className="w-10 h-3.5 bg-white rounded-full mt-1 flex items-center justify-center">
-                <span className="text-[8px] font-bold text-[#7e3866]">Explore</span>
-              </div>
-            </div>
-            <span className="text-xs font-medium text-gray-700 dark:text-gray-300">Offers</span>
-          </div>
-
-          {showCategorySkeleton ? (
-            <CategoryChipRowSkeleton className="py-1" />
-          ) : (
-            displayCategories.slice(0, 12).map((category, index) => (
-              <Link
-                key={category.id || index}
-                to={`/food/user/category/${category.slug || category.name.toLowerCase().replace(/\s+/g, "-")}`}
-                className="flex-shrink-0 flex flex-col items-center gap-2 group transition-all duration-300 hover:-translate-y-1"
-                style={{ animation: `fade-in-up 0.5s ease-out forwards ${index * 0.05}s`, opacity: 0 }}
-              >
-                <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full overflow-hidden shadow-sm border border-gray-100 dark:border-gray-800 group-hover:border-[#7e3866] transition-colors">
-                  <OptimizedImage
-                    src={category.image}
-                    alt={category.name}
-                    className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-                    sizes="80px"
-                  />
-                </div>
-                <span className="text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 text-center truncate max-w-[72px]">
-                  {category.name}
-                </span>
-              </Link>
-            ))
-          )}
-
-          {displayCategories.length > 12 && !showCategorySkeleton && (
-            <div
-              className="flex-shrink-0 flex flex-col items-center gap-2 cursor-pointer group"
-              onClick={() => navigate("/food/user/categories")}
-            >
-              <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-orange-50 dark:bg-orange-950 flex items-center justify-center border border-orange-100 group-hover:border-[#7e3866] transition-all">
-                <Plus className="w-6 h-6 text-[#7e3866]" />
-              </div>
-              <span className="text-xs font-medium text-gray-700">See All</span>
-            </div>
-          )}
-        </div>
-      </section>
-    );
-  }, [displayCategories, showCategorySkeleton, navigate]);
+  // Extracted CategoryRailSection
 
   return (
 
@@ -3023,358 +2042,38 @@ export default function Home() {
         </div>
 
         <div className="md:hidden relative overflow-x-clip bg-[#fff9f2] min-h-screen pb-24">
-          <header className="sticky top-0 z-50 bg-[#fff9f2]/95 backdrop-blur-md px-5 pt-3 pb-2">
-            <div className="flex items-center justify-between gap-3">
-              <button
-                type="button"
-                onClick={handleLocationClick}
-                className="min-w-0 flex items-center gap-1.5 text-left"
-              >
-                <MapPin className="h-4 w-4 text-black fill-black" />
-                <span className="text-[11px] font-black text-gray-900 truncate max-w-[120px]">
-                  {effectiveLocation?.area || effectiveLocation?.city || "Select location"}
-                </span>
-                <ChevronDown className="h-3.5 w-3.5 text-gray-700" />
-              </button>
-
-              <div className="text-center shrink-0">
-                <div className="text-[22px] leading-none font-black italic text-[#e92823] tracking-tight">
-                  ZiggyBites
-                </div>
-                <div className="text-[6px] font-black text-gray-700 tracking-[0.08em]">
-                  Homemade. Healthy. Delivered.
-                </div>
-              </div>
-
-              <div className="flex items-center gap-3 text-gray-900">
-                <ShoppingCart className="h-5 w-5" />
-              </div>
-            </div>
-
-            <div className="mt-4 flex items-center gap-2">
-              <button
-                type="button"
-                onClick={handleSearchFocus}
-                className="h-10 flex-1 bg-white rounded-full border border-orange-100 shadow-sm px-4 flex items-center gap-2 text-left"
-              >
-                <Search className="h-4 w-4 text-[#e92823]" />
-                <span className="text-xs font-semibold text-gray-400 truncate">
-                  Search "veg thali"
-                </span>
-                <Mic className="h-4 w-4 text-gray-500 ml-auto" />
-              </button>
-              <button
-                type="button"
-                onClick={() => applyHomeFoodPreference(vegMode ? "all" : "healthy")}
-                className="relative h-10 w-12 rounded-xl bg-[#6aad37] text-white flex flex-col items-center justify-center shadow-sm"
-                aria-label="Toggle veg mode"
-              >
-                <span className="text-[8px] font-black leading-none">VEG</span>
-                <span className="text-[7px] font-black leading-none">MODE</span>
-                <span
-                  className={`absolute -bottom-1 right-0 h-3.5 w-7 rounded-full border border-white bg-[#9bd46f] transition-colors ${
-                    vegMode ? "bg-[#6aad37]" : "bg-gray-300"
-                  }`}
-                >
-                  <span
-                    className={`absolute top-0.5 h-2.5 w-2.5 rounded-full bg-white transition-transform ${
-                      vegMode ? "translate-x-3.5" : "translate-x-0.5"
-                    }`}
-                  />
-                </span>
-              </button>
-            </div>
-          </header>
+          <MobileHeader 
+  effectiveLocation={effectiveLocation} 
+  handleLocationClick={handleLocationClick} 
+  handleSearchFocus={handleSearchFocus} 
+  vegMode={vegMode} 
+  applyHomeFoodPreference={applyHomeFoodPreference} 
+/>
 
           <main className="px-5">
-            <section className="relative overflow-hidden rounded-[10px] bg-[#fff0e8] border border-[#ffe1d2] min-h-[126px] p-4 mt-2">
-              <div className="relative z-10 max-w-[55%]">
-                <p className="text-[9px] font-black uppercase tracking-[0.12em] text-[#d3542a]">
-                  Subscription Meals
-                </p>
-                <h1 className="mt-1 text-[25px] font-black leading-[0.9] text-[#7a1f16]">
-                  Good Food.
-                  <br />
-                  Better You.
-                </h1>
-                <p className="mt-2 text-[9px] font-semibold leading-snug text-[#8b5a45]">
-                  Nutritious, homemade meals delivered daily to your doorstep.
-                </p>
-                <button
-                  type="button"
-                  onClick={() => navigate("/food/user/restaurants")}
-                  className="mt-3 h-7 px-3 rounded-md bg-[#d9251d] text-white text-[9px] font-black flex items-center gap-1"
-                >
-                  Choose Your Plan
-                  <ArrowRight className="h-3 w-3" />
-                </button>
-              </div>
-              <div className="absolute right-0 top-2 bottom-0 w-[48%]">
-                {mobileFeaturedRestaurant ? (
-                  <RestaurantImageCarousel
-                    restaurant={mobileFeaturedRestaurant}
-                    backendOrigin={BACKEND_ORIGIN}
-                    className="h-full"
-                    roundedClass="rounded-none"
-                    priority
-                  />
-                ) : (
-                  <img src={foodImages[0]} alt="Tiffin meal" className="h-full w-full object-cover" />
-                )}
-                <div className="absolute inset-0 bg-gradient-to-r from-[#fff0e8] via-transparent to-transparent" />
-              </div>
-            </section>
+            <SubscriptionHero mobileFeaturedRestaurant={mobileFeaturedRestaurant} />
 
-            <section className="mt-4 grid grid-cols-5 gap-2">
-              {loadingRealCategories && homeCategoryTiles.length === 0 ? (
-                Array.from({ length: 5 }).map((_, index) => (
-                  <div key={`home-category-skeleton-${index}`} className="h-[82px] rounded-xl border border-orange-100 bg-white shadow-sm">
-                    <div className="mx-auto mt-2 h-12 w-12 animate-pulse rounded-full bg-orange-100" />
-                    <div className="mx-auto mt-2 h-2 w-10 animate-pulse rounded bg-orange-100" />
-                  </div>
-                ))
-              ) : homeCategoryTiles.length === 0 ? (
-                <div className="col-span-5 rounded-xl border border-dashed border-orange-200 bg-white p-4 text-center text-xs font-semibold text-gray-500">
-                  No categories available
-                </div>
-              ) : homeCategoryTiles.slice(0, 5).map((category) => {
-                const isSelected = selectedHomeCategory?.slug === category.slug;
+            <HomeCategories 
+  loadingRealCategories={loadingRealCategories} 
+  homeCategoryTiles={homeCategoryTiles} 
+  selectedHomeCategory={selectedHomeCategory} 
+  setSelectedHomeCategory={setSelectedHomeCategory} 
+/>
 
-                return (
-                  <button
-                    key={category.id}
-                    type="button"
-                    onClick={() =>
-                      setSelectedHomeCategory((current) =>
-                        current?.slug === category.slug ? null : category,
-                      )
-                    }
-                    className="min-w-0 text-left"
-                  >
-                    <div
-                      className={`relative rounded-xl bg-white border shadow-sm p-1.5 flex flex-col items-center gap-1.5 transition-all ${
-                        isSelected
-                          ? "border-[#e92823] ring-2 ring-[#e92823]/15"
-                          : "border-orange-100"
-                      }`}
-                    >
-                      {category.healthy && (
-                        <span className="absolute -top-1 -right-1 rounded-full bg-[#6aad37] px-1.5 py-0.5 text-[6px] font-black uppercase text-white shadow-sm">
-                          Healthy
-                        </span>
-                      )}
-                    <div className="h-12 w-12 rounded-full overflow-hidden border border-orange-100 bg-orange-50">
-                      {category.image ? (
-                        <img src={category.image} alt={category.name} className="h-full w-full object-cover" />
-                      ) : (
-                        <span className="flex h-full w-full items-center justify-center text-base font-black text-[#e92823]">
-                          {String(category.name || "M").slice(0, 1).toUpperCase()}
-                        </span>
-                      )}
-                    </div>
-                    <span
-                      className={`text-[8px] leading-tight font-black text-center ${
-                        isSelected ? "text-[#e92823]" : "text-[#6aad37]"
-                      }`}
-                    >
-                      {category.name}
-                    </span>
-                  </div>
-                </button>
-                );
-              })}
-            </section>
+            <OffersBanner />
 
-            <section className="mt-4 rounded-[10px] bg-[#fff3ee] border border-[#ffe1d2] min-h-[78px] overflow-hidden flex items-center">
-              <div className="w-16 flex justify-center">
-                <span className="h-10 w-10 rounded-full bg-[#e92823] text-white flex items-center justify-center">
-                  <BadgePercent className="h-6 w-6" />
-                </span>
-              </div>
-              <div className="flex-1 min-w-0 py-3">
-                <p className="text-[8px] font-black uppercase tracking-[0.12em] text-[#d9251d]">
-                  Exclusive Offers
-                </p>
-                <h2 className="text-[14px] font-black leading-tight text-[#b7221d]">
-                  Save More on
-                  <br />
-                  Your Meal Plans!
-                </h2>
-                <p className="mt-1 text-[8px] font-semibold text-[#7b594d]">
-                  Grab exciting discounts on weekly & monthly plans.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => navigate("/food/user/offers")}
-                className="mr-3 h-7 px-3 rounded-md bg-[#d9251d] text-white text-[8px] font-black"
-              >
-                View Offers
-              </button>
-            </section>
-
-            <section className="mt-4">
-              <div className="flex items-center justify-between mb-2">
-                <h2 className="text-sm font-black text-gray-900">
-                  {selectedHomeCategory
-                    ? `${selectedHomeCategory.name} For You`
-                    : "Recommended For You"}
-                </h2>
-                <button
-                  type="button"
-                  onClick={() =>
-                    selectedHomeCategory
-                      ? setSelectedHomeCategory(null)
-                      : navigate("/food/user/restaurants")
-                  }
-                  className="text-[10px] font-black text-[#d9251d] flex items-center gap-1"
-                >
-                  {selectedHomeCategory ? "Clear" : "View All"} <ArrowRight className="h-3 w-3" />
-                </button>
-              </div>
-
-              <div className="space-y-3">
-                {showRestaurantSkeleton || loadingRestaurants || loadingCategoryFoodItems || (!selectedHomeCategory && loadingRecommendedFoodItems) ? (
-                  <RestaurantGridSkeleton count={4} />
-                ) : selectedHomeCategory ? (
-                  categoryFoodItems.length > 0 ? (
-                    categoryFoodItems.map((item, index) => (
-                      <Link
-                        key={`${item.restaurantSlug}-${item.id}-${index}`}
-                        to={{
-                          pathname: "/food/user/choose-meal",
-                          search: `?dish=${encodeURIComponent(item.name || "")}&dishId=${encodeURIComponent(item.itemId || item.id || "")}&restaurant=${encodeURIComponent(item.restaurantName || "")}&restaurantId=${encodeURIComponent(item.restaurantId || "")}&category=${encodeURIComponent(item.categoryName || "")}${Number.isFinite(item.price) ? `&price=${encodeURIComponent(item.price)}` : ""}`,
-                        }}
-                        state={{ dish: item }}
-                        className="flex gap-3 rounded-[10px] bg-white border border-orange-100 shadow-sm p-2"
-                      >
-                        <div className="h-[74px] w-[94px] rounded-lg overflow-hidden shrink-0 bg-orange-50">
-                          {item.image ? (
-                            <img src={item.image} alt={item.name} className="h-full w-full object-cover" />
-                          ) : (
-                            <span className="flex h-full w-full items-center justify-center text-lg font-black text-[#e92823]">
-                              {String(item.name || "I").slice(0, 1).toUpperCase()}
-                            </span>
-                          )}
-                        </div>
-                        <div className="min-w-0 flex-1 py-0.5">
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="min-w-0">
-                              <h3 className="text-[12px] font-black text-gray-900 truncate">
-                                {item.name}
-                              </h3>
-                              <p className="mt-0.5 text-[9px] font-semibold text-gray-600 line-clamp-2">
-                                {item.description}
-                              </p>
-                            </div>
-                            {Number.isFinite(item.price) && (
-                              <span className="text-[13px] font-black text-gray-900 shrink-0">
-                                Rs. {item.price}
-                              </span>
-                            )}
-                          </div>
-                          <p className="mt-1 text-[8px] font-medium text-gray-400 line-clamp-1">
-                            {item.restaurantName} â€¢ {item.categoryName || selectedHomeCategory.name}
-                          </p>
-                          <div className="mt-2 flex items-center justify-between">
-                            <span className="inline-flex items-center gap-1 text-[8px] font-black text-[#6aad37]">
-                              <Leaf className="h-3 w-3" />
-                              {item.foodType || (selectedHomeCategory.healthy ? "Healthy" : "Meal")}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={(event) =>
-                                handleAddHomeItemToCart(event, item)
-                              }
-                              className="h-6 w-6 rounded-full bg-[#ef2b24] text-white flex items-center justify-center"
-                              aria-label={`Add ${item.name || "item"} to cart`}
-                            >
-                              <Plus className="h-4 w-4" />
-                            </button>
-                          </div>
-                        </div>
-                      </Link>
-                    ))
-                  ) : (
-                    <div className="rounded-[10px] border border-dashed border-orange-200 bg-white/70 p-5 text-center">
-                      <p className="text-sm font-black text-gray-900">No items found</p>
-                      <p className="mt-1 text-xs font-semibold text-gray-500">
-                        Try another category or switch to All Food Items.
-                      </p>
-                    </div>
-                  )
-                ) : recommendedFoodItems.length > 0 ? (
-                  recommendedFoodItems.map((item, index) => (
-                    <Link
-                      key={`${item.restaurantSlug}-${item.id}-${index}`}
-                      to={{
-                        pathname: "/food/user/choose-meal",
-                        search: `?dish=${encodeURIComponent(item.name || "")}&dishId=${encodeURIComponent(item.itemId || item.id || "")}&restaurant=${encodeURIComponent(item.restaurantName || "")}&restaurantId=${encodeURIComponent(item.restaurantId || "")}&category=${encodeURIComponent(item.categoryName || "")}${Number.isFinite(item.price) ? `&price=${encodeURIComponent(item.price)}` : ""}`,
-                      }}
-                      state={{ dish: item }}
-                      className="flex gap-3 rounded-[10px] bg-white border border-orange-100 shadow-sm p-2"
-                    >
-                      <div className="h-[74px] w-[94px] rounded-lg overflow-hidden shrink-0 bg-orange-50">
-                        {item.image ? (
-                          <img src={item.image} alt={item.name} className="h-full w-full object-cover" />
-                        ) : (
-                          <span className="flex h-full w-full items-center justify-center text-lg font-black text-[#e92823]">
-                            {String(item.name || "I").slice(0, 1).toUpperCase()}
-                          </span>
-                        )}
-                      </div>
-                      <div className="min-w-0 flex-1 py-0.5">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="min-w-0">
-                            <h3 className="text-[12px] font-black text-gray-900 truncate">
-                              {item.name}
-                            </h3>
-                            {item.description && (
-                              <p className="mt-0.5 text-[9px] font-semibold text-gray-600 line-clamp-2">
-                                {item.description}
-                              </p>
-                            )}
-                          </div>
-                          {Number.isFinite(item.price) && (
-                            <span className="text-[13px] font-black text-gray-900 shrink-0">
-                              Rs. {item.price}
-                            </span>
-                          )}
-                        </div>
-                        <p className="mt-1 text-[8px] font-medium text-gray-400 line-clamp-1">
-                          {[item.restaurantName, item.categoryName].filter(Boolean).join(" • ")}
-                        </p>
-                        <div className="mt-2 flex items-center justify-between">
-                          {item.foodType && (
-                            <span className="inline-flex items-center gap-1 text-[8px] font-black text-[#6aad37]">
-                              <Leaf className="h-3 w-3" />
-                              {item.foodType}
-                            </span>
-                          )}
-                          <button
-                            type="button"
-                            onClick={(event) =>
-                              handleAddHomeItemToCart(event, item)
-                            }
-                            className="ml-auto h-6 w-6 rounded-full bg-[#ef2b24] text-white flex items-center justify-center"
-                            aria-label={`Add ${item.name || "item"} to cart`}
-                          >
-                            <Plus className="h-4 w-4" />
-                          </button>
-                        </div>
-                      </div>
-                    </Link>
-                  ))
-                ) : (
-                  <div className="rounded-[10px] border border-dashed border-orange-200 bg-white/70 p-5 text-center">
-                    <p className="text-sm font-black text-gray-900">No items found</p>
-                    <p className="mt-1 text-xs font-semibold text-gray-500">
-                      Menu items will appear here after restaurants add them.
-                    </p>
-                  </div>
-                )}
-              </div>
-            </section>
+            <RecommendedItems 
+  selectedHomeCategory={selectedHomeCategory} 
+  setSelectedHomeCategory={setSelectedHomeCategory} 
+  showRestaurantSkeleton={showRestaurantSkeleton} 
+  loadingRestaurants={loadingRestaurants} 
+  loadingCategoryFoodItems={loadingCategoryFoodItems} 
+  loadingRecommendedFoodItems={loadingRecommendedFoodItems} 
+  categoryFoodItems={categoryFoodItems} 
+  recommendedFoodItems={recommendedFoodItems} 
+  handleAddHomeItemToCart={handleAddHomeItemToCart} 
+  cart={cart} 
+/>
           </main>
         </div>
 
@@ -3429,271 +2128,37 @@ export default function Home() {
               >
 
                 {/* "What's on your mind today?" Section - Now with Sticky Logic */}
-                <div
-                  id="categories-section"
-                  className="px-4 py-2.5 space-y-3 bg-white dark:bg-[#0a0a0a]"
-                >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <h2 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white min-w-0 flex-shrink leading-tight">What's on your mind today?</h2>
-                    <div className="h-[1px] bg-gray-100 dark:bg-gray-800 flex-1"></div>
-                    <Link to="/food/user/categories" className="text-sm font-bold text-gray-400 dark:text-gray-500 flex items-center gap-0.5 whitespace-nowrap shrink-0">
-                      View All <ArrowDownUp className="h-3 w-3 rotate-90" />
-                    </Link>
-                  </div>
-
-                  {/* Categories Horizontal Slider */}
-                  <div className="flex overflow-x-auto gap-1.5 pb-2 scrollbar-hide -mx-4 px-4 mask-edge-fade">
-                    {displayCategories.map((category, index) => (
-                      <Link
-                        key={category.id || index}
-                        to={`/food/user/category/${category.slug}`}
-                        className="flex-shrink-0 flex flex-col items-center gap-2.5 group w-[92px]"
-                      >
-                        <div className="relative w-20 h-20 sm:w-24 sm:h-24 rounded-full overflow-hidden shadow-md border-2 border-gray-100 dark:border-gray-800 bg-white dark:bg-[#1a1a1a] group-active:scale-95 transition-all duration-300">
-                          {/* Shining Glint Effect */}
-                          <div className="absolute inset-0 z-10 pointer-events-none overflow-hidden">
-                            <motion.div
-                              animate={{
-                                x: ['-200%', '200%'],
-                              }}
-                              transition={{
-                                duration: 2,
-                                repeat: Infinity,
-                                repeatDelay: 3 + index * 0.5,
-                                ease: "easeInOut"
-                              }}
-                              className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent skew-x-[-20deg] w-[150%] h-full"
-                            />
-                          </div>
-
-                          <OptimizedImage
-                            src={category.image}
-                            alt={category.name}
-                            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
-                          />
-                        </div>
-                        <span className="text-[10px] font-bold text-gray-600 dark:text-gray-300 text-center leading-tight line-clamp-1 w-full px-0.5">
-                          {category.name}
-                        </span>
-                      </Link>
-                    ))}
-                  </div>
-                </div>
+                <MindCategories displayCategories={displayCategories} />
 
                 {/* Dynamic Sticky Header (Search + Slider + Filters) */}
-                <AnimatePresence>
-                  {isStickyHeaderVisible && (
-                    <motion.div
-                      initial={{ y: -200 }}
-                      animate={{ y: 0 }}
-                      exit={{ y: -200 }}
-                      transition={{ duration: 0.3, ease: "easeOut" }}
-                      className="fixed top-0 left-0 right-0 z-[100] bg-white/95 dark:bg-[#0a0a0a]/95 backdrop-blur-md shadow-lg border-b border-gray-100 dark:border-white/5 safe-top"
-                    >
-                      {/* Search Bar Row (appears when scrolling up) */}
-                      <AnimatePresence>
-                        {showStickySearch && (
-                          <motion.div
-                            initial={{ height: 0, opacity: 0 }}
-                            animate={{ height: 'auto', opacity: 1 }}
-                            exit={{ height: 0, opacity: 0 }}
-                            className="px-4 pt-3 pb-2"
-                          >
-                            <div
-                              className="bg-white dark:bg-[#1a1a1a] rounded-2xl flex items-center px-4 py-3 cursor-pointer border-2 border-[#7e3866]/30 dark:border-[#7e3866]/50 shadow-md"
-                              onClick={handleSearchFocus}
-                            >
-                              <Search className="h-5 w-5 text-[#7e3866] dark:text-[#a14b84] mr-3" strokeWidth={2.5} />
-                              <div className="flex-1 relative h-5 overflow-hidden">
-                                <span className="absolute inset-0 text-base text-gray-400 font-medium">Search "biryani"</span>
-                              </div>
-                              <div className="h-5 w-[1px] bg-gray-200 dark:bg-white/10 mx-2" />
-                              <Mic className="h-5 w-5 text-[#7e3866] dark:text-[#a14b84]" />
-                            </div>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-
-                      {/* Categories Slider (Increased Icon Size) */}
-                      <div className="flex overflow-x-auto gap-5 py-3 pb-2 scrollbar-hide px-4 mask-edge-fade">
-                        {displayCategories.map((category, index) => (
-                          <Link
-                            key={`sticky-${category.id || index}`}
-                            to={`/food/user/category/${category.slug}`}
-                            className="flex-shrink-0 flex flex-col items-center gap-1.5 group w-[74px]"
-                          >
-                            <div className="w-18 h-18 rounded-full overflow-hidden border-2 border-gray-100 dark:border-white/10 shadow-md bg-white dark:bg-white/5 transition-transform group-active:scale-95">
-                              <OptimizedImage
-                                src={category.image}
-                                alt={category.name}
-                                className="w-full h-full object-cover"
-                              />
-                            </div>
-                            <span className="text-[9px] font-bold text-gray-700 dark:text-gray-300 text-center truncate w-full uppercase tracking-tighter">
-                              {category.name}
-                            </span>
-                          </Link>
-                        ))}
-                      </div>
-
-                      {/* Integrated Filters Row */}
-                      <div className="px-4 pb-3">
-                        <div
-                          className="flex items-center gap-2 overflow-x-auto scrollbar-hide"
-                          style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
-                        >
-                          <button
-                            type="button"
-                            onClick={() => setIsFilterOpen(true)}
-                            className="h-8 px-3 rounded-full flex items-center gap-1.5 bg-white dark:bg-white/10 border border-gray-200 dark:border-white/5 shadow-sm whitespace-nowrap"
-                          >
-                            <SlidersHorizontal className="h-3.5 w-3.5" />
-                            <span className="text-[10px] font-bold uppercase">Filters</span>
-                          </button>
-
-                          {foodPreferenceFilters.map((filter) => {
-                            const Icon = filter.icon;
-                            const isActive =
-                              (filter.id === "healthy" && vegMode) ||
-                              (filter.id === "all" && !vegMode);
-                            return (
-                              <button
-                                key={filter.id}
-                                type="button"
-                                onClick={() => applyHomeFoodPreference(filter.id)}
-                                className={`h-8 px-4 rounded-full flex items-center gap-2 whitespace-nowrap transition-all font-bold text-[10px] uppercase ${
-                                  isActive
-                                    ? filter.id === "healthy"
-                                      ? "bg-green-600 text-white"
-                                      : "bg-[#7e3866] text-white"
-                                    : "bg-white dark:bg-white/5 border border-gray-100 dark:border-white/5 text-gray-600 dark:text-gray-400"
-                                }`}
-                              >
-                                <Icon className="h-3 w-3" />
-                                {filter.label}
-                              </button>
-                            );
-                          })}
-
-                          {[
-                            { id: "delivery-under-30", label: "Under 30 mins" },
-                            { id: "delivery-under-45", label: "Under 45 mins" },
-                            { id: "distance-under-1km", label: "Under 1km", icon: MapPin },
-                          ].map((filter) => {
-                            const Icon = filter.icon;
-                            const isActive = activeFilters.has(filter.id);
-                            return (
-                              <button
-                                key={filter.id}
-                                type="button"
-                                onClick={() => toggleFilter(filter.id)}
-                                className={`h-8 px-4 rounded-full flex items-center gap-2 whitespace-nowrap transition-all font-bold text-[10px] uppercase ${isActive
-                                  ? "bg-[#7e3866] text-white"
-                                  : "bg-white dark:bg-white/5 border border-gray-100 dark:border-white/5 text-gray-600 dark:text-gray-400"
-                                  }`}
-                              >
-                                {Icon && <Icon className="h-3 w-3" />}
-                                {filter.label}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
+                <StickyHeader 
+      isStickyHeaderVisible={isStickyHeaderVisible}
+      showStickySearch={showStickySearch}
+      handleSearchFocus={handleSearchFocus}
+      displayCategories={displayCategories}
+      setIsFilterOpen={setIsFilterOpen}
+      foodPreferenceFilters={foodPreferenceFilters}
+      vegMode={vegMode}
+      applyHomeFoodPreference={applyHomeFoodPreference}
+      activeFilters={activeFilters}
+      toggleFilter={toggleFilter}
+    />
 
                 {/* Admin Hero Banners Section - Now below categories */}
                 {HeroBannerSection}
 
                 {/* Filters Sticky Sidebar Header */}
-                <section className="py-2.5 px-4 bg-white/95 dark:bg-[#0a0a0a]/95 backdrop-blur-md sticky top-0 z-[40] -mx-4 w-[calc(100%+2rem)] border-b border-gray-100 dark:border-white/5 shadow-sm transition-colors duration-300">
-                  <div
-                    className="flex items-center gap-2 overflow-x-auto scrollbar-hide px-4"
-                    style={{
-                      scrollbarWidth: "none",
-                      msOverflowStyle: "none",
-                    }}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => setIsFilterOpen(true)}
-                      className="h-9 px-4 rounded-full flex items-center gap-1.5 whitespace-nowrap flex-shrink-0 font-bold transition-all bg-white dark:bg-[#1a1a1a] border border-gray-200 shadow-sm active:scale-95"
-                    >
-                      <SlidersHorizontal className="h-4 w-4 text-black" />
-                      <span className="text-xs font-bold text-black dark:text-white uppercase tracking-tight">
-                        Filters
-                      </span>
-                    </button>
-
-                    {foodPreferenceFilters.map((filter) => {
-                      const Icon = filter.icon;
-                      const isActive =
-                        (filter.id === "healthy" && vegMode) ||
-                        (filter.id === "all" && !vegMode);
-                      return (
-                        <button
-                          key={filter.id}
-                          type="button"
-                          onClick={() => applyHomeFoodPreference(filter.id)}
-                          className={`h-9 px-4 rounded-full flex items-center gap-2 whitespace-nowrap flex-shrink-0 transition-all font-bold shadow-sm active:scale-95 ${
-                            isActive
-                              ? filter.id === "healthy"
-                                ? "bg-green-600 text-white border border-green-600"
-                                : "bg-[#7e3866] text-white border border-[#7e3866]"
-                              : "bg-white dark:bg-[#1a1a1a] border border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300"
-                          }`}
-                        >
-                          <Icon className="h-4 w-4" />
-                          {filter.label}
-                        </button>
-                      );
-                    })}
-
-                    {[
-                      { id: "delivery-under-30", label: "Under 30 mins" },
-                      { id: "delivery-under-45", label: "Under 45 mins" },
-                      { id: "distance-under-1km", label: "Under 1km", icon: MapPin },
-                      { id: "distance-under-2km", label: "Under 2km", icon: MapPin },
-                    ].map((filter) => {
-                      const Icon = filter.icon;
-                      const isActive = activeFilters.has(filter.id);
-                      return (
-                        <button
-                          key={filter.id}
-                          type="button"
-                          onClick={() => {
-                            const nextFilters = new Set(activeFilters);
-                            if (nextFilters.has(filter.id)) {
-                              nextFilters.delete(filter.id);
-                            } else {
-                              nextFilters.add(filter.id);
-                            }
-                            setActiveFilters(nextFilters);
-                            void applyFiltersAndRefetch(
-                              nextFilters,
-                              sortBy,
-                              selectedCuisine,
-                            );
-                          }}
-                          className={`h-9 px-4 rounded-full flex items-center gap-2 whitespace-nowrap flex-shrink-0 transition-all font-bold shadow-sm active:scale-95 ${isActive
-                            ? "bg-[#7e3866] text-white border border-[#7e3866] hover:bg-orange-700"
-                            : "bg-white dark:bg-[#1a1a1a] border border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300"
-                            }`}
-                        >
-                          {Icon && (
-                            <Icon
-                              className={`h-3.5 w-3.5 ${isActive ? "fill-white" : ""}`}
-                            />
-                          )}
-                          <span className="text-xs font-bold tracking-tight">
-                            {filter.label}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </section>
+                <FilterBar 
+  setIsFilterOpen={setIsFilterOpen} 
+  foodPreferenceFilters={foodPreferenceFilters} 
+  vegMode={vegMode} 
+  applyHomeFoodPreference={applyHomeFoodPreference} 
+  activeFilters={activeFilters} 
+  setActiveFilters={setActiveFilters} 
+  applyFiltersAndRefetch={applyFiltersAndRefetch} 
+  sortBy={sortBy} 
+  selectedCuisine={selectedCuisine} 
+/>
 
               </motion.div>
             ) : (
@@ -3710,478 +2175,33 @@ export default function Home() {
           </AnimatePresence>
         </div>
 
-        {recommendedForYouRestaurants.length > 0 && (
-          <motion.section
-            className="hidden md:block content-auto pt-1 sm:pt-2"
-            initial={false}
-            animate={{ opacity: 1, y: 0 }}>
-            <h2 className="text-xs sm:text-sm lg:text-base font-semibold text-gray-400 dark:text-gray-500 tracking-widest uppercase mb-2 sm:mb-3 px-4">
-              Recommended For You
-            </h2>
-
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 px-4">
-              {recommendedForYouRestaurants.map((restaurant, index) => {
-                const restaurantSlug =
-                  restaurant.slug ||
-                  restaurant.name.toLowerCase().replace(/\s+/g, "-");
-                return (
-                  <motion.div
-                    key={`recommended-${restaurant.mongoId || restaurant.id || restaurantSlug}`}
-                    initial={{ opacity: 0, y: 12 }}
-                    whileInView={{ opacity: 1, y: 0 }}
-                    viewport={{ once: true }}
-                    transition={{ duration: 0.35, delay: index * 0.05 }}>
-                    <Link
-                      to={`/user/restaurants/${restaurantSlug}`}
-                      className="block rounded-[20px] overflow-hidden border border-gray-100 dark:border-gray-800 bg-white dark:bg-[#1a1a1a] shadow-sm hover:shadow-md transition-shadow">
-                      <div className="relative h-24 sm:h-28 md:h-32 bg-gray-50">
-                        <RestaurantImageCarousel
-                          restaurant={restaurant}
-                          backendOrigin={BACKEND_ORIGIN}
-                          className="h-24 sm:h-28 md:h-32"
-                          roundedClass="rounded-t-[20px]"
-                        />
-                        <div className={`absolute bottom-2 left-2 px-2 py-0.5 rounded-lg ${Number(restaurant.rating) > 0 ? "bg-black/80 backdrop-blur-md text-white font-medium" : "bg-gray-200/90 text-gray-600 font-medium"} text-[10px] shadow-lg border border-white/10`}>
-                          {Number(restaurant.rating) > 0 ? Number(restaurant.rating).toFixed(1) : "NEW"}
-                        </div>
-                      </div>
-                      <div className="p-2.5">
-                        <p className="text-sm font-semibold text-gray-900 dark:text-white truncate tracking-tight">
-                          {restaurant.name}
-                        </p>
-                        <p className="text-[10px] text-[#7e3866] font-bold mt-1 flex items-center gap-1 uppercase tracking-wider">
-                          <Flame className="w-3.5 h-3.5 fill-[#7e3866]" />
-                          Near & Fast
-                        </p>
-                      </div>
-                    </Link>
-                  </motion.div>
-                );
-              })}
-            </div>
-          </motion.section>
-        )}
+        <RecommendedRestaurants recommendedForYouRestaurants={recommendedForYouRestaurants} />
 
         {/* Explore More Section */}
-        <motion.section
-          className="hidden md:block content-auto pt-2 sm:pt-3 lg:pt-4"
-          initial={false}
-          animate={{ opacity: 1, y: 0 }}>
-          <div className="px-4 mb-6 flex items-center gap-2">
-            <h2 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white leading-tight">
-              {exploreMoreHeading}
-            </h2>
-            <div className="h-[1px] bg-gray-100 dark:bg-gray-800 flex-1"></div>
-          </div>
-          <div className="px-4 pb-4 lg:pb-6">
-            <div className="flex overflow-x-auto no-scrollbar gap-4 sm:gap-5 md:gap-6 items-start py-2">
-              {showExploreSkeleton ? (
-                Array(6).fill(0).map((_, i) => (
-                  <div key={i} className="flex-shrink-0 w-20 sm:w-24 md:w-28">
-                    <ExploreGridSkeleton count={1} />
-                  </div>
-                ))
-              ) : (
-                finalExploreItems.map((item, index) => (
-                  <motion.div
-                    key={item.id}
-                    initial={{ opacity: 0, scale: 0.9 }}
-                    whileInView={{ opacity: 1, scale: 1 }}
-                    viewport={{ once: true }}
-                    transition={{
-                      duration: 0.4,
-                      delay: index * 0.08,
-                    }}
-                    whileHover={{ y: -8 }}
-                    whileTap={{ scale: 0.95 }}
-                    className="flex-shrink-0 w-20 sm:w-24 md:w-28">
-                    <Link
-                      to={item.href}
-                      className="block w-full">
-                      <div className="flex flex-col items-center gap-2 w-full group">
-                        <div className="relative w-full aspect-square rounded-[1.25rem] bg-white dark:bg-[#1a1a1a] flex items-center justify-center shadow-[0_4px_12px_-4px_rgba(0,0,0,0.1)] group-hover:shadow-[0_12px_24px_-6px_rgba(0,0,0,0.15)] transition-all duration-500 overflow-hidden border border-gray-100 dark:border-gray-800 group-hover:border-[#7e3866]/40">
-                          {/* Colorful Glow Background */}
-                          <div className={`absolute inset-0 opacity-0 group-hover:opacity-20 transition-opacity duration-500 bg-gradient-to-br ${index % 3 === 0 ? 'from-[#7e3866] to-rose-500' : index % 3 === 1 ? 'from-indigo-500 to-purple-500' : 'from-teal-500 to-emerald-500'} z-20 pointer-events-none`} />
-
-                          {/* Shine Effect */}
-                          <div className="absolute inset-0 z-30 pointer-events-none overflow-hidden">
-                            <motion.div
-                              animate={{ x: ['-200%', '200%'] }}
-                              transition={{ duration: 3, repeat: Infinity, repeatDelay: 5 + index * 0.5 }}
-                              className="absolute inset-0 bg-gradient-to-r from-transparent via-white/50 to-transparent skew-x-[-25deg] w-[150%]"
-                            />
-                          </div>
-
-                          <OptimizedImage
-                            src={item.image}
-                            alt={item.label}
-                            className="w-full h-full object-cover relative z-10 transition-transform duration-500 group-hover:scale-110"
-                            width={200}
-                            height={200}
-                          />
-                        </div>
-                        <span className="text-[10px] sm:text-[11px] font-bold text-gray-500 dark:text-gray-400 group-hover:text-[#7e3866] dark:group-hover:text-white transition-colors text-center tracking-tight leading-tight uppercase px-1">
-                          {item.label}
-                        </span>
-                      </div>
-                    </Link>
-                  </motion.div>
-                ))
-              )}
-            </div>
-          </div>
-        </motion.section>
+        <ExploreMoreSection 
+  exploreMoreHeading={exploreMoreHeading} 
+  showExploreSkeleton={showExploreSkeleton} 
+  finalExploreItems={finalExploreItems} 
+/>
 
         {/* Featured Foods - Horizontal Scroll */}
 
         {/* Restaurants - Enhanced with Animations */}
-        <motion.section
-          className="hidden md:block content-auto space-y-0 pt-3 sm:pt-4 lg:pt-6 pb-8 md:pb-10"
-          initial={false}
-          animate={{ opacity: 1 }}>
-          {!shouldShowOutOfZoneHome && (
-            <div className="px-4 mb-3 lg:mb-4">
-              <div className="flex flex-col gap-0.5 lg:gap-1">
-                <h2 className="text-xs sm:text-sm lg:text-base font-semibold text-gray-400 tracking-widest uppercase">
-                  {filteredRestaurants.length} Restaurants Delivering to You
-                </h2>
-<span className="text-base sm:text-lg lg:text-2xl text-gray-500 font-normal">
-                  Featured
-                </span>
-              </div>
-            </div>
-          )}
-            {shouldShowOutOfZoneHome ? (
-              <div className="flex flex-col items-center justify-center py-16 px-4 text-center min-h-[480px] overflow-visible">
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.9, y: 20 }}
-                  animate={{ opacity: 1, scale: 1, y: 0 }}
-                  transition={{ duration: 0.8, ease: "easeOut" }}
-                  className="flex flex-col items-center max-w-sm mx-auto relative"
-                >
-                  <div className="relative mb-14">
-                    {/* Multi-layered Glow System */}
-                    <motion.div
-                      animate={{
-                        scale: [1, 1.4, 1],
-                        opacity: [0.15, 0.35, 0.15],
-                      }}
-                      transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-                      className="absolute inset-0 bg-[#7e3866] rounded-full blur-[70px]"
-                    />
-                    <motion.div
-                      animate={{
-                        scale: [1.3, 1, 1.3],
-                        opacity: [0.1, 0.25, 0.1],
-                      }}
-                      transition={{ duration: 5, repeat: Infinity, ease: "easeInOut", delay: 1 }}
-                      className="absolute inset-0 bg-rose-400 rounded-full blur-[50px]"
-                    />
-
-                    {/* Floating Decorative Icons */}
-                    <motion.div 
-                      animate={{ y: [0, -15, 0], rotate: [0, 15, 0], scale: [1, 1.1, 1] }}
-                      transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-                      className="absolute -top-10 -left-10 text-orange-400/40"
-                    >
-                      <Pizza className="w-12 h-12" strokeWidth={1} />
-                    </motion.div>
-                    <motion.div 
-                      animate={{ y: [0, 15, 0], rotate: [0, -20, 0], scale: [1, 1.05, 1] }}
-                      transition={{ duration: 5, repeat: Infinity, ease: "easeInOut", delay: 1 }}
-                      className="absolute -bottom-6 -right-12 text-rose-400/40"
-                    >
-                      <UtensilsCrossed className="w-10 h-10" strokeWidth={1} />
-                    </motion.div>
-                    <motion.div 
-                      animate={{ x: [0, 12, 0], y: [0, -10, 0] }}
-                      transition={{ duration: 6, repeat: Infinity, ease: "easeInOut", delay: 1.5 }}
-                      className="absolute top-4 -right-14 text-amber-400/30"
-                    >
-                      <Flame className="w-8 h-8" strokeWidth={1} />
-                    </motion.div>
-
-                    <motion.div
-                      animate={{ y: [0, -25, 0] }}
-                      transition={{ duration: 3.5, repeat: Infinity, ease: "easeInOut" }}
-                      className="relative z-10 w-44 h-44 bg-white/80 dark:bg-[#1a1a1a]/80 backdrop-blur-sm rounded-[3rem] shadow-[0_20px_50px_rgba(126,56,102,0.3)] flex items-center justify-center border border-white/50 dark:border-white/10 overflow-hidden"
-                    >
-                      <img 
-                        src={chefMascot} 
-                        alt="Chef Mascot" 
-                        className="w-full h-full object-contain p-2 transform scale-115 drop-shadow-2xl"
-                      />
-                    </motion.div>
-                    
-                    {/* Animated Particles with varied colors */}
-                    {[...Array(5)].map((_, i) => (
-                      <motion.div
-                        key={i}
-                        animate={{ 
-                          y: [0, -120], 
-                          x: [0, (i - 2) * 40],
-                          opacity: [0, 0.6, 0],
-                          scale: [0, 1, 0]
-                        }}
-                        transition={{ 
-                          duration: 3 + i * 0.2, 
-                          repeat: Infinity, 
-                          delay: i * 0.6,
-                          ease: "easeOut" 
-                        }}
-                        className={`absolute top-1/2 left-1/2 w-${2 + (i % 2)} h-${2 + (i % 2)} ${i % 2 === 0 ? 'bg-[#7e3866]/40' : 'bg-rose-400/40'} rounded-full`}
-                      />
-                    ))}
-                  </div>
-
-                  <h3 className="text-3xl sm:text-4xl font-black mb-4 tracking-tight leading-tight bg-gradient-to-r from-[#7e3866] via-rose-500 to-[#7e3866] bg-clip-text text-transparent bg-[length:200%_auto] animate-gradient-shift">
-                    Coming Soon!
-                  </h3>
-                  <p className="text-base sm:text-lg font-medium text-gray-500 dark:text-gray-400 leading-relaxed px-4 max-w-xs">
-                    Currently we are not operating on this area. We are coming soon to your location!
-                  </p>
-                  
-                  <div className="mt-12 flex items-center gap-3">
-                    <motion.div 
-                      animate={{ width: [8, 40, 8], opacity: [0.2, 0.5, 0.2] }}
-                      transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
-                      className="h-1.5 bg-[#7e3866] rounded-full" 
-                    />
-                    <motion.div 
-                      animate={{ width: [40, 8, 40], opacity: [0.5, 1, 0.5] }}
-                      transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
-                      className="h-1.5 bg-[#7e3866] rounded-full" 
-                    />
-                    <motion.div 
-                      animate={{ width: [8, 40, 8], opacity: [0.2, 0.5, 0.2] }}
-                      transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut", delay: 0.5 }}
-                      className="h-1.5 bg-[#7e3866] rounded-full" 
-                    />
-                  </div>
-                </motion.div>
-              </div>
-            ) : (
-              <>
-                <div
-                  className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-4 lg:gap-5 xl:gap-6 px-4 pt-1 sm:pt-1.5 lg:pt-2 items-stretch ${isLoadingFilterResults || loadingRestaurants ? "opacity-50" : "opacity-100"} transition-opacity duration-300`}>
-                  {visibleRestaurants.map((restaurant, index) => {
-                    const nameStr =
-                      typeof restaurant?.name === "string"
-                        ? restaurant.name.trim()
-                        : "";
-                    const fallbackSlugSource =
-                      nameStr ||
-                      (typeof restaurant?.restaurantName === "string"
-                        ? restaurant.restaurantName.trim()
-                        : "") ||
-                      String(
-                        restaurant?.slug ||
-                        restaurant?.id ||
-                        restaurant?._id ||
-                        `restaurant-${index}`,
-                      );
-
-                    const restaurantSlug =
-                      typeof restaurant?.slug === "string" &&
-                        restaurant.slug.trim()
-                        ? restaurant.slug.trim()
-                        : fallbackSlugSource.toLowerCase().replace(/\s+/g, "-");
-                    const availability = getRestaurantAvailabilityStatus(
-                      restaurant,
-                      new Date(availabilityTick),
-                      { ignoreOperationalStatus: true },
-                    );
-                    // Direct favorite check - isFavorite is already memoized in context
-                    const favorite = isFavorite(restaurantSlug);
-
-                    const handleToggleFavorite = (e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      if (favorite) {
-                        // If already bookmarked, show Manage Collections modal
-                        setSelectedRestaurantSlug(restaurantSlug);
-                        setShowManageCollections(true);
-                      } else {
-                        // Add to favorites and show toast
-                        addFavorite({
-                          slug: restaurantSlug,
-                          name: restaurant.name,
-                          cuisine: restaurant.cuisine,
-                          rating: restaurant.rating,
-                          deliveryTime: restaurant.deliveryTime,
-                          distance: restaurant.distance,
-                          priceRange: restaurant.priceRange,
-                          image: restaurant.image,
-                        });
-                        setShowToast(true);
-                        setTimeout(() => {
-                          setShowToast(false);
-                        }, 3000);
-                      }
-                    };
-
-                    return (
-                      <div
-                        key={
-                          restaurant?.id ||
-                          restaurant?._id ||
-                          restaurantSlug ||
-                          index
-                        }
-                        className="h-full transform transition-all duration-300 hover:-translate-y-3 hover:scale-[1.02]"
-                        style={{
-                          perspective: 1000,
-                          animation:
-                            index < 10
-                              ? `fade-in-up 0.5s ease-out ${index * 0.05}s backwards`
-                              : "none",
-                        }}>
-                        <div className="h-full group">
-                          <Link
-                            to={`/user/restaurants/${restaurantSlug}`}
-                            className="h-full flex">
-                            <Card
-                              className={`overflow-hidden gap-0 cursor-pointer border-0 dark:border-gray-800 group bg-white dark:bg-[#1a1a1a] border-background transition-all duration-500 py-0 rounded-[28px] flex flex-col h-full w-full relative shadow-sm hover:shadow-xl ${isOutOfService || !availability.isOpen
-                                ? "grayscale opacity-75"
-                                : ""
-                                }`}>
-                              {/* Image Section with Carousel */}
-                              <div className="relative">
-                                <RestaurantImageCarousel
-                                  restaurant={restaurant}
-                                  priority={index < 3}
-                                  backendOrigin={BACKEND_ORIGIN}
-                                />
-
-                                {restaurant.featuredDish && Number.isFinite(Number(restaurant.featuredPrice)) && (
-                                  <div className="absolute top-4 left-4 flex items-center z-10 transform transition-transform duration-300 group-hover:scale-105">
-                                    <div className="bg-black/70 backdrop-blur-lg text-white px-4 py-1.5 rounded-full text-[11px] font-medium tracking-tight flex items-center shadow-2xl border border-white/20">
-                                      {restaurant.featuredDish} • Rs. {restaurant.featuredPrice}
-                                    </div>
-                                  </div>
-                                )}
-
-                                {/* Bookmark Icon - Top Right */}
-                                <div className="absolute top-4 right-4 z-10 transform transition-transform duration-300 group-hover:scale-110">
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={handleToggleFavorite}
-                                    aria-label={
-                                      favorite
-                                        ? "Remove from favorites"
-                                        : "Add to favorites"
-                                    }
-                                    className={`h-11 w-11 rounded-[20px] shadow-xl flex items-center justify-center transition-all duration-300 ${favorite
-                                      ? "bg-red-500 text-white"
-                                      : "bg-white/90 backdrop-blur-sm text-gray-800 hover:bg-white"
-                                      }`}>
-                                    <Bookmark
-                                      className={`h-5 w-5 transition-all duration-300 ${favorite ? "fill-white" : ""
-                                        }`}
-                                    />
-                                  </Button>
-                                </div>
-                              </div>
-
-                              {/* Content Section */}
-                              <div className="transform transition-transform duration-300 group-hover:-translate-y-1">
-                                <CardContent className="p-3 sm:p-4 lg:p-5 pt-3 sm:pt-4 lg:pt-5 flex flex-col flex-grow">
-                                  {/* Restaurant Name & Rating */}
-                                  <div className="flex items-start justify-between gap-2 mb-2 lg:mb-3">
-                                    <div className="flex-1 min-w-0">
-                                      <h3 className="text-lg lg:text-2xl font-bold text-gray-950 dark:text-white line-clamp-1 leading-tight tracking-tight transition-colors duration-300 group-hover:text-[#7e3866]">
-                                        {restaurant.name}
-                                      </h3>
-                                      <div className="flex flex-wrap items-center gap-2 mt-2">
-                                        <span
-                                          className={`inline-flex rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-widest shadow-sm ${availability.isOpen ? "bg-[#7e3866] text-white" : "bg-gray-400 text-white"}`}>
-                                          {availability.isOpen
-                                            ? "Open now"
-                                            : "Offline"}
-                                        </span>
-                                        {availability.isOpen &&
-                                          availability.closingCountdownLabel &&
-                                          availability.openingTime &&
-                                          availability.closingTime && (
-                                            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#7e3866]/10 text-[#7e3866] border border-[#7e3866]/20 text-[10px] font-black uppercase tracking-widest">
-                                              <Timer
-                                                className="h-3 w-3 flex-shrink-0"
-                                                strokeWidth={3}
-                                              />
-                                              <span>
-                                                {availability.closingCountdownLabel}
-                                              </span>
-                                            </div>
-                                          )}
-                                      </div>
-                                    </div>
-                                    <div className={`flex-shrink-0 ${Number(restaurant.rating) > 0 ? "bg-[#7e3866]" : "bg-gray-400"} text-white px-3 py-1.5 rounded-2xl flex items-center gap-1.5 shadow-md transform transition-transform duration-300 group-hover:scale-110`}>
-                                      <span className="text-sm lg:text-lg font-black tracking-tight">
-                                        {Number(restaurant.rating) > 0 ? Number(restaurant.rating).toFixed(1) : "NEW"}
-                                      </span>
-                                      {Number(restaurant.rating) > 0 && <Star className="h-3.5 w-3.5 lg:h-4.5 lg:w-4.5 fill-white text-white" strokeWidth={0} />}
-                                    </div>
-                                  </div>
-
-                                  {/* Delivery Time & Distance */}
-                                  <div className="flex items-center gap-1 text-sm lg:text-base text-gray-500 mb-2 lg:mb-3 transition-opacity duration-300 opacity-70 group-hover:opacity-100">
-                                    <Clock
-                                      className="h-4 w-4 lg:h-5 lg:w-5 text-gray-500 dark:text-gray-400"
-                                      strokeWidth={1.5}
-                                    />
-                                    <span className="font-medium dark:text-gray-300 text-gray-700">
-                                      {restaurant.deliveryTime}
-                                    </span>
-                                    <span className="mx-1">|</span>
-                                    <span className="font-medium dark:text-gray-300 text-gray-700">
-                                      {restaurant.distance}
-                                    </span>
-                                  </div>
-
-                                  {/* Offer Badge */}
-                                  {restaurant.offer && (
-                                    <div className="flex items-center gap-2 text-sm lg:text-base mt-auto transform transition-transform duration-300 group-hover:translate-x-1">
-                                      <BadgePercent
-                                        className="h-4 w-4 lg:h-5 lg:w-5 text-[#7e3866]"
-                                        strokeWidth={3}
-                                      />
-                                      <span className="text-[#7e3866] dark:text-[#a05485] font-black uppercase text-[10px] tracking-wider">
-                                        {restaurant.offer}
-                                      </span>
-                                    </div>
-                                  )}
-                                </CardContent>
-                              </div>
-
-                              {/* Border Glow Effect */}
-                              <div className="absolute inset-0 rounded-md pointer-events-none z-0 transition-all duration-300 border border-transparent group-hover:border-[#7e3866]/30 group-hover:shadow-[inset_0_0_0_1px_rgba(235,89,14,0.2)]" />
-                            </Card>
-                          </Link>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                <div className="flex flex-col items-center pt-2 sm:pt-3 gap-2 px-4">
-                  {hasMoreRestaurants && (
-                    <Button
-                      variant="outline"
-                      onClick={loadMoreRestaurants}
-                      className="text-sm font-medium border-gray-300 hover:border-gray-400">
-                      Load more restaurants
-                    </Button>
-                  )}
-                  <div
-                    ref={restaurantLoadMoreRef}
-                    className="h-1 w-full"
-                    aria-hidden="true"
-                  />
-                </div>
-              </>
-            )}
-        </motion.section>
+        <RestaurantsSection 
+      shouldShowOutOfZoneHome={shouldShowOutOfZoneHome}
+      filteredRestaurants={filteredRestaurants}
+      isLoadingFilterResults={isLoadingFilterResults}
+      loadingRestaurants={loadingRestaurants}
+      visibleRestaurants={visibleRestaurants}
+      isOutOfService={isOutOfService}
+      availabilityTick={availabilityTick}
+      hasMoreRestaurants={hasMoreRestaurants}
+      loadMoreRestaurants={loadMoreRestaurants}
+      setSelectedRestaurantSlug={setSelectedRestaurantSlug}
+      setShowManageCollections={setShowManageCollections}
+      setShowToast={setShowToast}
+      restaurantLoadMoreRef={restaurantLoadMoreRef}
+    />
       </div>
 
       {/* Filter Modal - Bottom Sheet */}
@@ -4794,247 +2814,16 @@ export default function Home() {
       </AnimatePresence>
 
       {/* All Categories Modal */}
-      <AnimatePresence>
-        {showAllCategoriesModal && (
-          <>
-            {/* Backdrop */}
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
-              onClick={() => setShowAllCategoriesModal(false)}
-              className="fixed inset-0 bg-black/40 z-[9998] backdrop-blur-sm"
-            />
+      <AllCategoriesModal 
+        showAllCategoriesModal={showAllCategoriesModal}
+        setShowAllCategoriesModal={setShowAllCategoriesModal}
+        displayCategories={displayCategories}
+      />
 
-            {/* Modal - Full screen with rounded corners */}
-            <motion.div
-              initial={{ opacity: 0, y: "100%" }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: "100%" }}
-              transition={{
-                type: "spring",
-                damping: 30,
-                stiffness: 300,
-              }}
-              className="fixed inset-x-0 bottom-0 top-12 sm:top-16 md:top-20 z-[9999] bg-white dark:bg-[#1a1a1a] rounded-t-3xl shadow-2xl overflow-hidden flex flex-col"
-              onClick={(e) => e.stopPropagation()}>
-              {/* Header */}
-              <div className="flex items-center justify-between px-5 py-4 sm:px-6 sm:py-5 border-b border-gray-200 dark:border-gray-800 flex-shrink-0">
-                <h2 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white">
-                  All Categories
-                </h2>
-                <button
-                  onClick={() => setShowAllCategoriesModal(false)}
-                  className="p-1.5 sm:p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-                  aria-label="Close">
-                  <X className="w-5 h-5 sm:w-6 sm:h-6 text-gray-600 dark:text-gray-400" />
-                </button>
-              </div>
-
-              {/* Categories Grid - Scrollable */}
-              <div className="flex-1 overflow-y-auto px-4 sm:px-5 py-4 sm:py-5">
-                <div className="grid grid-cols-3 gap-4 sm:gap-5 md:gap-6">
-                  {displayCategories.map((category, index) => {
-                    const categoryData = {
-                      name: category.name || category.label,
-                      image: category.image || category.imageUrl,
-                      slug: category.slug,
-                    };
-                    return (
-                      <motion.div
-                        key={category.id || index}
-                        initial={{ opacity: 0, scale: 0.9 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        transition={{
-                          duration: 0.3,
-                          delay: index * 0.02,
-                          type: "spring",
-                          stiffness: 100,
-                        }}
-                        whileTap={{ scale: 0.95 }}>
-                        <Link
-                          to={`/user/category/${categoryData.slug || categoryData.name.toLowerCase().replace(/\s+/g, "-")}`}
-                          onClick={() => setShowAllCategoriesModal(false)}
-                          className="block">
-                          <div className="flex flex-col items-center gap-2 sm:gap-2.5 cursor-pointer w-full">
-                            <div className="w-20 h-20 sm:w-24 sm:h-24 md:w-28 md:h-28 rounded-full overflow-hidden shadow-md transition-all hover:shadow-lg flex-shrink-0">
-                              <OptimizedImage
-                                src={categoryData.image}
-                                alt={categoryData.name}
-                                className="w-full h-full bg-white rounded-full"
-                                sizes="(max-width: 640px) 80px, (max-width: 768px) 96px, 112px"
-                                objectFit="cover"
-                                placeholder="blur"
-                                onError={() => { }}
-                              />
-                            </div>
-                            <span className="text-xs sm:text-sm font-medium text-gray-800 dark:text-gray-200 text-center leading-tight px-1 break-words w-full min-w-0">
-                              {categoryData.name}
-                            </span>
-                          </div>
-                        </Link>
-                      </motion.div>
-                    );
-                  })}
-                </div>
-              </div>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
-
-      <AnimatePresence>
-        {isApplyingVegMode && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.3 }}
-            className="fixed inset-0 z-[10000] bg-white dark:bg-[#0a0a0a] flex items-center justify-center">
-            <div className="relative w-32 h-32 flex items-center justify-center w-full">
-              {/* Animated circles - positioned absolutely at the center */}
-              {[...Array(8)].map((_, i) => {
-                const baseSize = 112;
-                const maxSize = 600;
-                return (
-                  <motion.div
-                    key={i}
-                    initial={{
-                      scale: 1,
-                      opacity: 0,
-                    }}
-                    animate={{
-                      scale: maxSize / baseSize,
-                      opacity: [0, 0.4, 0.2, 0],
-                    }}
-                    transition={{
-                      duration: 2.5,
-                      repeat: Number.POSITIVE_INFINITY,
-                      ease: "easeOut",
-                      delay: i * 0.15,
-                    }}
-                    className="absolute rounded-full border border-green-300 dark:border-green-600"
-                    style={{
-                      width: baseSize,
-                      height: baseSize,
-                    }}
-                  />
-                );
-              })}
-
-              {/* 100% VEG badge - absolute positioning at exact center */}
-              <motion.div
-                initial={{ scale: 0, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                transition={{
-                  type: "spring",
-                  stiffness: 200,
-                  damping: 15,
-                  delay: 0.1,
-                }}
-                className="absolute z-10 w-28 h-28 rounded-full border-2 border-green-600 dark:border-green-500 bg-white dark:bg-[#1a1a1a] flex flex-col items-center justify-center shadow-sm"
-              >
-                <motion.div
-                  className="flex flex-col items-center"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: 0.3 }}>
-                  <span className="text-green-600 dark:text-green-400 font-extrabold text-3xl leading-none">
-                    100%
-                  </span>
-                  <span className="text-green-600 dark:text-green-400 font-extrabold text-3xl leading-none mt-0.5">
-                    VEG
-                  </span>
-                </motion.div>
-              </motion.div>
-
-              {/* Text below badge */}
-              <motion.p
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.4 }}
-                className="text-xl font-normal text-gray-800 dark:text-gray-200 text-center relative z-10 mt-56 w-full">
-                Explore veg dishes from all restaurants
-              </motion.p>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
+      <VegModeOverlay isApplyingVegMode={isApplyingVegMode} isSwitchingOffVegMode={isSwitchingOffVegMode} />
+      
       {/* Loading Screen - Switching Off Veg Mode */}
-      <AnimatePresence>
-        {isSwitchingOffVegMode && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.3 }}
-            className="fixed inset-0 z-[10000] bg-white dark:bg-[#0a0a0a] flex items-center justify-center">
-            <div className="flex flex-col items-center gap-6">
-              {/* Two Circles Spinning in Opposite Directions */}
-              <motion.div
-                initial={{ scale: 0, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                transition={{
-                  type: "spring",
-                  stiffness: 200,
-                  damping: 15,
-                  delay: 0.1,
-                }}
-                className="relative w-16 h-16 flex items-center justify-center">
-                {/* Outer Circle - Spins Clockwise */}
-                <motion.div
-                  animate={{ rotate: 360 }}
-                  transition={{
-                    rotate: {
-                      duration: 1.5,
-                      repeat: Infinity,
-                      ease: "linear",
-                    },
-                  }}
-                  className="absolute w-16 h-16 border-[4px] border-transparent border-t-pink-500 dark:border-t-pink-400 border-r-pink-500 dark:border-r-pink-400 rounded-full"
-                />
-
-                {/* Inner Circle - Spins Counter-clockwise */}
-                <motion.div
-                  animate={{ rotate: -360 }}
-                  transition={{
-                    rotate: {
-                      duration: 1,
-                      repeat: Infinity,
-                      ease: "linear",
-                    },
-                  }}
-                  className="absolute w-12 h-12 border-[4px] border-transparent border-r-pink-500 dark:border-r-pink-400 rounded-full"
-                />
-              </motion.div>
-
-              {/* Loading Text */}
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.3 }}
-                className="text-center">
-                <motion.h2
-                  className="text-xl font-normal text-gray-800 dark:text-gray-200 mb-1"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: 0.4 }}>
-                  Switching off
-                </motion.h2>
-                <motion.p
-                  className="text-xl font-normal text-gray-800 dark:text-gray-200"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: 0.5 }}>
-                  Veg Mode for you
-                </motion.p>
-              </motion.div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      
 
       {/* Toast Notification - Fixed to viewport bottom */}
       {typeof window !== "undefined" &&
@@ -5055,123 +2844,13 @@ export default function Home() {
         )}
 
       {/* Manage Collections Modal */}
-      {typeof window !== "undefined" &&
-        createPortal(
-          <AnimatePresence>
-            {showManageCollections && (
-              <>
-                {/* Backdrop */}
-                <motion.div
-                  className="fixed inset-0 bg-black/40 z-[9999]"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.2 }}
-                  onClick={() => setShowManageCollections(false)}
-                />
-
-                {/* Manage Collections Bottom Sheet */}
-                <motion.div
-                  className="fixed left-0 right-0 bottom-0 z-[10000] bg-white rounded-t-3xl shadow-2xl"
-                  initial={{ y: "100%" }}
-                  animate={{ y: 0 }}
-                  exit={{ y: "100%" }}
-                  transition={{
-                    duration: 0.2,
-                    type: "spring",
-                    damping: 30,
-                    stiffness: 400,
-                  }}>
-                  {/* Header */}
-                  <div className="flex items-center justify-between px-4 pt-6 pb-4 border-b border-gray-200">
-                    <h2 className="text-lg font-bold text-gray-900">
-                      Manage Collections
-                    </h2>
-                    <button
-                      onClick={() => setShowManageCollections(false)}
-                      className="h-8 w-8 rounded-full bg-gray-700 flex items-center justify-center hover:bg-gray-800 transition-colors">
-                      <X className="h-4 w-4 text-white" />
-                    </button>
-                  </div>
-
-                  {/* Collections List */}
-                  <div className="px-4 py-4 space-y-2 max-h-[60vh] overflow-y-auto">
-                    {/* Bookmarks Collection */}
-                    <div
-                      className="w-full flex items-start gap-3 p-3 hover:bg-gray-50 rounded-lg transition-colors cursor-pointer"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        // Don't close modal on click, let checkbox handle it
-                      }}>
-                      <div className="h-12 w-12 rounded-lg bg-pink-100 flex items-center justify-center flex-shrink-0">
-                        <Bookmark className="h-6 w-6 text-red-500 fill-red-500" />
-                      </div>
-                      <div className="flex-1 text-left">
-                        <div className="flex items-center justify-between">
-                          <span className="text-base font-medium text-gray-900">
-                            Bookmarks
-                          </span>
-                          {selectedRestaurantSlug && (
-                            <div onClick={(e) => e.stopPropagation()}>
-                              <Checkbox
-                                checked={isFavorite(selectedRestaurantSlug)}
-                                onCheckedChange={(checked) => {
-                                  if (!checked) {
-                                    removeFavorite(selectedRestaurantSlug);
-                                    setSelectedRestaurantSlug(null);
-                                    setShowManageCollections(false);
-                                  }
-                                }}
-                                className="h-5 w-5 rounded border-2 border-red-500 data-[state=checked]:bg-red-500 data-[state=checked]:border-red-500"
-                              />
-                            </div>
-                          )}
-                          {!selectedRestaurantSlug && (
-                            <div className="h-5 w-5 rounded border-2 border-red-500 bg-red-500 flex items-center justify-center">
-                              <Check className="h-3 w-3 text-white" />
-                            </div>
-                          )}
-                        </div>
-                        <p className="text-sm text-gray-500 mt-1">
-                          {getFavorites().length} restaurant
-                          {getFavorites().length !== 1 ? "s" : ""}
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Create new Collection */}
-                    <button
-                      className="w-full flex items-start gap-3 p-3 hover:bg-gray-50 rounded-lg transition-colors"
-                      onClick={() => setShowManageCollections(false)}>
-                      <div className="h-12 w-12 rounded-lg bg-pink-100 flex items-center justify-center flex-shrink-0">
-                        <Plus className="h-6 w-6 text-red-500" />
-                      </div>
-                      <div className="flex-1 text-left">
-                        <span className="text-base font-medium text-gray-900">
-                          Create new Collection
-                        </span>
-                      </div>
-                    </button>
-                  </div>
-
-                  {/* Done Button */}
-                  <div className="border-t border-gray-200 px-4 py-4">
-                    <Button
-                      className="w-full bg-gray-300 hover:bg-gray-400 text-gray-700 py-3 rounded-lg font-medium"
-                      onClick={() => {
-                        setSelectedRestaurantSlug(null);
-                        setShowManageCollections(false);
-                      }}>
-                      Done
-                    </Button>
-                  </div>
-                </motion.div>
-              </>
-            )}
-          </AnimatePresence>,
-          document.body,
-        )}
-
+      <ManageCollectionsModal 
+        showManageCollections={showManageCollections}
+        setShowManageCollections={setShowManageCollections}
+        selectedRestaurantSlug={selectedRestaurantSlug}
+        setSelectedRestaurantSlug={setSelectedRestaurantSlug}
+      />
+      
       <StickyCartCard />
       {/* Live order strip: only on homepage (not in UserLayout) */}
       <OrderTrackingCard hasBottomNav />

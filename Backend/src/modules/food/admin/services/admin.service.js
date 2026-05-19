@@ -3009,6 +3009,7 @@ export async function getFoods(query) {
         variations: serializeFoodVariants(f.variants),
         image: f.image || '',
         foodType: f.foodType || 'Non-Veg',
+        tag: f.tag || 'Normal',
         isAvailable: f.isAvailable !== false,
         preparationTime: f.preparationTime || '',
         approvalStatus: f.approvalStatus || 'approved',
@@ -3150,6 +3151,7 @@ export async function createFood(body) {
         variants,
         image: typeof body.image === 'string' ? body.image.trim() : '',
         foodType,
+        tag: body.tag === 'Healthy' ? 'Healthy' : 'Normal',
         isAvailable: body.isAvailable !== false,
         preparationTime: typeof body.preparationTime === 'string' ? body.preparationTime.trim() : '',
         approvalStatus: 'approved'
@@ -3185,6 +3187,7 @@ export async function updateFood(id, body) {
     }
     if (body.image !== undefined) doc.image = String(body.image || '').trim();
     if (body.foodType !== undefined) doc.foodType = targetFoodType;
+    if (body.tag !== undefined) doc.tag = body.tag === 'Healthy' ? 'Healthy' : 'Normal';
     if (body.isAvailable !== undefined) doc.isAvailable = body.isAvailable !== false;
     if (body.preparationTime !== undefined) doc.preparationTime = String(body.preparationTime || '').trim();
     if (body.categoryId !== undefined || body.categoryName !== undefined || body.category !== undefined || body.foodType !== undefined) {

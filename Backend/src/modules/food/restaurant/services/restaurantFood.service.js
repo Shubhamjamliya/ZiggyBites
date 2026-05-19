@@ -30,6 +30,8 @@ const normalizeFoodType = (v) => {
     return 'Non-Veg';
 };
 
+const normalizeFoodTag = (v) => String(v || '').trim() === 'Healthy' ? 'Healthy' : 'Normal';
+
 const getCreateFoodPricing = (body = {}) => {
     const variants = normalizeFoodVariantsInput(extractRawFoodVariants(body));
     if (variants.length > 0) {
@@ -206,6 +208,7 @@ export async function createRestaurantFood(restaurantId, body = {}) {
         variants,
         image,
         foodType,
+        tag: normalizeFoodTag(body.tag),
         isAvailable,
         preparationTime,
         approvalStatus: 'pending',
@@ -262,6 +265,7 @@ export async function updateRestaurantFood(restaurantId, foodId, body = {}) {
 
     const targetFoodType = body.foodType !== undefined ? normalizeFoodType(body.foodType) : normalizeFoodType(existing.foodType);
     if (body.foodType !== undefined) update.foodType = targetFoodType;
+    if (body.tag !== undefined) update.tag = normalizeFoodTag(body.tag);
 
     if (
         body.categoryId !== undefined ||

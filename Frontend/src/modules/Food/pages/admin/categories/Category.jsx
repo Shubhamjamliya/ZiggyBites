@@ -58,6 +58,7 @@ export default function Category() {
   const [categories, setCategories] = useState([])
   const [loading, setLoading] = useState(true)
   const [showPendingOnly, setShowPendingOnly] = useState(false)
+  const [listingFilter, setListingFilter] = useState("all")
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingCategory, setEditingCategory] = useState(null)
   const [zones, setZones] = useState([])
@@ -108,13 +109,14 @@ export default function Category() {
       fetchCategories()
     }, 300)
     return () => window.clearTimeout(timer)
-  }, [searchQuery, showPendingOnly])
+  }, [searchQuery, showPendingOnly, listingFilter])
 
   const filteredCategories = useMemo(() => {
     const query = String(searchQuery || "").trim().toLowerCase()
-    if (!query) return categories
     return categories.filter((category) => {
+      if (listingFilter === "healthy" && category?.healthy !== true) return false
       const creator = category?.createdByRestaurant?.name || category?.restaurant?.name || ""
+      if (!query) return true
       return (
         String(category?.name || "").toLowerCase().includes(query) ||
         String(category?.foodTypeScope || "").toLowerCase().includes(query) ||
@@ -122,7 +124,7 @@ export default function Category() {
         String(category?.id || "").toLowerCase().includes(query)
       )
     })
-  }, [categories, searchQuery])
+  }, [categories, searchQuery, listingFilter])
 
   const fetchCategories = async () => {
     try {
@@ -130,6 +132,7 @@ export default function Category() {
       const params = {}
       if (searchQuery) params.search = searchQuery
       if (showPendingOnly) params.approvalStatus = "pending"
+      if (listingFilter === "healthy") params.healthy = true
 
       const response = await adminAPI.getCategories(params)
       const list = response?.data?.data?.categories || response?.data?.categories || []
@@ -300,12 +303,13 @@ export default function Category() {
         category?.foodTypeScope || "Both",
         category?.isGlobal ? "Global" : "Private",
         zoneLabel(category?.zoneId),
+        category?.healthy ? "Health Foods" : "All Items",
         category?.approvalStatus || "pending",
       ])
 
       autoTable(doc, {
         startY: 35,
-        head: [["SL", "Category", "Diet Scope", "Visibility", "Zone", "Approval"]],
+        head: [["SL", "Category", "Diet Scope", "Visibility", "Zone", "Listing", "Approval"]],
         body: tableData,
         theme: "striped",
         headStyles: {
@@ -387,6 +391,24 @@ export default function Category() {
             <div className="flex items-center gap-2 rounded-full border border-slate-200 p-1">
               <button
                 type="button"
+                onClick={() => setListingFilter("all")}
+                className={`rounded-full px-3 py-2 text-xs font-semibold ${listingFilter === "all" ? "bg-slate-900 text-white" : "text-slate-600"}`}
+              >
+                All Items
+              </button>
+              <button
+                type="button"
+                onClick={() => setListingFilter("healthy")}
+                className={`inline-flex items-center gap-1 rounded-full px-3 py-2 text-xs font-semibold ${listingFilter === "healthy" ? "bg-emerald-600 text-white" : "text-slate-600"}`}
+              >
+                <Leaf className="h-3.5 w-3.5" />
+                Health Foods
+              </button>
+            </div>
+
+            <div className="flex items-center gap-2 rounded-full border border-slate-200 p-1">
+              <button
+                type="button"
                 onClick={() => setShowPendingOnly(false)}
                 className={`rounded-full px-3 py-2 text-xs font-semibold ${!showPendingOnly ? "bg-slate-900 text-white" : "text-slate-600"}`}
               >
@@ -441,6 +463,7 @@ export default function Category() {
                 <th className="w-[17%] px-4 py-4 text-left text-[11px] font-bold uppercase tracking-wider text-slate-600">Owner</th>
                 <th className="w-[15%] px-4 py-4 text-left text-[11px] font-bold uppercase tracking-wider text-slate-600">Zone</th>
                 <th className="w-[10%] px-4 py-4 text-center text-[11px] font-bold uppercase tracking-wider text-slate-600">Diet</th>
+                <th className="w-[12%] px-4 py-4 text-center text-[11px] font-bold uppercase tracking-wider text-slate-600">Listing</th>
                 <th className="w-[10%] px-4 py-4 text-center text-[11px] font-bold uppercase tracking-wider text-slate-600">Status</th>
                 <th className="w-[13%] px-4 py-4 text-left text-[11px] font-bold uppercase tracking-wider text-slate-600">Approval</th>
                 <th className="w-[20%] px-5 py-4 text-right text-[11px] font-bold uppercase tracking-wider text-slate-600">Actions</th>
@@ -449,14 +472,14 @@ export default function Category() {
             <tbody className="divide-y divide-slate-100">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-20 text-center">
+                  <td colSpan={8} className="px-6 py-20 text-center">
                     <Loader2 className="mx-auto h-8 w-8 animate-spin text-blue-600" />
                     <p className="mt-2 text-sm text-slate-500">Loading categories...</p>
                   </td>
                 </tr>
               ) : filteredCategories.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-20 text-center">
+                  <td colSpan={8} className="px-6 py-20 text-center">
                     <p className="text-lg font-semibold text-slate-700">No categories found</p>
                     <p className="mt-1 text-sm text-slate-500">Try a different search or create a new category.</p>
                   </td>
@@ -524,6 +547,12 @@ export default function Category() {
                       <td className="px-4 py-5 text-center">
                         <span className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-semibold ${scopeBadgeClass(category?.foodTypeScope)}`}>
                           {category?.foodTypeScope || "Both"}
+                        </span>
+                      </td>
+                      <td className="px-4 py-5 text-center">
+                        <span className={`inline-flex items-center justify-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${category?.healthy ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-slate-100 text-slate-700"}`}>
+                          {category?.healthy && <Leaf className="h-3.5 w-3.5" />}
+                          {category?.healthy ? "Health Foods" : "All Items"}
                         </span>
                       </td>
                       <td className="px-4 py-5 text-center">

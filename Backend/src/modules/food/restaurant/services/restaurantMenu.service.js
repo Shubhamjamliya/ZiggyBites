@@ -57,6 +57,7 @@ const buildMenuFromFoods = async (foods = []) => {
             variations: serializeFoodVariants(food.variants),
             image: food.image || '',
             foodType: food.foodType || 'Non-Veg',
+            tag: food.tag || 'Normal',
             isAvailable: food.isAvailable !== false,
             approvalStatus: food.approvalStatus || 'approved',
             rejectionReason: food.rejectionReason || '',

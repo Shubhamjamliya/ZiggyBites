@@ -1,5 +1,5 @@
 import { useParams, Link, useSearchParams, useNavigate, useLocation } from "react-router-dom"
-import React, { useState, useEffect, useMemo, useRef, useCallback, memo } from "react"
+import React, { Suspense, lazy, useState, useEffect, useMemo, useRef, useCallback, memo } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { toast } from "sonner"
 import {
@@ -35,7 +35,6 @@ import { Textarea } from "@food/components/ui/textarea"
 import { useOrders } from "@food/context/OrdersContext"
 import { useProfile } from "@food/context/ProfileContext"
 import { useLocation as useUserLocation } from "@food/hooks/useLocation"
-import DeliveryTrackingMap from "@food/components/user/DeliveryTrackingMap"
 import { orderAPI, restaurantAPI } from "@food/api"
 import { useCompanyName } from "@food/hooks/useCompanyName"
 import { useUserNotifications } from "@food/hooks/useUserNotifications"
@@ -51,6 +50,16 @@ const debugLog = (...args) => console.log('[OrderTracking]', ...args)
 const debugWarn = (...args) => console.warn('[OrderTracking]', ...args)
 const debugError = (...args) => console.error('[OrderTracking]', ...args)
 
+const DeliveryTrackingMap = lazy(() => import("@food/components/user/DeliveryTrackingMap"))
+
+const DeliveryMapFallback = () => (
+  <div className="relative h-[300px] sm:h-[450px] bg-gradient-to-b from-gray-100 to-gray-200 dark:from-[#0a0a0a] dark:to-[#1a1a1a] flex items-center justify-center">
+    <div className="flex items-center gap-2 rounded-full bg-white/90 dark:bg-black/40 px-4 py-2 text-sm font-semibold text-gray-600 dark:text-gray-300 shadow-sm">
+      <Loader2 className="h-4 w-4 animate-spin" />
+      Loading live map
+    </div>
+  </div>
+)
 
 // Animated checkmark component
 const AnimatedCheckmark = ({ delay = 0 }) => (
@@ -184,18 +193,19 @@ const DeliveryMap = memo(({ orderId, order, isVisible, fallbackCustomerCoords = 
     <div
       className="relative w-full h-[300px] sm:h-[450px] overflow-visible"
     >
-      <DeliveryTrackingMap
-        orderId={orderId}
-        orderTrackingIds={orderTrackingIdsList}
-        restaurantCoords={effectiveRestaurantCoords}
-        customerCoords={effectiveCustomerCoords}
-
-        userLiveCoords={userLiveCoords}
-        userLocationAccuracy={userLocationAccuracy}
-        deliveryBoyData={deliveryBoyData}
-        order={order}
-        onEtaUpdate={onEtaUpdate}
-      />
+      <Suspense fallback={<DeliveryMapFallback />}>
+        <DeliveryTrackingMap
+          orderId={orderId}
+          orderTrackingIds={orderTrackingIdsList}
+          restaurantCoords={effectiveRestaurantCoords}
+          customerCoords={effectiveCustomerCoords}
+          userLiveCoords={userLiveCoords}
+          userLocationAccuracy={userLocationAccuracy}
+          deliveryBoyData={deliveryBoyData}
+          order={order}
+          onEtaUpdate={onEtaUpdate}
+        />
+      </Suspense>
     </div>
   );
 });

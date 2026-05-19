@@ -4,7 +4,9 @@ import { ValidationError } from '../../../../core/auth/errors.js';
 import mongoose from 'mongoose';
 import { FoodZone } from '../../admin/models/zone.model.js';
 import { FoodOffer } from '../../admin/models/offer.model.js';
+import { FoodItem } from '../../admin/models/food.model.js';
 import { FoodDiningRestaurant } from '../../dining/models/diningRestaurant.model.js';
+import { getFoodDisplayPrice, serializeFoodVariants } from '../../admin/services/foodVariant.service.js';
 
 const normalizeName = (value) =>
     String(value || '')
@@ -1397,6 +1399,112 @@ export const listApprovedRestaurants = async (query = {}) => {
     }));
 
     return { restaurants, total, page, limit };
+};
+
+export const listPublicDishes = async (query = {}) => {
+    const limit = Math.min(Math.max(parseInt(query.limit, 10) || 200, 1), 1000);
+    const filter = {
+        approvalStatus: 'approved',
+        isAvailable: { $ne: false }
+    };
+
+    const categoryId = String(query.categoryId || '').trim();
+    if (categoryId && mongoose.Types.ObjectId.isValid(categoryId)) {
+        filter.categoryId = new mongoose.Types.ObjectId(categoryId);
+    }
+
+    const category = String(query.category || '').trim();
+    if (category) {
+        const rx = { $regex: category.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' };
+        filter.$or = [
+            { categoryName: rx },
+            { category: rx },
+            { name: rx }
+        ];
+    }
+
+    const tag = String(query.tag || '').trim();
+    if (tag && ['Healthy', 'Normal'].includes(tag)) {
+        filter.tag = tag;
+    }
+
+    const restaurantFilter = { status: 'approved' };
+    const zoneIdRaw = String(query.zoneId || '').trim();
+    if (zoneIdRaw && mongoose.Types.ObjectId.isValid(zoneIdRaw)) {
+        restaurantFilter.$or = [{ zoneId: new mongoose.Types.ObjectId(zoneIdRaw) }];
+        const zoneDoc = await FoodZone.findOne({ _id: zoneIdRaw, isActive: true }).lean();
+        const polygon = zoneToPolygon(zoneDoc);
+        if (polygon) {
+            restaurantFilter.$or.push({ location: { $geoWithin: { $geometry: polygon } } });
+        }
+    }
+
+    const restaurants = await FoodRestaurant.find(restaurantFilter)
+        .select('_id restaurantName restaurantNameNormalized profileImage coverImages menuImages cuisines rating totalRatings estimatedDeliveryTime estimatedDeliveryTimeMinutes pureVegRestaurant location zoneId status')
+        .limit(2000)
+        .lean();
+    const restaurantMap = new Map((restaurants || []).map((restaurant) => [String(restaurant._id), restaurant]));
+    const restaurantIds = Array.from(restaurantMap.keys()).map((id) => new mongoose.Types.ObjectId(id));
+
+    if (!restaurantIds.length) {
+        return { dishes: [], total: 0, limit };
+    }
+
+    filter.restaurantId = { $in: restaurantIds };
+
+    const foods = await FoodItem.find(filter)
+        .sort({ createdAt: -1 })
+        .limit(limit)
+        .lean();
+
+    const dishes = (foods || []).map((food) => {
+        const restaurant = restaurantMap.get(String(food.restaurantId)) || {};
+        return {
+            id: String(food._id),
+            _id: food._id,
+            restaurantId: String(food.restaurantId || ''),
+            restaurantName: restaurant.restaurantName || '',
+            restaurantSlug: restaurant.restaurantNameNormalized || normalizeName(restaurant.restaurantName),
+            restaurant: {
+                _id: restaurant._id,
+                restaurantName: restaurant.restaurantName || '',
+                name: restaurant.restaurantName || '',
+                rating: normalizeRatingValue(restaurant.rating),
+                totalRatings: normalizeTotalRatingsValue(restaurant.totalRatings),
+                profileImage: restaurant.profileImage ? { url: restaurant.profileImage } : null,
+                coverImages: Array.isArray(restaurant.coverImages) ? restaurant.coverImages : [],
+                menuImages: Array.isArray(restaurant.menuImages) ? restaurant.menuImages : [],
+                cuisines: Array.isArray(restaurant.cuisines) ? restaurant.cuisines : [],
+                estimatedDeliveryTime: restaurant.estimatedDeliveryTime || '',
+                estimatedDeliveryTimeMinutes: restaurant.estimatedDeliveryTimeMinutes || null,
+                pureVegRestaurant: restaurant.pureVegRestaurant === true,
+                location: restaurant.location || null,
+                zoneId: restaurant.zoneId || null,
+                status: restaurant.status || 'approved'
+            },
+            categoryId: food.categoryId ? String(food.categoryId) : '',
+            categoryName: food.categoryName || food.category || '',
+            category: food.categoryName || food.category || '',
+            name: food.name || '',
+            description: food.description || '',
+            price: getFoodDisplayPrice(food),
+            priceOnOtherPlatforms: food.priceOnOtherPlatforms || null,
+            otherPlatformGst: food.otherPlatformGst ?? null,
+            variants: serializeFoodVariants(food.variants),
+            variations: serializeFoodVariants(food.variants),
+            image: food.image || '',
+            foodType: food.foodType || 'Non-Veg',
+            tag: food.tag || 'Normal',
+            nutrition: food.nutrition || null,
+            isAvailable: food.isAvailable !== false,
+            approvalStatus: food.approvalStatus || 'approved',
+            preparationTime: food.preparationTime || '',
+            createdAt: food.createdAt,
+            updatedAt: food.updatedAt
+        };
+    });
+
+    return { dishes, total: dishes.length, limit };
 };
 
 export const getApprovedRestaurantByIdOrSlug = async (idOrSlug) => {

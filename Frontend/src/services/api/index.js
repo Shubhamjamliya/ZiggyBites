@@ -1394,6 +1394,9 @@ export const restaurantAPI = {
   /** Public: list approved restaurants for user app */
   getRestaurants: (params = {}, config = {}) =>
     getPublicRestaurantsOnce(params, config),
+  /** Public: list approved dishes for user app */
+  getPublicDishes: (params = {}, config = {}) =>
+    publicGetOnce("/food/restaurant/dishes", { params, ...config }),
   /** Public: get single approved restaurant by id or slug */
   getRestaurantById: (id, config = {}) =>
     apiClient.get(`/food/restaurant/restaurants/${String(id)}`, { ...config }),

@@ -3010,6 +3010,7 @@ export async function getFoods(query) {
         image: f.image || '',
         foodType: f.foodType || 'Non-Veg',
         tag: f.tag || 'Normal',
+        nutrition: f.nutrition || null,
         isAvailable: f.isAvailable !== false,
         preparationTime: f.preparationTime || '',
         approvalStatus: f.approvalStatus || 'approved',
@@ -3109,6 +3110,25 @@ const getAdminFoodUpdatedPricing = (existing = {}, body = {}) => {
     return update;
 };
 
+const normalizeNutritionInput = (input = {}) => {
+    const source = input && typeof input === 'object' ? input : {};
+    const toNonNegativeNumberOrNull = (value) => {
+        if (value === '' || value === null || value === undefined) return null;
+        const parsed = Number(value);
+        return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+    };
+    const nutrition = {
+        calories: toNonNegativeNumberOrNull(source.calories ?? source.kcal),
+        protein: toNonNegativeNumberOrNull(source.protein),
+        fiber: toNonNegativeNumberOrNull(source.fiber ?? source.fibre),
+        carbohydrates: toNonNegativeNumberOrNull(source.carbohydrates ?? source.carbs),
+        fat: toNonNegativeNumberOrNull(source.fat),
+        weightPerServing: toNonNegativeNumberOrNull(source.weightPerServing),
+        allergens: typeof source.allergens === 'string' ? source.allergens.trim() : ''
+    };
+    return Object.values(nutrition).some((value) => value !== null && value !== '') ? nutrition : undefined;
+};
+
 export async function createFood(body) {
     const restaurantId = body.restaurantId;
     if (!restaurantId || !mongoose.Types.ObjectId.isValid(restaurantId)) {
@@ -3152,6 +3172,7 @@ export async function createFood(body) {
         image: typeof body.image === 'string' ? body.image.trim() : '',
         foodType,
         tag: body.tag === 'Healthy' ? 'Healthy' : 'Normal',
+        nutrition: normalizeNutritionInput(body.nutrition),
         isAvailable: body.isAvailable !== false,
         preparationTime: typeof body.preparationTime === 'string' ? body.preparationTime.trim() : '',
         approvalStatus: 'approved'
@@ -3188,6 +3209,7 @@ export async function updateFood(id, body) {
     if (body.image !== undefined) doc.image = String(body.image || '').trim();
     if (body.foodType !== undefined) doc.foodType = targetFoodType;
     if (body.tag !== undefined) doc.tag = body.tag === 'Healthy' ? 'Healthy' : 'Normal';
+    if (body.nutrition !== undefined) doc.nutrition = normalizeNutritionInput(body.nutrition);
     if (body.isAvailable !== undefined) doc.isAvailable = body.isAvailable !== false;
     if (body.preparationTime !== undefined) doc.preparationTime = String(body.preparationTime || '').trim();
     if (body.categoryId !== undefined || body.categoryName !== undefined || body.category !== undefined || body.foodType !== undefined) {

@@ -21,8 +21,14 @@ const createFoodForm = () => ({
   description: "",
   image: "",
   foodType: "Non-Veg",
+  tag: "Normal",
   isAvailable: true,
   preparationTime: "",
+  nutrition: {
+    calories: "",
+    protein: "",
+    fiber: "",
+  },
 })
 
 const createVariantDraft = (variant = {}) => ({
@@ -135,9 +141,11 @@ export default function FoodsList() {
               price: getFoodDisplayPrice(f),
               variants: getFoodVariants(f),
               foodType: f.foodType || "Non-Veg",
+              tag: f.tag === "Healthy" ? "Healthy" : "Normal",
               approvalStatus: f.approvalStatus || "approved",
               description: f.description || "",
               preparationTime: f.preparationTime || "",
+              nutrition: f.nutrition || null,
               isAvailable: f.isAvailable !== false,
               createdAt: f.createdAt,
               updatedAt: f.updatedAt,
@@ -276,8 +284,14 @@ export default function FoodsList() {
       description: String(food.description || ""),
       image: String(food.image || ""),
       foodType: String(food.foodType || "Non-Veg"),
+      tag: food.tag === "Healthy" ? "Healthy" : "Normal",
       isAvailable: food.isAvailable !== false,
       preparationTime: String(food.preparationTime || ""),
+      nutrition: {
+        calories: food.nutrition?.calories != null ? String(food.nutrition.calories) : "",
+        protein: food.nutrition?.protein != null ? String(food.nutrition.protein) : "",
+        fiber: food.nutrition?.fiber != null ? String(food.nutrition.fiber) : "",
+      },
     })
     setSelectedImageFile(null)
     setImagePreviewUrl(String(food.image || ""))
@@ -409,8 +423,14 @@ export default function FoodsList() {
         description: foodForm.description.trim(),
         image: imageUrl,
         foodType: foodForm.foodType === "Veg" ? "Veg" : "Non-Veg",
+        tag: foodForm.tag === "Healthy" ? "Healthy" : "Normal",
         isAvailable: foodForm.isAvailable !== false,
         preparationTime: String(foodForm.preparationTime || "").trim(),
+        nutrition: {
+          calories: foodForm.nutrition?.calories,
+          protein: foodForm.nutrition?.protein,
+          fiber: foodForm.nutrition?.fiber,
+        },
       }
 
       if (foodFormMode === "edit") {
@@ -539,6 +559,9 @@ export default function FoodsList() {
                 <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">
                   Category
                 </th>
+                <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">
+                  Tag
+                </th>
                 <th className="px-6 py-4 text-center text-[10px] font-bold text-slate-700 uppercase tracking-wider">
                   Action
                 </th>
@@ -547,7 +570,7 @@ export default function FoodsList() {
             <tbody className="bg-white divide-y divide-slate-100">
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-20 text-center">
+                  <td colSpan={7} className="px-6 py-20 text-center">
                     <div className="flex flex-col items-center justify-center">
                       <Loader2 className="w-8 h-8 animate-spin text-blue-600 mb-2" />
                       <p className="text-sm text-slate-500">Loading foods...</p>
@@ -556,7 +579,7 @@ export default function FoodsList() {
                 </tr>
               ) : filteredFoods.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-20 text-center">
+                  <td colSpan={7} className="px-6 py-20 text-center">
                     <div className="flex flex-col items-center justify-center">
                       <p className="text-lg font-semibold text-slate-700 mb-1">No Data Found</p>
                       <p className="text-sm text-slate-500">No food items match your search or restaurant filter</p>
@@ -600,6 +623,17 @@ export default function FoodsList() {
                       <div className="flex flex-col">
                         <span className="text-sm font-medium text-slate-800">{food.categoryName || "-"}</span>
                       </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span
+                        className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${
+                          food.tag === "Healthy"
+                            ? "bg-emerald-100 text-emerald-700"
+                            : "bg-slate-100 text-slate-700"
+                        }`}
+                      >
+                        {food.tag || "Normal"}
+                      </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-center">
                       <div className="flex items-center justify-center gap-2">
@@ -716,7 +750,11 @@ export default function FoodsList() {
                 <p><span className="font-semibold text-slate-700">Price:</span> <span className="text-slate-900">{selectedFood.variants?.length ? `Starting from \u20B9${selectedFood.price}` : `\u20B9${selectedFood.price}`}</span></p>
                 <p><span className="font-semibold text-slate-700">Category:</span> <span className="text-slate-900">{selectedFood.categoryName || "-"}</span></p>
                 <p><span className="font-semibold text-slate-700">Food Type:</span> <span className="text-slate-900">{selectedFood.foodType || "-"}</span></p>
+                <p><span className="font-semibold text-slate-700">Tag:</span> <span className="text-slate-900">{selectedFood.tag || "Normal"}</span></p>
                 <p><span className="font-semibold text-slate-700">Approval:</span> <span className="text-slate-900 capitalize">{selectedFood.approvalStatus || "-"}</span></p>
+                <p><span className="font-semibold text-slate-700">Calories:</span> <span className="text-slate-900">{selectedFood.nutrition?.calories ?? "-"}</span></p>
+                <p><span className="font-semibold text-slate-700">Protein:</span> <span className="text-slate-900">{selectedFood.nutrition?.protein != null ? `${selectedFood.nutrition.protein}g` : "-"}</span></p>
+                <p><span className="font-semibold text-slate-700">Fiber:</span> <span className="text-slate-900">{selectedFood.nutrition?.fiber != null ? `${selectedFood.nutrition.fiber}g` : "-"}</span></p>
               </div>
               {selectedFood.variants?.length ? (
                 <div className="rounded-lg border border-slate-200 bg-white p-4">
@@ -868,6 +906,18 @@ export default function FoodsList() {
                 </select>
               </div>
               <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Listing Tag</label>
+                <select
+                  value={foodForm.tag}
+                  onChange={(e) => setFoodForm((prev) => ({ ...prev, tag: e.target.value }))}
+                  className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm bg-white"
+                >
+                  <option value="Normal">Normal</option>
+                  <option value="Healthy">Healthy</option>
+                </select>
+                <p className="mt-1 text-xs text-slate-500">Healthy items appear under Healthy Foods. Normal items appear only under All Food Items.</p>
+              </div>
+              <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Upload Image</label>
                 <input
                   type="file"
@@ -913,6 +963,44 @@ export default function FoodsList() {
                   </div>
                 </div>
               ) : null}
+              <div className="md:col-span-2 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-sm font-semibold text-slate-900 mb-3">Nutrition values</p>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Calories (kcal)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={foodForm.nutrition?.calories || ""}
+                      onChange={(e) => setFoodForm((prev) => ({ ...prev, nutrition: { ...(prev.nutrition || {}), calories: e.target.value } }))}
+                      className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm bg-white"
+                      placeholder="520"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Protein (g)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={foodForm.nutrition?.protein || ""}
+                      onChange={(e) => setFoodForm((prev) => ({ ...prev, nutrition: { ...(prev.nutrition || {}), protein: e.target.value } }))}
+                      className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm bg-white"
+                      placeholder="24"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Fiber (g)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={foodForm.nutrition?.fiber || ""}
+                      onChange={(e) => setFoodForm((prev) => ({ ...prev, nutrition: { ...(prev.nutrition || {}), fiber: e.target.value } }))}
+                      className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm bg-white"
+                      placeholder="18"
+                    />
+                  </div>
+                </div>
+              </div>
               <div className="flex items-center gap-6 pt-7">
                 <label className="inline-flex items-center gap-2 text-sm text-slate-700">
                   <input

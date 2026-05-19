@@ -11,6 +11,7 @@ import {
     uploadRestaurantCoverImages,
     uploadRestaurantMenuImages,
     listPublicOffers,
+    listPublicDishes,
     getRestaurantComplaints
 } from '../services/restaurant.service.js';
 import {
@@ -34,6 +35,15 @@ export const listApprovedRestaurantsController = async (req, res, next) => {
     try {
         const data = await listApprovedRestaurants(req.query);
         return sendResponse(res, 200, 'Restaurants fetched successfully', data);
+    } catch (error) {
+        next(error);
+    }
+};
+
+export const listPublicDishesController = async (req, res, next) => {
+    try {
+        const data = await listPublicDishes(req.query || {});
+        return sendResponse(res, 200, 'Dishes fetched successfully', data);
     } catch (error) {
         next(error);
     }

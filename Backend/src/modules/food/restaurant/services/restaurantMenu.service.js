@@ -58,6 +58,7 @@ const buildMenuFromFoods = async (foods = []) => {
             image: food.image || '',
             foodType: food.foodType || 'Non-Veg',
             tag: food.tag || 'Normal',
+            nutrition: food.nutrition || null,
             isAvailable: food.isAvailable !== false,
             approvalStatus: food.approvalStatus || 'approved',
             rejectionReason: food.rejectionReason || '',

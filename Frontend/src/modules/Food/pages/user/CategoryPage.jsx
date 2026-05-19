@@ -22,6 +22,7 @@ import { useLocation } from "@food/hooks/useLocation"
 import { useZone } from "@food/hooks/useZone"
 import { useDelayedLoading } from "@food/hooks/useDelayedLoading"
 import { getMenuFromResponse } from "@food/utils/menuItems"
+import { getNutritionSummary } from "@food/utils/nutrition"
 
 // Filter options
 const filterOptions = [
@@ -147,8 +148,8 @@ export default function CategoryPage() {
 
     approvedFoodsInFlightRef.current = (async () => {
       try {
-        const response = await adminAPI.getFoods({ limit: 1000 })
-        const list = response?.data?.data?.foods || []
+        const response = await restaurantAPI.getPublicDishes({ limit: 1000 })
+        const list = response?.data?.data?.dishes || response?.data?.dishes || []
         const approvedFoods = Array.isArray(list)
           ? list.filter((food) =>
               String(food?.approvalStatus || "").toLowerCase() === "approved" &&
@@ -235,6 +236,7 @@ export default function CategoryPage() {
         categoryName: food?.categoryName || sectionName,
         category: food?.categoryName || sectionName,
         preparationTime: food?.preparationTime || "",
+        nutrition: food?.nutrition || null,
         approvalStatus: food?.approvalStatus || "approved",
       })
     })
@@ -278,9 +280,12 @@ export default function CategoryPage() {
         if (food?.isAvailable === false) return false
         if (String(food?.approvalStatus || "").toLowerCase() !== "approved") return false
 
+        const selectedId = String(categoryId || "").trim()
+        const foodCategoryId = String(food?.categoryId || "").trim()
         const categoryName = String(food?.categoryName || food?.category || "").toLowerCase()
         const foodName = String(food?.name || "").toLowerCase()
         return (
+          (selectedId && foodCategoryId && selectedId === foodCategoryId) ||
           matchesCategoryText(categoryName, keywords) ||
           matchesCategoryText(foodName, keywords)
         )
@@ -322,6 +327,7 @@ export default function CategoryPage() {
           categoryDishPrice: Number(food?.price || 0),
           categoryDishImage: fallbackImage,
           categoryDishFoodType: food?.foodType || "Non-Veg",
+          categoryDishNutrition: food?.nutrition || null,
         }
       })
   }
@@ -579,7 +585,8 @@ export default function CategoryPage() {
           const transformedCategories = [
             { id: 'all', name: "All", image: null, slug: 'all' },
             ...categoriesArray.map((cat) => ({
-              id: cat.slug || cat.id,
+              id: String(cat.id || cat._id || cat.slug || cat.name),
+              categoryId: String(cat.categoryId || cat.id || cat._id || ""),
               name: cat.name,
               image: cat.image || foodImages[0],
               slug: cat.slug || cat.name.toLowerCase().replace(/\s+/g, '-'),
@@ -592,12 +599,15 @@ export default function CategoryPage() {
           // Generate category keywords dynamically from category names
           const keywordsMap = {}
           categoriesArray.forEach((cat) => {
-            const categoryId = cat.slug || cat.id
+            const categoryId = cat.slug || cat.id || cat._id
             const categoryName = cat.name.toLowerCase()
 
             // Generate keywords from category name
             const words = categoryName.split(/[\s-]+/).filter(w => w.length > 0)
-            keywordsMap[categoryId] = [categoryName, ...words]
+            const keywords = [categoryName, ...words]
+            keywordsMap[String(categoryId || categoryName)] = keywords
+            if (cat._id || cat.id) keywordsMap[String(cat._id || cat.id)] = keywords
+            if (cat.slug) keywordsMap[String(cat.slug)] = keywords
           })
 
           setCategoryKeywords(keywordsMap)
@@ -746,6 +756,7 @@ export default function CategoryPage() {
               originalPrice: originalPrice,
               itemId: item._id || item.id || `${item.name}-${finalPrice}`,
               foodType: item.foodType, // Include foodType for vegMode filtering
+              nutrition: item.nutrition || null,
             })
           }
         }
@@ -783,6 +794,7 @@ export default function CategoryPage() {
                 originalPrice: originalPrice,
                 itemId: item?._id || item?.id || `${item?.name}-${finalPrice}`,
                 foodType: item?.foodType,
+                nutrition: item?.nutrition || null,
               })
             }
           }
@@ -1183,6 +1195,7 @@ export default function CategoryPage() {
                   categoryDishName: dishForCard.name,
                   categoryDishPrice: dishForCard.price,
                   categoryDishImage: dishForCard.image,
+                  categoryDishNutrition: dishForCard.nutrition || null,
                 })
               })
             }
@@ -1233,6 +1246,7 @@ export default function CategoryPage() {
                   categoryDishName: dishForCard.name,
                   categoryDishPrice: dishForCard.price,
                   categoryDishImage: dishForCard.image,
+                  categoryDishNutrition: dishForCard.nutrition || null,
                 })
               })
             }
@@ -1263,9 +1277,9 @@ export default function CategoryPage() {
     setSelectedCategory(categorySlug)
     // Update URL to reflect category change
     if (categorySlug === 'all') {
-      navigate('/user/category/all')
+      navigate('/food/user/category/all')
     } else {
-      navigate(`/user/category/${categorySlug}`)
+      navigate(`/food/user/category/${categorySlug}`)
     }
   }
 
@@ -1528,6 +1542,11 @@ export default function CategoryPage() {
                             {restaurant.name}
                           </p>
                         )}
+                        {isCategoryView && getNutritionSummary(restaurant.categoryDishNutrition) && (
+                          <p className="text-[10px] md:text-xs font-semibold text-gray-500 dark:text-gray-400 line-clamp-1">
+                            {getNutritionSummary(restaurant.categoryDishNutrition)}
+                          </p>
+                        )}
                         {restaurant.deliveryTime && (
                           <div className="flex items-center gap-1 text-gray-500 dark:text-gray-400 text-[10px] md:text-xs">
                             <Clock className="h-2.5 w-2.5 md:h-3 md:w-3" />
@@ -1653,6 +1672,11 @@ export default function CategoryPage() {
                             {isCategoryView && (
                               <p className="mt-1 text-sm md:text-base text-gray-500 dark:text-gray-400 line-clamp-1">
                                 {restaurant.name}
+                              </p>
+                            )}
+                            {isCategoryView && getNutritionSummary(restaurant.categoryDishNutrition) && (
+                              <p className="mt-1 text-xs md:text-sm font-semibold text-gray-500 dark:text-gray-400 line-clamp-1">
+                                {getNutritionSummary(restaurant.categoryDishNutrition)}
                               </p>
                             )}
                           </div>

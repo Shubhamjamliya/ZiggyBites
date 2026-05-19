@@ -384,6 +384,7 @@ export default function Home() {
 
   const isHandlingSwitchOff = useRef(false);
   const heroShellRef = useRef(null);
+  const mobileHeroShellRef = useRef(null);
   const stickyHeaderRef = useRef(null);
   const slugifyCategory = useCallback(
     (value) =>
@@ -576,7 +577,8 @@ export default function Home() {
 
   useEffect(() => {
     const handleScroll = () => {
-      const heroShell = heroShellRef.current;
+      const isMobile = window.innerWidth < 768;
+      const heroShell = isMobile ? (mobileHeroShellRef.current || heroShellRef.current) : (heroShellRef.current || mobileHeroShellRef.current);
       const stickyHeader = stickyHeaderRef.current;
 
       if (!heroShell) {
@@ -1369,6 +1371,7 @@ export default function Home() {
 
     const mapped = source.map((category, index) => ({
       id: category.id || category.slug || `home-category-${index}`,
+      categoryId: category.categoryId || category.id || category._id || "",
       name: category.name || category.label || "Meals",
       slug:
         category.slug ||
@@ -1408,21 +1411,38 @@ export default function Home() {
     let cancelled = false;
 
     const getItemsFromSection = (section, restaurant, category) => {
-      const selectedSlug = category?.slug || "";
-      const sectionName = String(section?.name || section?.categoryName || "").trim();
-      const sectionSlug = slugifyCategory(sectionName);
-      const sectionMatches = selectedSlug && sectionSlug === selectedSlug;
+      const selectedSlug = String(category?.slug || "").trim().toLowerCase();
+      const selectedCategoryId = String(category?.categoryId || category?.id || "").trim();
+      const categoryName = String(category?.name || "").trim().toLowerCase();
+
+      // Generate keywords from slug and name
+      const keywords = Array.from(new Set([
+        selectedSlug,
+        categoryName,
+        ...selectedSlug.split("-"),
+        ...categoryName.split(/\s+/),
+      ])).filter(Boolean).map(w => w.trim().toLowerCase());
+
+      const sectionCategoryId = String(section?.categoryId || section?.id || "").trim();
+      const sectionName = String(section?.name || section?.categoryName || "").trim().toLowerCase();
+      const sectionMatches =
+        (selectedCategoryId && sectionCategoryId && sectionCategoryId === selectedCategoryId) ||
+        keywords.some(kw => sectionName.includes(kw));
       const restaurantSlug = getRestaurantSlug(restaurant);
 
       const normalizeItem = (item, itemIndex, sourceName = sectionName) => {
         if (!item || typeof item !== "object") return null;
-        const itemCategory = String(item.categoryName || item.category || sourceName || "").trim();
-        const itemCategorySlug = slugifyCategory(itemCategory);
-        const itemName = String(item.name || item.itemName || item.title || "").trim();
+        const itemTag = String(item.tag || "").trim();
+        if (vegMode && itemTag !== "Healthy") return null;
+        const itemCategoryId = String(item.categoryId || "").trim();
+        const itemCategory = String(item.categoryName || item.category || sourceName || "").trim().toLowerCase();
+        const itemName = String(item.name || item.itemName || item.title || "").trim().toLowerCase();
+
+        const idMatches = selectedCategoryId && itemCategoryId && itemCategoryId === selectedCategoryId;
         const itemMatches =
+          idMatches ||
           sectionMatches ||
-          itemCategorySlug === selectedSlug ||
-          slugifyCategory(itemName).includes(selectedSlug);
+          keywords.some(kw => itemCategory.includes(kw) || itemName.includes(kw));
 
         if (!itemMatches) return null;
         if (!itemName && !itemCategory) return null;
@@ -1439,7 +1459,7 @@ export default function Home() {
           id: item._id || item.id || `${restaurantSlug}-${selectedSlug}-${itemIndex}`,
           itemId:
             item._id || item.id || `${restaurantSlug}-${selectedSlug}-${itemIndex}`,
-          name: itemName || itemCategory,
+          name: item.name || itemName || itemCategory,
           description:
             item.description ||
             item.shortDescription ||
@@ -1448,6 +1468,7 @@ export default function Home() {
           price: priceCandidate,
           image,
           foodType: item.foodType || "",
+          tag: itemTag || "Normal",
           restaurantName: restaurant.name,
           mongoRestaurantId:
             restaurant._id ||
@@ -1462,7 +1483,9 @@ export default function Home() {
             restaurant.restaurantId ||
             "",
           restaurantSlug,
-          categoryName: itemCategory || category?.name || "",
+          categoryId: itemCategoryId || selectedCategoryId || "",
+          categoryName: item.categoryName || item.category || category?.name || "",
+          nutrition: item.nutrition || null,
         };
       };
 
@@ -1490,23 +1513,23 @@ export default function Home() {
 
       setLoadingCategoryFoodItems(true);
       try {
-        const restaurants = filteredRestaurants.slice(0, 24);
+        const restaurants = restaurantsData.slice(0, 48);
         const nextItems = [];
 
         for (const restaurant of restaurants) {
           const restaurantId = restaurant.restaurantId || restaurant.id || restaurant.mongoId;
           if (!restaurantId) continue;
 
-          let menu = menuUnionCacheRef.current.get(String(restaurantId));
-          if (!menu) {
-            try {
-              const response = await restaurantAPI.getMenuByRestaurantId(restaurantId);
-              menu = response?.data?.data?.menu || response?.data?.menu || null;
-              menuUnionCacheRef.current.set(String(restaurantId), menu);
-            } catch {
-              menuUnionCacheRef.current.set(String(restaurantId), null);
-              menu = null;
-            }
+          let menu = null;
+          try {
+            const response = await restaurantAPI.getMenuByRestaurantId(restaurantId, {
+              noCache: true,
+              params: { _ts: Date.now() },
+            });
+            menu = response?.data?.data?.menu || response?.data?.menu || null;
+            menuUnionCacheRef.current.set(String(restaurantId), menu);
+          } catch {
+            menu = menuUnionCacheRef.current.get(String(restaurantId)) || null;
           }
 
           if (cancelled) return;
@@ -1515,6 +1538,60 @@ export default function Home() {
           sections.forEach((section) => {
             nextItems.push(...getItemsFromSection(section, restaurant, selectedHomeCategory));
           });
+        }
+
+        if (nextItems.length === 0) {
+          const fallbackParams = {
+            limit: 200,
+            category: selectedHomeCategory.name || selectedHomeCategory.slug,
+          };
+          if (selectedHomeCategory.categoryId) {
+            fallbackParams.categoryId = selectedHomeCategory.categoryId;
+          }
+          if (vegMode) {
+            fallbackParams.tag = "Healthy";
+          }
+
+          try {
+            const response = await restaurantAPI.getPublicDishes(fallbackParams, {
+              noCache: true,
+              params: { ...fallbackParams, _ts: Date.now() },
+            });
+            const dishes = response?.data?.data?.dishes || response?.data?.dishes || [];
+            (Array.isArray(dishes) ? dishes : []).forEach((dish, index) => {
+              const restaurant = dish.restaurant || {};
+              const restaurantName = dish.restaurantName || restaurant.restaurantName || restaurant.name || "";
+              const restaurantId = dish.restaurantId || restaurant._id || restaurant.id || "";
+              const restaurantSlug = dish.restaurantSlug || getRestaurantSlug({
+                name: restaurantName,
+                restaurantName,
+                _id: restaurantId,
+              }, index);
+              const priceCandidate = [dish.price, dish.finalPrice, dish.basePrice]
+                .map((value) => Number(value))
+                .find((value) => Number.isFinite(value) && value > 0);
+
+              nextItems.push({
+                id: dish._id || dish.id || `${restaurantSlug}-${selectedHomeCategory.slug}-${index}`,
+                itemId: dish._id || dish.id || `${restaurantSlug}-${selectedHomeCategory.slug}-${index}`,
+                name: dish.name || "",
+                description: dish.description || restaurantName || "",
+                price: priceCandidate,
+                image: normalizeImageUrl(dish.image) || restaurant.profileImage?.url || "",
+                foodType: dish.foodType || "",
+                tag: dish.tag || "Normal",
+                restaurantName,
+                mongoRestaurantId: restaurantId,
+                restaurantId,
+                restaurantSlug,
+                categoryId: dish.categoryId || selectedHomeCategory.categoryId || "",
+                categoryName: dish.categoryName || dish.category || selectedHomeCategory.name || "",
+                nutrition: dish.nutrition || null,
+              });
+            });
+          } catch {
+            // The menu scan above remains the primary source; public dishes are only a fallback.
+          }
         }
 
         const dedupedItems = nextItems.filter((item, index, list) => {
@@ -1534,11 +1611,12 @@ export default function Home() {
       cancelled = true;
     };
   }, [
-    filteredRestaurants,
+    restaurantsData,
     getRestaurantSlug,
     normalizeImageUrl,
     selectedHomeCategory,
     slugifyCategory,
+    vegMode,
   ]);
 
   useEffect(() => {
@@ -1547,6 +1625,8 @@ export default function Home() {
     const normalizeRecommendedItem = (item, restaurant, itemIndex, categoryName = "") => {
       const itemName = String(item?.name || item?.itemName || item?.title || "").trim();
       if (!itemName) return null;
+      const itemTag = String(item?.tag || "").trim();
+      if (vegMode && itemTag !== "Healthy") return null;
 
       const restaurantSlug = getRestaurantSlug(restaurant, itemIndex);
       const itemCategory = String(
@@ -1573,6 +1653,7 @@ export default function Home() {
         price: priceCandidate,
         image,
         foodType: item?.foodType || "",
+        tag: itemTag || "Normal",
         restaurantName: restaurant?.name || "",
         mongoRestaurantId:
           restaurant?._id ||
@@ -1588,6 +1669,7 @@ export default function Home() {
           "",
         restaurantSlug,
         categoryName: itemCategory,
+        nutrition: item?.nutrition || null,
       };
     };
 
@@ -1623,7 +1705,7 @@ export default function Home() {
     const fetchRecommendedItems = async () => {
       setLoadingRecommendedFoodItems(true);
       try {
-        const restaurants = filteredRestaurants.slice(0, 24);
+        const restaurants = restaurantsData.slice(0, 48);
         const nextItems = [];
 
         for (const restaurant of restaurants) {
@@ -1663,9 +1745,10 @@ export default function Home() {
       cancelled = true;
     };
   }, [
-    filteredRestaurants,
+    restaurantsData,
     getRestaurantSlug,
     normalizeImageUrl,
+    vegMode,
   ]);
 
   const hasMoreRestaurants =
@@ -1828,11 +1911,11 @@ export default function Home() {
     return () => clearInterval(interval);
   }, []); // placeholders is a constant, no need for dependency
 
-  // Memoized Hero Banner Component for better perf
-  const HeroBannerSection = useMemo(() => {
+  // Dynamic Hero Banner Component helper
+  const renderHeroBannerSection = (isMobile = false) => {
     if (showBannerSkeleton) {
       return (
-        <div className="px-4 py-2">
+        <div className="px-0 md:px-4 py-2">
           <HeroBannerSkeleton className="h-36 sm:h-44 lg:h-56 rounded-2xl" />
         </div>
       );
@@ -1841,9 +1924,9 @@ export default function Home() {
     if (heroBannerImages.length === 0) return null;
 
     return (
-      <div className="px-4 py-2">
+      <div className="px-0 md:px-4 py-2">
         <div
-          ref={heroShellRef}
+          ref={isMobile ? mobileHeroShellRef : heroShellRef}
           data-home-hero-shell="true"
           className="relative w-full overflow-hidden aspect-[1.7/1] sm:aspect-[1.9/1] lg:aspect-[2.1/1] min-h-[180px] sm:min-h-[220px] lg:min-h-[260px] rounded-2xl shadow-sm group cursor-pointer bg-white"
           onTouchStart={handleTouchStart}
@@ -1900,7 +1983,7 @@ export default function Home() {
               if (linkedRestaurants.length > 0) {
                 const firstRestaurant = linkedRestaurants[0];
                 const restaurantSlug = firstRestaurant.slug || firstRestaurant.restaurantId || firstRestaurant._id;
-                navigate(`/restaurants/${restaurantSlug}`);
+                navigate(`/food/user/restaurants/${restaurantSlug}`);
               }
             }}
             aria-label={`Open hero banner ${currentBannerIndex + 1}`}
@@ -1910,7 +1993,7 @@ export default function Home() {
         </div>
       </div>
     );
-  }, [heroBannerImages, currentBannerIndex, showBannerSkeleton, heroBannersData, navigate]);
+  };
 
   // Extracted CategoryRailSection
 
@@ -2051,7 +2134,7 @@ export default function Home() {
 />
 
           <main className="px-5">
-            <SubscriptionHero mobileFeaturedRestaurant={mobileFeaturedRestaurant} />
+            {renderHeroBannerSection(true)}
 
             <HomeCategories 
   loadingRealCategories={loadingRealCategories} 
@@ -2059,8 +2142,6 @@ export default function Home() {
   selectedHomeCategory={selectedHomeCategory} 
   setSelectedHomeCategory={setSelectedHomeCategory} 
 />
-
-            <OffersBanner />
 
             <RecommendedItems 
   selectedHomeCategory={selectedHomeCategory} 
@@ -2077,7 +2158,7 @@ export default function Home() {
           </main>
         </div>
 
-        <div className="hidden relative overflow-x-clip bg-white dark:bg-[#0a0a0a]">
+        <div className="hidden md:block relative overflow-x-clip bg-white dark:bg-[#0a0a0a]">
           {/* Brand Top Section (Dark) */}
           <div className="relative overflow-hidden bg-gradient-to-b from-[#3a142c] to-[#1a0a14] rounded-b-[2rem] shadow-lg mb-2">
             {festVideoActive && (
@@ -2145,7 +2226,7 @@ export default function Home() {
     />
 
                 {/* Admin Hero Banners Section - Now below categories */}
-                {HeroBannerSection}
+                {renderHeroBannerSection(false)}
 
                 {/* Filters Sticky Sidebar Header */}
                 <FilterBar 

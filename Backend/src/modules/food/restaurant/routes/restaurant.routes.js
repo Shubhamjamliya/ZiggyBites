@@ -3,6 +3,7 @@ import { upload } from '../../../../middleware/upload.js';
 import {
     registerRestaurantController,
     listApprovedRestaurantsController,
+    listPublicDishesController,
     getApprovedRestaurantController,
     listPublicOffersController,
     getCurrentRestaurantController,
@@ -84,6 +85,7 @@ router.post('/register', uploadFields, registerRestaurantController);
 
 // Public: approved restaurants list (for user app)
 router.get('/restaurants', cacheResponse(300, 'restaurants'), listApprovedRestaurantsController);
+router.get('/dishes', cacheResponse(300, 'public_dishes'), listPublicDishesController);
 router.get('/restaurants/:id', cacheResponse(600, 'restaurant_detail'), getApprovedRestaurantController);
 router.get('/restaurants/:id/menu', cacheResponse(600, 'restaurant_menu'), getPublicRestaurantMenuController);
 router.get('/restaurants/:id/outlet-timings', cacheResponse(600, 'restaurant_timings'), getOutletTimingsByRestaurantIdController);
@@ -181,10 +183,12 @@ router.get('/restaurants/:id/addons', cacheResponse(600, 'restaurant_addons'), g
 // Foods (restaurant creates/updates items -> stored in food_items collection)
 router.post('/foods', authMiddleware, requireRestaurant, async (req, res, next) => {
     await invalidateCache('restaurant_menu:*');
+    await invalidateCache('public_dishes:*');
     next();
 }, createRestaurantFoodController);
 router.patch('/foods/:id', authMiddleware, requireRestaurant, async (req, res, next) => {
     await invalidateCache('restaurant_menu:*');
+    await invalidateCache('public_dishes:*');
     next();
 }, updateRestaurantFoodController);
 

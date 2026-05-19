@@ -73,7 +73,7 @@ export default function AllCategoriesModal({
                       }}
                       whileTap={{ scale: 0.95 }}>
                       <Link
-                        to={`/user/category/${categoryData.slug || categoryData.name.toLowerCase().replace(/\s+/g, "-")}`}
+                        to={`/food/user/category/${categoryData.slug || categoryData.name.toLowerCase().replace(/\s+/g, "-")}`}
                         onClick={() => setShowAllCategoriesModal(false)}
                         className="block">
                         <div className="flex flex-col items-center gap-2 sm:gap-2.5 cursor-pointer w-full">

@@ -142,13 +142,13 @@ export default function ItemDetailsPage() {
       : (item.image ? [item.image] : [])
     setImages(existingImages)
 
-    setWeightPerServing("")
-    setCalorieCount("")
-    setProteinCount("")
-    setCarbohydrates("")
-    setFatCount("")
-    setFibreCount("")
-    setAllergens("")
+    setWeightPerServing(item.nutrition?.weightPerServing != null ? String(item.nutrition.weightPerServing) : "")
+    setCalorieCount(item.nutrition?.calories != null ? String(item.nutrition.calories) : "")
+    setProteinCount(item.nutrition?.protein != null ? String(item.nutrition.protein) : "")
+    setCarbohydrates(item.nutrition?.carbohydrates != null ? String(item.nutrition.carbohydrates) : "")
+    setFatCount(item.nutrition?.fat != null ? String(item.nutrition.fat) : "")
+    setFibreCount(item.nutrition?.fiber != null ? String(item.nutrition.fiber) : "")
+    setAllergens(item.nutrition?.allergens || "")
 
     if (item.nutrition && Array.isArray(item.nutrition)) {
       item.nutrition.forEach(nut => {
@@ -671,6 +671,15 @@ export default function ItemDetailsPage() {
           foodType: foodType,
           isAvailable: isInStock,
           preparationTime: preparationTime || "",
+          nutrition: {
+            calories: calorieCount,
+            protein: proteinCount,
+            fiber: fibreCount,
+            carbohydrates,
+            fat: fatCount,
+            weightPerServing,
+            allergens,
+          },
           categoryId: categoryId || undefined,
           categoryName,
         })
@@ -695,6 +704,15 @@ export default function ItemDetailsPage() {
           foodType: foodType,
           isAvailable: isInStock,
           preparationTime: preparationTime || "",
+          nutrition: {
+            calories: calorieCount,
+            protein: proteinCount,
+            fiber: fibreCount,
+            carbohydrates,
+            fat: fatCount,
+            weightPerServing,
+            allergens,
+          },
           categoryId: categoryId || undefined,
           categoryName,
         })
@@ -1207,6 +1225,44 @@ export default function ItemDetailsPage() {
                     <option value="35-45 mins">35-45 mins</option>
                   </select>
                   <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500 pointer-events-none" />
+                </div>
+              </div>
+              <div className="rounded-xl border border-gray-200 bg-white p-3 space-y-3">
+                <div>
+                  <p className="text-sm font-medium text-gray-900">Nutrition values</p>
+                  <p className="text-xs text-gray-500">Shown to customers below the dish description.</p>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">Calories (kcal)</label>
+                    <input
+                      type="text"
+                      value={calorieCount}
+                      onChange={(e) => setCalorieCount(e.target.value.replace(/[^0-9.]/g, ''))}
+                      placeholder="520"
+                      className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm text-gray-900 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">Protein (g)</label>
+                    <input
+                      type="text"
+                      value={proteinCount}
+                      onChange={(e) => setProteinCount(e.target.value.replace(/[^0-9.]/g, ''))}
+                      placeholder="24"
+                      className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm text-gray-900 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">Fiber (g)</label>
+                    <input
+                      type="text"
+                      value={fibreCount}
+                      onChange={(e) => setFibreCount(e.target.value.replace(/[^0-9.]/g, ''))}
+                      placeholder="18"
+                      className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm text-gray-900 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
                 </div>
               </div>
               {/* <div>

@@ -32,6 +32,25 @@ const normalizeFoodType = (v) => {
 
 const normalizeFoodTag = (v) => String(v || '').trim() === 'Healthy' ? 'Healthy' : 'Normal';
 
+const normalizeNutritionInput = (input = {}) => {
+    const source = input && typeof input === 'object' ? input : {};
+    const toNonNegativeNumberOrNull = (value) => {
+        if (value === '' || value === null || value === undefined) return null;
+        const parsed = Number(value);
+        return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+    };
+    const nutrition = {
+        calories: toNonNegativeNumberOrNull(source.calories ?? source.kcal),
+        protein: toNonNegativeNumberOrNull(source.protein),
+        fiber: toNonNegativeNumberOrNull(source.fiber ?? source.fibre),
+        carbohydrates: toNonNegativeNumberOrNull(source.carbohydrates ?? source.carbs),
+        fat: toNonNegativeNumberOrNull(source.fat),
+        weightPerServing: toNonNegativeNumberOrNull(source.weightPerServing),
+        allergens: toStr(source.allergens)
+    };
+    return Object.values(nutrition).some((value) => value !== null && value !== '') ? nutrition : undefined;
+};
+
 const getCreateFoodPricing = (body = {}) => {
     const variants = normalizeFoodVariantsInput(extractRawFoodVariants(body));
     if (variants.length > 0) {
@@ -209,6 +228,7 @@ export async function createRestaurantFood(restaurantId, body = {}) {
         image,
         foodType,
         tag: normalizeFoodTag(body.tag),
+        nutrition: normalizeNutritionInput(body.nutrition),
         isAvailable,
         preparationTime,
         approvalStatus: 'pending',
@@ -266,6 +286,7 @@ export async function updateRestaurantFood(restaurantId, foodId, body = {}) {
     const targetFoodType = body.foodType !== undefined ? normalizeFoodType(body.foodType) : normalizeFoodType(existing.foodType);
     if (body.foodType !== undefined) update.foodType = targetFoodType;
     if (body.tag !== undefined) update.tag = normalizeFoodTag(body.tag);
+    if (body.nutrition !== undefined) update.nutrition = normalizeNutritionInput(body.nutrition);
 
     if (
         body.categoryId !== undefined ||

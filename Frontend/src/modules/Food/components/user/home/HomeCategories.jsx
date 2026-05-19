@@ -14,10 +14,10 @@ export default function HomeCategories({
           Array.from({ length: 5 }).map((_, index) => (
             <div 
               key={`home-category-skeleton-${index}`} 
-              className="flex-shrink-0 w-24 h-28 rounded-xl border border-orange-100 bg-white shadow-sm flex flex-col items-center justify-between p-1.5 overflow-hidden"
+              className="flex-shrink-0 w-24 h-24 rounded-xl border border-orange-100 bg-white shadow-sm flex flex-col items-center justify-start gap-1.5 p-2 overflow-hidden"
             >
-              <div className="h-16 w-full animate-pulse bg-orange-100 rounded-lg" />
-              <div className="h-2 w-12 animate-pulse rounded bg-orange-100 my-1" />
+              <div className="h-13 w-20 animate-pulse bg-orange-100 rounded-full mx-auto" />
+              <div className="h-2 w-12 animate-pulse rounded bg-orange-100 my-0.5 mx-auto" />
             </div>
           ))
         ) : homeCategoryTiles.length === 0 ? (
@@ -32,15 +32,21 @@ export default function HomeCategories({
               <button
                 key={category.id}
                 type="button"
-                onClick={() =>
+                onClick={() => {
                   setSelectedHomeCategory((current) =>
                     current?.slug === category.slug ? null : category,
                   )
-                }
+                  window.setTimeout(() => {
+                    document.getElementById("home-recommended-items")?.scrollIntoView({
+                      behavior: "smooth",
+                      block: "start",
+                    })
+                  }, 80)
+                }}
                 className="flex-shrink-0 w-24 text-left focus:outline-none"
               >
                 <div
-                  className={`relative rounded-xl bg-white border shadow-sm flex flex-col items-center justify-between p-1.5 h-28 overflow-hidden transition-all duration-300 ${
+                  className={`relative rounded-xl bg-white border shadow-sm flex flex-col items-center justify-start gap-1.5 p-2 h-24 overflow-hidden transition-all duration-300 ${
                     isSelected
                       ? "border-[#e92823] ring-2 ring-[#e92823]/15 scale-[1.02]"
                       : "border-orange-100 hover:border-orange-200"
@@ -52,8 +58,8 @@ export default function HomeCategories({
                     </span>
                   )}
                   
-                  {/* Category Image Container - padded and rounded inside the card */}
-                  <div className="h-16 w-full overflow-hidden rounded-lg bg-orange-50/50 flex items-center justify-center relative">
+                  {/* Category Image Container - oval container */}
+                  <div className="h-13 w-20 overflow-hidden rounded-full bg-orange-50/50 flex items-center justify-center relative shrink-0">
                     {category.image ? (
                       <img 
                         src={category.image} 
@@ -68,7 +74,7 @@ export default function HomeCategories({
                   </div>
                   
                   <span
-                    className={`text-[9px] leading-tight font-extrabold text-center line-clamp-2 w-full px-1 mt-1 mb-0.5 ${
+                    className={`text-[9px] leading-tight font-extrabold text-center line-clamp-2 w-full px-1 ${
                       isSelected ? "text-[#e92823]" : "text-gray-700"
                     }`}
                   >

@@ -11,6 +11,7 @@ import * as orderController from '../../orders/controllers/order.controller.js';
 import { getAppCustomizationController, updateAppCustomizationController } from '../../shared/appCustomization.controller.js';
 import { getAdminPageController, upsertAdminPageController } from '../controllers/pageContent.controller.js';
 import { upload } from '../../../../middleware/upload.js';
+import { invalidateCache } from '../../../../middleware/cache.js';
 
 const router = express.Router();
 
@@ -26,6 +27,14 @@ const requireAdmin = (req, _res, next) => {
 };
 
 router.use(requireAdmin);
+
+const invalidatePublicFoodCaches = async (_req, _res, next) => {
+    await invalidateCache('restaurants:*');
+    await invalidateCache('restaurant_detail:*');
+    await invalidateCache('restaurant_menu:*');
+    await invalidateCache('public_dishes:*');
+    next();
+};
 
 // ----- Broadcast Notifications -----
 router.post('/notifications/broadcast', notificationBroadcastController.createBroadcastNotificationController);
@@ -101,13 +110,13 @@ router.patch('/addons/:id/reject', addonsApprovalController.rejectRestaurantAddo
 
 // ----- Foods -----
 router.get('/foods', adminController.getFoods);
-router.post('/foods', adminController.createFood);
-router.patch('/foods/:id', adminController.updateFood);
-router.delete('/foods/:id', adminController.deleteFood);
+router.post('/foods', invalidatePublicFoodCaches, adminController.createFood);
+router.patch('/foods/:id', invalidatePublicFoodCaches, adminController.updateFood);
+router.delete('/foods/:id', invalidatePublicFoodCaches, adminController.deleteFood);
 // Food approval queue (pending items created by restaurants)
 router.get('/foods/pending-approvals', foodApprovalController.getPendingFoodApprovals);
-router.patch('/foods/:id/approve', foodApprovalController.approveFoodItemController);
-router.patch('/foods/:id/reject', foodApprovalController.rejectFoodItemController);
+router.patch('/foods/:id/approve', invalidatePublicFoodCaches, foodApprovalController.approveFoodItemController);
+router.patch('/foods/:id/reject', invalidatePublicFoodCaches, foodApprovalController.rejectFoodItemController);
 
 // ----- Offers & Coupons -----
 router.get('/offers', adminController.getAllOffers);

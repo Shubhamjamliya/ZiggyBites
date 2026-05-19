@@ -57,6 +57,7 @@ import {
   getFoodVariants,
   hasFoodVariants,
 } from "@food/utils/foodVariants"
+import { getNutritionSummary } from "@food/utils/nutrition"
 import fssaiLogo from "@food/assets/fssai.png"
 import { RestaurantDetailSkeleton } from "@food/components/ui/loading-skeletons"
 
@@ -2525,6 +2526,11 @@ function RestaurantDetailsContent() {
                               {item.description && (
                                 <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 line-clamp-2">{item.description}</p>
                               )}
+                              {getNutritionSummary(item.nutrition) && (
+                                <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 mt-1">
+                                  {getNutritionSummary(item.nutrition)}
+                                </p>
+                              )}
 
                               {/* Mobile-only action buttons */}
                               <div className="flex gap-4 mt-3 md:hidden">
@@ -2745,6 +2751,11 @@ function RestaurantDetailsContent() {
                                         {/* Description - Show if available */}
                                         {item.description && (
                                           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 line-clamp-2">{item.description}</p>
+                                        )}
+                                        {getNutritionSummary(item.nutrition) && (
+                                          <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 mt-1">
+                                            {getNutritionSummary(item.nutrition)}
+                                          </p>
                                         )}
 
                                         {/* Mobile-only action buttons */}

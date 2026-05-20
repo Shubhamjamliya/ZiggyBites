@@ -15,6 +15,11 @@ export const DEFAULT_APP_CUSTOMIZATION_SETTINGS = {
     allowTomorrow: true,
     minLeadTimeMinutes: 60,
   },
+  timeManagement: {
+    dishChangeLeadHours: 24,
+    addressChangeLeadHours: 3,
+    devModeAllowAnytimeChanges: false,
+  },
 };
 
 function normalizeScheduledOrderSettings(settings = {}) {
@@ -33,6 +38,8 @@ function normalizeScheduledOrderSettings(settings = {}) {
 
 function normalizeAppCustomizationSettings(settings = {}) {
   const startFrom = String(settings.subscriptionOrders?.startFrom || settings.subscriptionStartFrom || 'tomorrow').toLowerCase();
+  const dishChangeLeadHours = Number(settings.timeManagement?.dishChangeLeadHours);
+  const addressChangeLeadHours = Number(settings.timeManagement?.addressChangeLeadHours);
   return {
     normalOrderFlowEnabled: settings.normalOrderFlowEnabled !== false,
     subscriptionFlowEnabled: settings.subscriptionFlowEnabled !== false,
@@ -42,6 +49,17 @@ function normalizeAppCustomizationSettings(settings = {}) {
       devModePlaceNow: Boolean(settings.subscriptionOrders?.devModePlaceNow),
     },
     scheduledOrders: normalizeScheduledOrderSettings(settings.scheduledOrders),
+    timeManagement: {
+      dishChangeLeadHours:
+        Number.isFinite(dishChangeLeadHours) && dishChangeLeadHours >= 1
+          ? Math.min(168, Math.round(dishChangeLeadHours))
+          : DEFAULT_APP_CUSTOMIZATION_SETTINGS.timeManagement.dishChangeLeadHours,
+      addressChangeLeadHours:
+        Number.isFinite(addressChangeLeadHours) && addressChangeLeadHours >= 1
+          ? Math.min(168, Math.round(addressChangeLeadHours))
+          : DEFAULT_APP_CUSTOMIZATION_SETTINGS.timeManagement.addressChangeLeadHours,
+      devModeAllowAnytimeChanges: Boolean(settings.timeManagement?.devModeAllowAnytimeChanges),
+    },
   };
 }
 
@@ -72,6 +90,10 @@ export async function updateAppCustomizationSettings(payload = {}, adminId) {
       ...current.scheduledOrders,
       ...(payload.scheduledOrders || {}),
     },
+    timeManagement: {
+      ...current.timeManagement,
+      ...(payload.timeManagement || {}),
+    },
   });
 
   if (
@@ -91,6 +113,7 @@ export async function updateAppCustomizationSettings(payload = {}, adminId) {
         diningFlowEnabled: next.diningFlowEnabled,
         subscriptionOrders: next.subscriptionOrders,
         scheduledOrders: next.scheduledOrders,
+        timeManagement: next.timeManagement,
         updatedBy: { role: "ADMIN", adminId, at: new Date() },
       },
     },

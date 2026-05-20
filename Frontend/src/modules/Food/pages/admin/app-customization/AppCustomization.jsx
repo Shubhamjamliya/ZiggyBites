@@ -18,6 +18,10 @@ const DEFAULT_SETTINGS = {
     allowTomorrow: true,
     minLeadTimeMinutes: 60,
   },
+  timeManagement: {
+    dishChangeLeadHours: 24,
+    addressChangeLeadHours: 3,
+  },
 }
 
 function ToggleSwitch({ checked, onChange, ariaLabel }) {
@@ -82,6 +86,10 @@ export default function AppCustomization() {
               ...DEFAULT_SETTINGS.scheduledOrders,
               ...(data.scheduledOrders || {}),
             },
+            timeManagement: {
+              ...DEFAULT_SETTINGS.timeManagement,
+              ...(data.timeManagement || {}),
+            },
           })
         }
       } catch (error) {
@@ -132,6 +140,10 @@ export default function AppCustomization() {
           scheduledOrders: {
             ...DEFAULT_SETTINGS.scheduledOrders,
             ...(saved.scheduledOrders || {}),
+          },
+          timeManagement: {
+            ...DEFAULT_SETTINGS.timeManagement,
+            ...(saved.timeManagement || {}),
           },
         })
       }

@@ -8,7 +8,11 @@ import * as feedbackExperienceController from '../controllers/feedbackExperience
 import * as notificationBroadcastController from '../controllers/notificationBroadcast.controller.js';
 import * as diningAdminController from '../../dining/controllers/diningAdmin.controller.js';
 import * as orderController from '../../orders/controllers/order.controller.js';
-import { getAppCustomizationController, updateAppCustomizationController } from '../../shared/appCustomization.controller.js';
+import {
+    getAppCustomizationController,
+    sendAppCustomizationTestNotificationController,
+    updateAppCustomizationController
+} from '../../shared/appCustomization.controller.js';
 import { getAdminPageController, upsertAdminPageController } from '../controllers/pageContent.controller.js';
 import { upload } from '../../../../middleware/upload.js';
 import { invalidateCache } from '../../../../middleware/cache.js';
@@ -139,6 +143,7 @@ router.put('/referral-settings', adminController.createOrUpdateReferralSettings)
 // ----- App Customization -----
 router.get('/app-customization', getAppCustomizationController);
 router.put('/app-customization', updateAppCustomizationController);
+router.post('/app-customization/test-notification', sendAppCustomizationTestNotificationController);
 
 // ----- Business Settings -----
 router.get('/business-settings/public', businessSettingsController.getBusinessSettings); // Public endpoint

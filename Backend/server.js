@@ -15,6 +15,7 @@ const SHUTDOWN_TIMEOUT_MS = 10000;
 let server = null;
 let expireOffersInterval = null;
 let fssaiExpiryInterval = null;
+let subscriptionReminderInterval = null;
 
 const gracefulShutdown = async (signal) => {
     logger.info(`${signal} received, starting graceful shutdown`);
@@ -29,6 +30,7 @@ const gracefulShutdown = async (signal) => {
             await closeBullMQConnection();
             if (expireOffersInterval) clearInterval(expireOffersInterval);
             if (fssaiExpiryInterval) clearInterval(fssaiExpiryInterval);
+            if (subscriptionReminderInterval) clearInterval(subscriptionReminderInterval);
             logger.info('Graceful shutdown complete');
             process.exit(0);
         } catch (err) {
@@ -105,6 +107,17 @@ const startServer = async () => {
         };
         runFssaiExpirySync();
         fssaiExpiryInterval = setInterval(runFssaiExpirySync, 60 * 60 * 1000);
+
+        const runSubscriptionReminders = async () => {
+            try {
+                const { syncSubscriptionScheduleReminders } = await import('./src/modules/food/subscription/services/subscription.service.js');
+                await syncSubscriptionScheduleReminders();
+            } catch (err) {
+                logger.error(`Subscription reminder sync error: ${err.message}`);
+            }
+        };
+        runSubscriptionReminders();
+        subscriptionReminderInterval = setInterval(runSubscriptionReminders, 10 * 60 * 1000);
 
         process.on('SIGINT', () => gracefulShutdown('SIGINT'));
         process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));

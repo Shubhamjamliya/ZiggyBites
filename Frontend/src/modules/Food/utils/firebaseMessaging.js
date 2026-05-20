@@ -745,6 +745,7 @@ export async function registerWebPushForCurrentModule(pathname = window.location
       try {
         pushDebugLog(PUSH_DEBUG_PREFIX, "Synchronizing FCM token with backend database", { moduleName, tokenPreview: `${token?.slice(0, 10)}...` });
         await saveTokenByModule(moduleName, token);
+        setSavedToken(moduleName, token);
         pushDebugLog(PUSH_DEBUG_PREFIX, "FCM token synchronized with backend successfully");
       } catch (e) {
         pushDebugWarn(PUSH_DEBUG_PREFIX, "Failed to synchronize FCM token to backend", { error: e?.message || e, stack: e?.stack });

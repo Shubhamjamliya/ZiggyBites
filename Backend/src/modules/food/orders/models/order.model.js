@@ -372,6 +372,11 @@ const settingsSchema = new mongoose.Schema(
             allowTomorrow: { type: Boolean, default: true },
             minLeadTimeMinutes: { type: Number, min: 0, default: 60 }
         },
+        timeManagement: {
+            dishChangeLeadHours: { type: Number, min: 1, max: 168, default: 24 },
+            addressChangeLeadHours: { type: Number, min: 1, max: 168, default: 3 },
+            devModeAllowAnytimeChanges: { type: Boolean, default: false }
+        },
         updatedBy: {
             role: { type: String },
             adminId: { type: mongoose.Schema.Types.ObjectId },

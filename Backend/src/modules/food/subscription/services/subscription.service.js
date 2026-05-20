@@ -9,9 +9,11 @@ import { FoodItem } from '../../admin/models/food.model.js';
 import { FoodUser } from '../../../../core/users/user.model.js';
 import {
   createRazorpaySubscription,
+  createRazorpayOrder,
   fetchRazorpaySubscription,
   getRazorpayKeyId,
   isRazorpayConfigured,
+  verifyPaymentSignature,
   verifySubscriptionSignature,
 } from '../../orders/helpers/razorpay.helper.js';
 import * as userWalletService from '../../user/services/userWallet.service.js';
@@ -29,6 +31,7 @@ import {
   assertSubscriptionFlowAllowed,
   getAppCustomizationSettings,
 } from '../../shared/appCustomization.service.js';
+import { FoodMealSlot } from '../../landing/models/mealSlot.model.js';
 
 function normalizeMeals(meals = []) {
   return meals
@@ -55,6 +58,70 @@ function buildSubscriptionDates(planDays, options = {}) {
   endDate.setDate(endDate.getDate() + Number(planDays || 0) - 1);
   endDate.setHours(23, 59, 59, 999);
   return { startDate, endDate };
+}
+
+function parseMealStartTime(timeLabel = '') {
+  const match = String(timeLabel || '').match(/(\d{1,2})(?::(\d{2}))?\s*(AM|PM)?/i);
+  if (!match) return null;
+  let hours = Number(match[1]);
+  const minutes = Number(match[2] || 0);
+  const meridiem = String(match[3] || '').toUpperCase();
+  if (meridiem === 'PM' && hours < 12) hours += 12;
+  if (meridiem === 'AM' && hours === 12) hours = 0;
+  if (!Number.isFinite(hours) || hours < 0 || hours > 23) return null;
+  return { hours, minutes: Number.isFinite(minutes) ? minutes : 0 };
+}
+
+function fallbackMealStartTime(mealName = '') {
+  const normalized = String(mealName || '').toLowerCase();
+  if (normalized.includes('breakfast')) return { hours: 7, minutes: 0 };
+  if (normalized.includes('lunch')) return { hours: 13, minutes: 0 };
+  if (normalized.includes('snack')) return { hours: 17, minutes: 0 };
+  if (normalized.includes('dinner')) return { hours: 20, minutes: 0 };
+  return { hours: 9, minutes: 0 };
+}
+
+async function getMealOrderAt(schedule) {
+  const serviceDate = new Date(schedule.serviceDate);
+  serviceDate.setHours(0, 0, 0, 0);
+  const mealName = String(schedule.mealName || '').trim().toLowerCase();
+  const slot = mealName
+    ? await FoodMealSlot.findOne({
+        title: { $regex: `^${mealName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, $options: 'i' },
+      }).lean()
+    : null;
+  const parsed = parseMealStartTime(slot?.timeLabel) || fallbackMealStartTime(schedule.mealName);
+  serviceDate.setHours(parsed.hours, parsed.minutes, 0, 0);
+  return serviceDate;
+}
+
+async function getDishChangeWindow(schedule, appSettings) {
+  const orderAt = await getMealOrderAt(schedule);
+  const leadHours = Math.max(
+    1,
+    Number(appSettings?.timeManagement?.dishChangeLeadHours || 24),
+  );
+  const deadline = new Date(orderAt.getTime() - leadHours * 60 * 60 * 1000);
+  return {
+    orderAt,
+    deadline,
+    leadHours,
+    canChange:
+      String(schedule.status) === 'scheduled' &&
+      (appSettings?.timeManagement?.devModeAllowAnytimeChanges === true || new Date() <= deadline),
+  };
+}
+
+function normalizeDishForClient(dish) {
+  if (!dish) return null;
+  return {
+    id: dish._id?.toString?.() || String(dish._id || ''),
+    name: dish.name || '',
+    price: Number(dish.price || 0),
+    image: dish.image || '',
+    foodType: dish.foodType || '',
+    categoryName: dish.categoryName || '',
+  };
 }
 
 function normalizeDeliveryAddress(address = {}, { customerName = '', customerPhone = '' } = {}) {
@@ -702,8 +769,8 @@ export async function sendSubscriptionMealToDelivery(scheduleId, restaurantId) {
       .select('restaurantName zoneId location isAcceptingOrders status')
       .lean(),
     FoodUser.findById(subscription.userId).select('name phone email').lean(),
-    mongoose.isValidObjectId(subscription.dishId)
-      ? FoodItem.findById(subscription.dishId).lean()
+    mongoose.isValidObjectId(schedule.dishId || subscription.dishId)
+      ? FoodItem.findById(schedule.dishId || subscription.dishId).lean()
       : null,
   ]);
 
@@ -759,8 +826,8 @@ export async function sendSubscriptionMealToDelivery(scheduleId, restaurantId) {
     zoneId: restaurant.zoneId || undefined,
     items: [
       {
-        itemId: String(subscription.dishId),
-        name: subscription.dishName,
+        itemId: String(schedule.dishId || subscription.dishId),
+        name: schedule.dishName || subscription.dishName,
         price: itemPrice || creditPerOrder,
         quantity: 1,
         isVeg: String(foodItem?.foodType || '').toLowerCase() === 'veg',
@@ -836,7 +903,7 @@ export async function sendSubscriptionMealToDelivery(scheduleId, restaurantId) {
     [{ ownerType: 'USER', ownerId: subscription.userId }],
     {
       title: 'Subscription meal is being prepared',
-      body: `${subscription.dishName} is being sent for delivery.`,
+      body: `${schedule.dishName || subscription.dishName} is being sent for delivery.`,
       data: {
         type: 'subscription_meal_sent',
         orderId: String(order._id),
@@ -857,6 +924,392 @@ export async function sendSubscriptionMealToDelivery(scheduleId, restaurantId) {
     schedule,
     order: normalizeOrderForClient(refreshed || order),
     alreadySent: false,
+  };
+}
+
+export async function listUpcomingSchedulesForUser(userId) {
+  if (!mongoose.isValidObjectId(userId)) {
+    throw new ValidationError('User not found');
+  }
+
+  const appSettings = await getAppCustomizationSettings();
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 14);
+  end.setHours(23, 59, 59, 999);
+
+  const schedules = await FoodSubscriptionSchedule.find({
+    userId: new mongoose.Types.ObjectId(userId),
+    status: 'scheduled',
+    serviceDate: { $gte: start, $lte: end },
+  })
+    .populate('subscriptionId', 'planTitle creditPerOrder deliveryAddress restaurantName')
+    .sort({ serviceDate: 1, mealName: 1 })
+    .lean();
+
+  const restaurantIds = [
+    ...new Set(schedules.map((schedule) => String(schedule.restaurantId || '')).filter(Boolean)),
+  ];
+  const dishes = restaurantIds.length
+    ? await FoodItem.find({
+        restaurantId: { $in: restaurantIds.map((id) => new mongoose.Types.ObjectId(id)) },
+        approvalStatus: 'approved',
+        isAvailable: true,
+      })
+        .select('restaurantId name price image foodType categoryName')
+        .sort({ name: 1 })
+        .lean()
+    : [];
+
+  const dishesByRestaurant = dishes.reduce((acc, dish) => {
+    const key = String(dish.restaurantId);
+    if (!acc[key]) acc[key] = [];
+    acc[key].push(normalizeDishForClient(dish));
+    return acc;
+  }, {});
+
+  const rows = await Promise.all(
+    schedules.map(async (schedule) => {
+      const window = await getDishChangeWindow(schedule, appSettings);
+      return {
+        ...schedule,
+        scheduleId: schedule._id?.toString?.() || String(schedule._id),
+        subscription: schedule.subscriptionId || null,
+        orderAt: window.orderAt,
+        dishChangeDeadline: window.deadline,
+        canChangeDish: window.canChange,
+        dishChangeLeadHours: window.leadHours,
+        availableDishes: dishesByRestaurant[String(schedule.restaurantId)] || [],
+      };
+    }),
+  );
+
+  return {
+    schedules: rows,
+    timeManagement: appSettings.timeManagement,
+  };
+}
+
+async function getScheduleForDishChange(scheduleId, userId) {
+  if (!mongoose.isValidObjectId(scheduleId)) {
+    throw new ValidationError('Subscription schedule id is invalid');
+  }
+  const schedule = await FoodSubscriptionSchedule.findOne({
+    _id: new mongoose.Types.ObjectId(scheduleId),
+    userId: new mongoose.Types.ObjectId(userId),
+  });
+  if (!schedule) throw new NotFoundError('Subscription schedule not found');
+  if (schedule.status !== 'scheduled') {
+    throw new ValidationError('This subscription meal can no longer be changed');
+  }
+  const appSettings = await getAppCustomizationSettings();
+  const window = await getDishChangeWindow(schedule, appSettings);
+  if (!window.canChange) {
+    throw new ValidationError(
+      `Dish changes close ${window.leadHours} hours before the subscription meal`,
+    );
+  }
+  return { schedule, window };
+}
+
+export async function changeSubscriptionScheduleDish(userId, scheduleId, dto = {}) {
+  if (!mongoose.isValidObjectId(userId)) throw new ValidationError('User not found');
+  const { schedule, window } = await getScheduleForDishChange(scheduleId, userId);
+  const newDishId = String(dto.dishId || '').trim();
+  if (!mongoose.isValidObjectId(newDishId)) throw new ValidationError('Dish id is required');
+
+  const [subscription, oldDish, newDish] = await Promise.all([
+    FoodSubscription.findOne({
+      _id: schedule.subscriptionId,
+      userId: new mongoose.Types.ObjectId(userId),
+      status: 'active',
+      paymentStatus: 'paid',
+    }),
+    mongoose.isValidObjectId(schedule.dishId) ? FoodItem.findById(schedule.dishId).lean() : null,
+    FoodItem.findOne({
+      _id: new mongoose.Types.ObjectId(newDishId),
+      restaurantId: schedule.restaurantId,
+      approvalStatus: 'approved',
+      isAvailable: true,
+    }).lean(),
+  ]);
+
+  if (!subscription) throw new ValidationError('Subscription is not active');
+  if (!newDish) throw new ValidationError('Selected dish is not available for this restaurant');
+  if (String(schedule.dishId) === String(newDish._id)) {
+    return {
+      status: 'unchanged',
+      schedule,
+      adjustment: { priceDifference: 0, payableAmount: 0, walletCreditAmount: 0 },
+    };
+  }
+
+  const oldPrice = Math.max(
+    0,
+    Number(oldDish?.price || schedule.dishChange?.newPrice || subscription.creditPerOrder || 0),
+  );
+  const newPrice = Math.max(0, Number(newDish.price || 0));
+  const priceDifference = Number((newPrice - oldPrice).toFixed(2));
+  const baseChange = {
+    originalDishId: schedule.dishChange?.originalDishId || schedule.dishId,
+    originalDishName: schedule.dishChange?.originalDishName || schedule.dishName,
+    oldPrice,
+    newPrice,
+    priceDifference,
+    changedAt: new Date(),
+  };
+
+  if (priceDifference > 0) {
+    const amountPaise = Math.round(priceDifference * 100);
+    const receipt = `sub_dish_${String(schedule._id).slice(-8)}_${Date.now()}`;
+    const order = isRazorpayConfigured()
+      ? await createRazorpayOrder(amountPaise, subscription.currency || 'INR', receipt)
+      : { id: `order_dev_${Date.now()}`, amount: amountPaise, currency: subscription.currency || 'INR' };
+
+    schedule.pendingDishChange = {
+      dishId: String(newDish._id),
+      dishName: newDish.name,
+      oldPrice,
+      newPrice,
+      priceDifference,
+      razorpayOrderId: String(order.id),
+      createdAt: new Date(),
+    };
+    await schedule.save();
+
+    return {
+      status: 'payment_required',
+      schedule,
+      orderAt: window.orderAt,
+      dishChangeDeadline: window.deadline,
+      adjustment: {
+        priceDifference,
+        payableAmount: priceDifference,
+        walletCreditAmount: 0,
+      },
+      razorpay: {
+        key: getRazorpayKeyId() || 'rzp_test_dummy',
+        orderId: String(order.id),
+        amount: Number(order.amount) || amountPaise,
+        currency: order.currency || subscription.currency || 'INR',
+      },
+    };
+  }
+
+  const walletCreditAmount = Math.abs(priceDifference);
+  schedule.dishId = String(newDish._id);
+  schedule.dishName = newDish.name;
+  schedule.dishChange = {
+    ...baseChange,
+    walletCreditAmount,
+    paidAmount: 0,
+  };
+  schedule.pendingDishChange = undefined;
+  await schedule.save();
+
+  if (walletCreditAmount > 0) {
+    await userWalletService.refundWalletBalance(
+      userId,
+      walletCreditAmount,
+      'Subscription dish change price difference',
+      {
+        source: 'subscription_dish_change',
+        subscriptionId: subscription._id,
+        scheduleId: schedule._id,
+        oldDishId: baseChange.originalDishId,
+        newDishId: newDish._id,
+      },
+    );
+  }
+
+  return {
+    status: walletCreditAmount > 0 ? 'wallet_credited' : 'changed',
+    schedule,
+    adjustment: {
+      priceDifference,
+      payableAmount: 0,
+      walletCreditAmount,
+    },
+  };
+}
+
+export async function verifySubscriptionDishChangePayment(userId, scheduleId, dto = {}) {
+  if (!mongoose.isValidObjectId(userId)) throw new ValidationError('User not found');
+  if (!mongoose.isValidObjectId(scheduleId)) {
+    throw new ValidationError('Subscription schedule id is invalid');
+  }
+  const schedule = await FoodSubscriptionSchedule.findOne({
+    _id: new mongoose.Types.ObjectId(scheduleId),
+    userId: new mongoose.Types.ObjectId(userId),
+    status: 'scheduled',
+  });
+  if (!schedule) throw new NotFoundError('Subscription schedule not found');
+  const pending = schedule.pendingDishChange || {};
+  if (!pending.razorpayOrderId || !pending.dishId) {
+    throw new ValidationError('No pending dish change payment found');
+  }
+
+  const orderId = String(dto.razorpayOrderId || '').trim();
+  const paymentId = String(dto.razorpayPaymentId || '').trim();
+  const signature = String(dto.razorpaySignature || '').trim();
+  if (orderId !== String(pending.razorpayOrderId)) {
+    throw new ValidationError('Razorpay order mismatch');
+  }
+  if (!paymentId) throw new ValidationError('razorpayPaymentId is required');
+  if (!signature) throw new ValidationError('razorpaySignature is required');
+
+  const ok = isRazorpayConfigured() ? verifyPaymentSignature(orderId, paymentId, signature) : true;
+  if (!ok) throw new ValidationError('Payment verification failed');
+
+  const originalDishId = schedule.dishChange?.originalDishId || schedule.dishId;
+  const originalDishName = schedule.dishChange?.originalDishName || schedule.dishName;
+  schedule.dishId = pending.dishId;
+  schedule.dishName = pending.dishName;
+  schedule.dishChange = {
+    originalDishId,
+    originalDishName,
+    oldPrice: pending.oldPrice,
+    newPrice: pending.newPrice,
+    priceDifference: pending.priceDifference,
+    walletCreditAmount: 0,
+    paidAmount: pending.priceDifference,
+    changedAt: new Date(),
+    razorpayOrderId: orderId,
+    razorpayPaymentId: paymentId,
+  };
+  schedule.pendingDishChange = undefined;
+  await schedule.save();
+
+  return {
+    status: 'changed',
+    schedule,
+    adjustment: {
+      priceDifference: pending.priceDifference,
+      payableAmount: pending.priceDifference,
+      walletCreditAmount: 0,
+    },
+  };
+}
+
+export async function syncSubscriptionScheduleReminders() {
+  const appSettings = await getAppCustomizationSettings();
+  const now = new Date();
+  const maxLeadHours = Math.max(
+    Number(appSettings.timeManagement?.dishChangeLeadHours || 24),
+    Number(appSettings.timeManagement?.addressChangeLeadHours || 3),
+  );
+  const rangeEnd = new Date(now.getTime() + (maxLeadHours + 2) * 60 * 60 * 1000);
+  const schedules = await FoodSubscriptionSchedule.find({
+    status: 'scheduled',
+    serviceDate: { $gte: new Date(now.getTime() - 24 * 60 * 60 * 1000), $lte: rangeEnd },
+    $or: [
+      { dishChangeReminderSentAt: null },
+      { dishChangeReminderSentAt: { $exists: false } },
+      { addressChangeReminderSentAt: null },
+      { addressChangeReminderSentAt: { $exists: false } },
+    ],
+  }).limit(200);
+
+  for (const schedule of schedules) {
+    const orderAt = await getMealOrderAt(schedule);
+    const dishNotifyAt = new Date(
+      orderAt.getTime() - Number(appSettings.timeManagement?.dishChangeLeadHours || 24) * 60 * 60 * 1000,
+    );
+    const addressNotifyAt = new Date(
+      orderAt.getTime() - Number(appSettings.timeManagement?.addressChangeLeadHours || 3) * 60 * 60 * 1000,
+    );
+    const updates = {};
+
+    if (!schedule.dishChangeReminderSentAt && now >= dishNotifyAt && now < orderAt) {
+      await notifyOwnersSafely(
+        [{ ownerType: 'USER', ownerId: schedule.userId }],
+        {
+          title: 'Change your subscription dish',
+          body: `You can change ${schedule.mealName || 'your meal'} before the cut-off time.`,
+          data: {
+            type: 'subscription_dish_change_reminder',
+            scheduleId: String(schedule._id),
+            subscriptionId: String(schedule.subscriptionId),
+          },
+        },
+      );
+      updates.dishChangeReminderSentAt = now;
+    }
+
+    if (!schedule.addressChangeReminderSentAt && now >= addressNotifyAt && now < orderAt) {
+      await notifyOwnersSafely(
+        [{ ownerType: 'USER', ownerId: schedule.userId }],
+        {
+          title: 'Confirm your delivery address',
+          body: `Please update your address if needed for ${schedule.mealName || 'your subscription meal'}.`,
+          data: {
+            type: 'subscription_address_change_reminder',
+            scheduleId: String(schedule._id),
+            subscriptionId: String(schedule.subscriptionId),
+          },
+        },
+      );
+      updates.addressChangeReminderSentAt = now;
+    }
+
+    if (Object.keys(updates).length) {
+      await FoodSubscriptionSchedule.updateOne({ _id: schedule._id }, { $set: updates });
+    }
+  }
+
+  return { checked: schedules.length };
+}
+
+export async function sendTestSubscriptionReminder(type = 'dish') {
+  const reminderType = String(type || 'dish').toLowerCase() === 'address' ? 'address' : 'dish';
+  const now = new Date();
+  const rangeEnd = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
+  const schedule = await FoodSubscriptionSchedule.findOne({
+    status: 'scheduled',
+    serviceDate: { $gte: new Date(now.getTime() - 24 * 60 * 60 * 1000), $lte: rangeEnd },
+  }).sort({ serviceDate: 1, mealName: 1 });
+
+  if (!schedule) {
+    throw new ValidationError('No upcoming scheduled subscription meal found for test notification');
+  }
+
+  const payload =
+    reminderType === 'address'
+      ? {
+          title: 'Test: Confirm your delivery address',
+          body: `Test reminder: update your address if needed for ${schedule.mealName || 'your subscription meal'}.`,
+          data: {
+            type: 'subscription_address_change_reminder_test',
+            scheduleId: String(schedule._id),
+            subscriptionId: String(schedule.subscriptionId),
+          },
+        }
+      : {
+          title: 'Test: Change your subscription dish',
+          body: `Test reminder: you can change ${schedule.mealName || 'your meal'} before the cut-off time.`,
+          data: {
+            type: 'subscription_dish_change_reminder_test',
+            scheduleId: String(schedule._id),
+            subscriptionId: String(schedule.subscriptionId),
+          },
+        };
+
+  const resultsRaw = await notifyOwnersSafely([{ ownerType: 'USER', ownerId: schedule.userId }], payload);
+  const results = Array.isArray(resultsRaw)
+    ? resultsRaw
+    : [resultsRaw].filter(Boolean);
+  const successCount = results.reduce((sum, item) => sum + Number(item?.successCount || 0), 0);
+  const failureCount = results.reduce((sum, item) => sum + Number(item?.failureCount || 0), 0);
+
+  return {
+    sent: successCount > 0,
+    type: reminderType,
+    scheduleId: String(schedule._id),
+    userId: String(schedule.userId),
+    successCount,
+    failureCount,
+    results,
   };
 }
 

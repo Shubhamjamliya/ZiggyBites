@@ -4,6 +4,7 @@ import {
   getAppCustomizationSettings,
   updateAppCustomizationSettings,
 } from './appCustomization.service.js';
+import { sendTestSubscriptionReminder } from '../subscription/services/subscription.service.js';
 
 function validateAppCustomizationPayload(body = {}) {
   const payload = {};
@@ -57,6 +58,26 @@ function validateAppCustomizationPayload(body = {}) {
     }
   }
 
+  if (body.timeManagement !== undefined) {
+    payload.timeManagement = {};
+    if (body.timeManagement?.dishChangeLeadHours !== undefined) {
+      payload.timeManagement.dishChangeLeadHours = Number(body.timeManagement.dishChangeLeadHours);
+    }
+    if (body.timeManagement?.addressChangeLeadHours !== undefined) {
+      payload.timeManagement.addressChangeLeadHours = Number(body.timeManagement.addressChangeLeadHours);
+    }
+    if (body.timeManagement?.devModeAllowAnytimeChanges !== undefined) {
+      payload.timeManagement.devModeAllowAnytimeChanges = Boolean(body.timeManagement.devModeAllowAnytimeChanges);
+    }
+
+    for (const [field, value] of Object.entries(payload.timeManagement)) {
+      if (typeof value === 'boolean') continue;
+      if (!Number.isInteger(value) || value < 1 || value > 168) {
+        throw new ValidationError(`${field} must be between 1 and 168 hours`);
+      }
+    }
+  }
+
   return payload;
 }
 
@@ -75,6 +96,15 @@ export async function updateAppCustomizationController(req, res, next) {
     const payload = validateAppCustomizationPayload(req.body || {});
     const settings = await updateAppCustomizationSettings(payload, adminId);
     return sendResponse(res, 200, 'App customization settings updated', { settings });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function sendAppCustomizationTestNotificationController(req, res, next) {
+  try {
+    const result = await sendTestSubscriptionReminder(req.body?.type);
+    return sendResponse(res, 200, 'Test notification sent', result);
   } catch (err) {
     next(err);
   }

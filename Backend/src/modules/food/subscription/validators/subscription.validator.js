@@ -38,6 +38,16 @@ const verifySubscriptionPaymentSchema = z.object({
   razorpaySignature: z.string().min(1, 'Razorpay signature required'),
 });
 
+const changeSubscriptionDishSchema = z.object({
+  dishId: z.string().min(1, 'Dish id required'),
+});
+
+const verifyDishChangePaymentSchema = z.object({
+  razorpayOrderId: z.string().min(1, 'Razorpay order id required'),
+  razorpayPaymentId: z.string().min(1, 'Razorpay payment id required'),
+  razorpaySignature: z.string().min(1, 'Razorpay signature required'),
+});
+
 function toValidationError(result) {
   const first = result.error?.issues?.[0];
   const path = first?.path?.length ? first.path.join('.') : '';
@@ -55,6 +65,18 @@ export function validateCreateSubscriptionOrderDto(body) {
 
 export function validateVerifySubscriptionPaymentDto(body) {
   const result = verifySubscriptionPaymentSchema.safeParse(body || {});
+  if (!result.success) toValidationError(result);
+  return result.data;
+}
+
+export function validateChangeSubscriptionDishDto(body) {
+  const result = changeSubscriptionDishSchema.safeParse(body || {});
+  if (!result.success) toValidationError(result);
+  return result.data;
+}
+
+export function validateVerifyDishChangePaymentDto(body) {
+  const result = verifyDishChangePaymentSchema.safeParse(body || {});
   if (!result.success) toValidationError(result);
   return result.data;
 }

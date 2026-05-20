@@ -400,6 +400,7 @@ export default function AdminSidebar({ isOpen = false, onClose, onCollapseChange
       Object.keys(prev).forEach((key) => {
         next[key] = key === sectionKey
       })
+      next[sectionKey] = true
       return next
     })
   }

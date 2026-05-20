@@ -1,6 +1,8 @@
 import { sendResponse } from '../../../../utils/response.js';
 import {
+  validateChangeSubscriptionDishDto,
   validateCreateSubscriptionOrderDto,
+  validateVerifyDishChangePaymentDto,
   validateVerifySubscriptionPaymentDto,
 } from '../validators/subscription.validator.js';
 import * as subscriptionService from '../services/subscription.service.js';
@@ -32,6 +34,46 @@ export async function listMySubscriptionsController(req, res, next) {
     const userId = req.user?.userId;
     const result = await subscriptionService.listSubscriptionsForUser(userId);
     return sendResponse(res, 200, 'Subscriptions retrieved', result);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function listUpcomingSubscriptionSchedulesController(req, res, next) {
+  try {
+    const userId = req.user?.userId;
+    const result = await subscriptionService.listUpcomingSchedulesForUser(userId);
+    return sendResponse(res, 200, 'Upcoming subscription meals retrieved', result);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function changeSubscriptionDishController(req, res, next) {
+  try {
+    const userId = req.user?.userId;
+    const dto = validateChangeSubscriptionDishDto(req.body);
+    const result = await subscriptionService.changeSubscriptionScheduleDish(
+      userId,
+      req.params.scheduleId,
+      dto,
+    );
+    return sendResponse(res, 200, 'Subscription dish change processed', result);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function verifyDishChangePaymentController(req, res, next) {
+  try {
+    const userId = req.user?.userId;
+    const dto = validateVerifyDishChangePaymentDto(req.body);
+    const result = await subscriptionService.verifySubscriptionDishChangePayment(
+      userId,
+      req.params.scheduleId,
+      dto,
+    );
+    return sendResponse(res, 200, 'Subscription dish change payment verified', result);
   } catch (err) {
     next(err);
   }

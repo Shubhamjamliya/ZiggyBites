@@ -44,22 +44,45 @@ const toBase64Url = (input) =>
 
 const normalizePrivateKey = (key) => String(key || '').replace(/\\n/g, '\n').trim();
 
+const isUsableServiceAccount = (account) => {
+    const privateKey = normalizePrivateKey(account?.private_key);
+    return Boolean(
+        account &&
+        account.client_email &&
+        account.project_id &&
+        privateKey.includes('-----BEGIN PRIVATE KEY-----') &&
+        privateKey.includes('-----END PRIVATE KEY-----') &&
+        privateKey.split('\n').length > 3
+    );
+};
+
 const getServiceAccountFromEnv = () => {
     if (cachedServiceAccount) return cachedServiceAccount;
-
-    const rawJson = sanitizeString(config.firebaseServiceAccount || process.env.FIREBASE_SERVICE_ACCOUNT);
-    if (rawJson) {
-        cachedServiceAccount = JSON.parse(rawJson);
-        return cachedServiceAccount;
-    }
 
     const pathValue = sanitizeString(config.firebaseServiceAccountPath || process.env.FIREBASE_SERVICE_ACCOUNT_PATH);
     if (pathValue) {
         const filePath = resolve(process.cwd(), pathValue);
         if (existsSync(filePath)) {
             cachedServiceAccount = JSON.parse(readFileSync(filePath, 'utf8'));
+            if (!isUsableServiceAccount(cachedServiceAccount)) {
+                throw new Error(`Firebase service account file at ${filePath} is missing required fields.`);
+            }
             return cachedServiceAccount;
         }
+    }
+
+    const rawJson = sanitizeString(
+        config.firebaseServiceAccount ||
+        process.env.FIREBASE_SERVICE_ACCOUNT ||
+        process.env.FIREBASE_SERVICE_ACCOUNT_JSON
+    );
+    if (rawJson) {
+        const parsed = JSON.parse(rawJson);
+        if (!isUsableServiceAccount(parsed)) {
+            throw new Error('Inline Firebase service account private key looks incomplete. Use FIREBASE_SERVICE_ACCOUNT_PATH with the JSON file path.');
+        }
+        cachedServiceAccount = parsed;
+        return cachedServiceAccount;
     }
 
     throw new Error('Firebase service account is not configured. Set FIREBASE_SERVICE_ACCOUNT or FIREBASE_SERVICE_ACCOUNT_PATH.');

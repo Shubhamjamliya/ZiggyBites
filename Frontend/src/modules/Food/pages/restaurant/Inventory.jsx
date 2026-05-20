@@ -1782,10 +1782,10 @@ export default function Inventory() {
         <div ref={tabBarRef} className="grid grid-cols-2 gap-3">
           <motion.button
             onClick={() => setActiveTab("all-items")}
-            className={`relative overflow-hidden rounded-[24px] border px-4 py-3 text-sm font-semibold ${
+            className={`relative overflow-hidden rounded-lg border px-4 py-3 text-sm font-semibold ${
               activeTab === "all-items"
-                ? "border-[#7e3866] text-white shadow-[0_18px_32px_-24px_rgba(126,56,102,0.6)]"
-                : "border-[#ead6e3] bg-white/90 text-[#6d6470] shadow-[0_16px_40px_-34px_rgba(109,100,112,0.35)]"
+                ? "border-[#7e3866] bg-[#7e3866] text-white"
+                : "border-gray-200 bg-white text-gray-700"
             }`}
             animate={{
               scale: activeTab === "all-items" ? 1.02 : 1,
@@ -1795,7 +1795,7 @@ export default function Inventory() {
             {activeTab === "all-items" && (
               <motion.div
                 layoutId="activeTabBackground"
-                className="absolute inset-0 rounded-[24px] bg-[#7e3866] -z-10"
+                className="absolute inset-0 rounded-lg bg-[#7e3866] -z-10"
                 initial={false}
                 transition={{
                   type: "spring",
@@ -1816,10 +1816,10 @@ export default function Inventory() {
 
           <motion.button
             onClick={() => setActiveTab("add-ons")}
-            className={`relative overflow-hidden rounded-[24px] border px-4 py-3 text-sm font-semibold ${
+            className={`relative overflow-hidden rounded-lg border px-4 py-3 text-sm font-semibold ${
               activeTab === "add-ons"
-                ? "border-[#7e3866] text-white shadow-[0_18px_32px_-24px_rgba(126,56,102,0.6)]"
-                : "border-[#ead6e3] bg-white/90 text-[#6d6470] shadow-[0_16px_40px_-34px_rgba(109,100,112,0.35)]"
+                ? "border-[#7e3866] bg-[#7e3866] text-white"
+                : "border-gray-200 bg-white text-gray-700"
             }`}
             animate={{
               scale: activeTab === "add-ons" ? 1.02 : 1,
@@ -1829,7 +1829,7 @@ export default function Inventory() {
             {activeTab === "add-ons" && (
               <motion.div
                 layoutId="activeTabBackground"
-                className="absolute inset-0 rounded-[24px] bg-[#7e3866] -z-10"
+                className="absolute inset-0 rounded-lg bg-[#7e3866] -z-10"
                 initial={false}
                 transition={{
                   type: "spring",
@@ -1917,16 +1917,16 @@ export default function Inventory() {
       >
         {/* Search and Filter */}
         <div className="sticky top-0 z-30 -mx-4 px-4 pb-4 bg-[#f3f5f8]/95 backdrop-blur supports-[backdrop-filter]:bg-[#f3f5f8]/80">
-          <div className="overflow-hidden rounded-[28px] border border-white/80 bg-white/90 p-4 shadow-[0_20px_48px_-34px_rgba(15,23,42,0.45)] backdrop-blur">
+          <div className="overflow-hidden rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-sm font-semibold text-slate-950">
-                  {activeTab === "add-ons" ? "Search and review add-ons" : "Search and manage menu inventory"}
+                  {activeTab === "add-ons" ? "Search add-ons" : "Search menu items"}
                 </p>
                 <p className="mt-1 text-xs text-slate-500">
                   {activeTab === "add-ons"
                     ? `${filteredAddons.length} add-on${filteredAddons.length !== 1 ? "s" : ""} in this view`
-                    : `${listToRender.length} categor${listToRender.length !== 1 ? "ies" : "y"} and ${activeFilterCount} item${activeFilterCount !== 1 ? "s" : ""} in focus`}
+                    : `${listToRender.length} categor${listToRender.length !== 1 ? "ies" : "y"} and ${activeFilterCount} item${activeFilterCount !== 1 ? "s" : ""}`}
                 </p>
               </div>
               {hasActiveTools ? (
@@ -1936,7 +1936,7 @@ export default function Inventory() {
                     setSearchQuery("")
                     setSelectedFilter("all")
                   }}
-                  className="rounded-full border border-[#e7d5e0] px-3 py-1.5 text-xs font-semibold text-[#6b4d62] transition-colors hover:border-[#d5bdd0] hover:bg-[#f9f0f7]"
+                  className="rounded-md border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-700 transition-colors hover:bg-gray-50"
                 >
                   Clear all
                 </button>
@@ -1951,7 +1951,7 @@ export default function Inventory() {
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder={activeTab === "add-ons" ? "Search add-ons by name or status" : "Search categories or menu items"}
-                  className="h-12 w-full rounded-[20px] border border-[#e7d5e0] bg-[#fcf7fb] pl-11 pr-10 text-sm text-slate-900 placeholder:text-slate-400 focus:border-[#c796b8] focus:bg-white focus:outline-none"
+                  className="h-12 w-full rounded-lg border border-gray-300 bg-white pl-11 pr-10 text-sm text-slate-900 placeholder:text-slate-400 focus:border-[#7e3866] focus:outline-none"
                 />
                 {searchQuery ? (
                   <button
@@ -1967,7 +1967,7 @@ export default function Inventory() {
 
               <button
                 onClick={() => setFilterOpen(true)}
-                className="relative flex h-12 items-center justify-center gap-2 rounded-[20px] border border-[#e7d5e0] bg-white px-4 text-sm font-semibold text-[#55254b] transition-colors hover:border-[#d5bdd0] hover:bg-[#f9f0f7]"
+                className="relative flex h-12 items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 text-sm font-semibold text-gray-800 transition-colors hover:bg-gray-50"
               >
                 <SlidersHorizontal className="w-4 h-4 text-[#7e3866]" />
                 <span>Filters</span>
@@ -1979,7 +1979,7 @@ export default function Inventory() {
               {activeTab === "add-ons" && (
                 <button
                   onClick={() => setIsAddAddonOpen((v) => !v)}
-                  className="h-12 rounded-[20px] bg-[#7e3866] px-4 text-sm font-semibold text-white shadow-[0_18px_32px_-24px_rgba(126,56,102,0.7)] transition-colors hover:bg-[#55254b]"
+                  className="h-12 rounded-lg bg-[#7e3866] px-4 text-sm font-semibold text-white transition-colors hover:bg-[#55254b]"
                   style={{ minWidth: "128px" }}
                 >
                   {isAddAddonOpen ? "Close" : "Add Add-on"}
@@ -2001,8 +2001,8 @@ export default function Inventory() {
                     onClick={() => setSelectedFilter(option.value)}
                     className={`shrink-0 rounded-full border px-3.5 py-2 text-xs font-semibold transition-colors ${
                       isActive
-                        ? "border-[#7e3866] bg-[#7e3866] text-white shadow-[0_14px_28px_-24px_rgba(126,56,102,0.8)]"
-                        : "border-[#e7d5e0] bg-[#fcf7fb] text-[#6d6470] hover:border-[#d5bdd0] hover:bg-white"
+                        ? "border-[#7e3866] bg-[#7e3866] text-white"
+                        : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
                     }`}
                   >
                     <span>{option.label}</span>
@@ -2120,13 +2120,13 @@ export default function Inventory() {
                   <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
                 </div>
               ) : filteredAddons.length === 0 ? (
-                <div className="rounded-[28px] border border-dashed border-slate-200 bg-white/70 px-4 py-20 text-center shadow-[0_18px_40px_-34px_rgba(15,23,42,0.35)]">
+                <div className="rounded-lg border border-dashed border-gray-300 bg-white px-4 py-16 text-center shadow-sm">
                   <div className="text-center">
                     <p className="text-lg font-semibold text-slate-700">
                       {hasActiveTools ? "No matching add-ons found" : "No add-ons available"}
                     </p>
                     <p className="mt-2 text-sm text-slate-500">
-                      {hasActiveTools ? "Try changing your search or filters" : "All add-ons will appear here"}
+                      {hasActiveTools ? "Try changing your search or filters" : "Add-ons will appear here"}
                     </p>
                   </div>
                 </div>
@@ -2135,7 +2135,7 @@ export default function Inventory() {
                   {filteredAddons.map((addon) => (
                     <div
                       key={addon.id}
-                      className="rounded-[28px] border border-white/80 bg-white p-4 shadow-[0_20px_48px_-34px_rgba(15,23,42,0.45)]"
+                      className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm"
                     >
                       <div className="flex items-start justify-between gap-4">
                         <div className="flex-1 min-w-0">
@@ -2146,7 +2146,7 @@ export default function Inventory() {
                                 ? "bg-emerald-50 text-emerald-700"
                                 : "bg-slate-100 text-slate-600"
                             }`}>
-                              {addon.isAvailable !== false ? "Live" : "Paused"}
+                              {addon.isAvailable !== false ? "Available" : "Unavailable"}
                             </span>
                             {addon.approvalStatus === 'approved' && (
                               <span className="rounded-full bg-green-100 px-2.5 py-1 text-[11px] font-semibold text-green-800">Approved</span>
@@ -2171,7 +2171,7 @@ export default function Inventory() {
                             <img
                               src={addon.images[0]}
                               alt={addon.name}
-                              className="h-20 w-20 rounded-2xl object-cover ring-1 ring-slate-200"
+                              className="h-20 w-20 rounded-lg object-cover ring-1 ring-slate-200"
                               onError={(e) => {
                                 e.target.style.display = 'none'
                               }}
@@ -2195,7 +2195,7 @@ export default function Inventory() {
             </>
           )}
           {activeTab !== "add-ons" && !loadingInventory && listToRender.length === 0 && (
-            <div className="rounded-[28px] border border-dashed border-slate-200 bg-white/70 px-6 py-16 text-center shadow-[0_18px_40px_-34px_rgba(15,23,42,0.35)]">
+            <div className="rounded-lg border border-dashed border-gray-300 bg-white px-6 py-16 text-center shadow-sm">
               <p className="text-lg font-semibold text-slate-700">
                 {hasActiveTools ? "No matching categories or items found" : "No menu categories available"}
               </p>
@@ -2214,7 +2214,7 @@ export default function Inventory() {
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: isLoading ? 0.6 : 1, y: 0 }}
                 transition={{ delay: index * 0.05 }}
-                className="relative overflow-hidden rounded-[30px] border border-white/80 bg-white shadow-[0_22px_52px_-36px_rgba(15,23,42,0.45)]"
+                className="relative overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm"
                 ref={(el) => {
                   if (el) {
                     categoryRefs.current[category.id] = el
@@ -2226,7 +2226,7 @@ export default function Inventory() {
                   <motion.div
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
-                    className="absolute inset-0 z-10 flex items-center justify-center rounded-[30px] bg-white/80"
+                    className="absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-white/80"
                   >
                     <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
                   </motion.div>
@@ -2240,39 +2240,39 @@ export default function Inventory() {
                   <div className="flex items-center justify-between gap-4">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-3 mb-2 flex-wrap">
-                        <h3 className="text-xl font-black tracking-tight text-slate-950 dark:text-white">
+                        <h3 className="text-lg font-semibold text-slate-950 dark:text-white">
                           {category.name}
                         </h3>
                         <div className="flex items-center gap-2">
-                          <span className="rounded-full bg-slate-100 dark:bg-gray-800 px-3 py-1 text-[10px] font-black uppercase tracking-wider text-slate-500">
+                          <span className="rounded-full bg-slate-100 dark:bg-gray-800 px-3 py-1 text-xs font-medium text-slate-600">
                             {category.items?.length || category.itemCount || 0} items
                           </span>
-                          <span className={`rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-wider ${
+                          <span className={`rounded-full px-3 py-1 text-xs font-medium ${
                             category.inStock
                               ? "bg-green-50 text-green-700 border border-green-100"
                               : "bg-amber-50 text-amber-700 border border-amber-100"
                           }`}>
-                            {category.inStock ? "Healthy" : "Needs attention"}
+                            {category.inStock ? "Available" : "Unavailable"}
                           </span>
                         </div>
                       </div>
                       
                       <div className="flex flex-wrap items-center gap-3 mt-4">
                         {category.inStock ? (
-                          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-green-50/50 rounded-xl border border-green-100/50">
-                            <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-                            <p className="text-[10px] font-bold text-green-700">All items live</p>
+                          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-green-50 rounded-lg border border-green-100">
+                            <div className="w-1.5 h-1.5 rounded-full bg-green-500" />
+                            <p className="text-xs font-medium text-green-700">All items available</p>
                           </div>
                         ) : (
-                          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-50/50 rounded-xl border border-rose-100/50">
+                          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 rounded-lg border border-rose-100">
                             <div className="w-1.5 h-1.5 rounded-full bg-rose-500" />
-                            <p className="text-[10px] font-bold text-rose-700">
-                              {getOutOfStockCount(category)} Items paused
+                            <p className="text-xs font-medium text-rose-700">
+                              {getOutOfStockCount(category)} item{getOutOfStockCount(category) !== 1 ? "s" : ""} unavailable
                             </p>
                           </div>
                         )}
-                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50/50 rounded-xl border border-blue-100/50">
-                          <p className="text-[10px] font-bold text-blue-700">
+                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 rounded-lg border border-blue-100">
+                          <p className="text-xs font-medium text-blue-700">
                             {(categoryItems.filter((item) => item.isRecommended).length)} Recommended
                           </p>
                         </div>
@@ -2283,7 +2283,7 @@ export default function Inventory() {
                       {/* Category Toggle Switch */}
                       <div
                         onClick={(e) => e.stopPropagation()}
-                        className="scale-110"
+                        className="scale-100"
                       >
                         <Switch
                           checked={category.inStock}
@@ -2330,14 +2330,14 @@ export default function Inventory() {
 
                           return (
                           <div key={item.id} className="group px-1">
-                            <div className="flex items-center justify-between gap-3 sm:gap-4 rounded-[28px] border border-slate-100/80 bg-white p-3 sm:p-4 shadow-[0_8px_20px_-12px_rgba(0,0,0,0.08)] hover:shadow-[0_20px_40px_-20px_rgba(0,0,0,0.12)] hover:border-slate-200 transition-all duration-500">
+                            <div className="flex items-center justify-between gap-3 sm:gap-4 rounded-lg border border-gray-200 bg-white p-3 sm:p-4 shadow-sm transition-colors hover:border-gray-300">
                               <div className="flex min-w-0 flex-1 items-center gap-3 sm:gap-5">
                                 {item.image && (
-                                  <div className="w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24 flex-shrink-0 rounded-[20px] overflow-hidden shadow-md border-2 border-white ring-1 ring-slate-100/50">
+                                  <div className="w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24 flex-shrink-0 overflow-hidden rounded-lg border border-gray-200">
                                     <img
                                       src={item.image}
                                       alt={item.name}
-                                      className="w-full h-full object-cover transform group-hover:scale-110 transition-transform duration-700"
+                                      className="w-full h-full object-cover"
                                       onError={(e) => {
                                         e.target.style.display = 'none';
                                       }}
@@ -2345,12 +2345,12 @@ export default function Inventory() {
                                   </div>
                                 )}
                                 <div className="min-w-0 flex-1">
-                                  <h4 className="line-clamp-1 text-sm sm:text-base md:text-lg font-black text-slate-950 tracking-tight leading-tight mb-1.5">
+                                  <h4 className="line-clamp-1 text-sm sm:text-base font-semibold text-slate-950 leading-tight mb-1.5">
                                     {item.name}
                                   </h4>
                                   
                                   <div className="flex flex-wrap items-center gap-1.5 mb-2.5">
-                                    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 sm:px-2.5 sm:py-1 text-[9px] sm:text-[10px] font-black uppercase tracking-wider shadow-sm transition-all ${
+                                    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 sm:px-2.5 sm:py-1 text-[10px] sm:text-xs font-medium ${
                                       item.isVeg
                                         ? "bg-white text-green-600 border border-green-100"
                                         : "bg-white text-red-600 border border-red-100"
@@ -2360,21 +2360,21 @@ export default function Inventory() {
                                       </div>
                                       {item.isVeg ? "Veg" : "Non-veg"}
                                     </span>
-                                    <span className={`rounded-full px-2 py-0.5 sm:px-2.5 sm:py-1 text-[9px] sm:text-[10px] font-black uppercase tracking-wider border shadow-sm ${approvalMeta.className.replace('text-', 'text-').replace('bg-', 'bg-white border-')}`}>
+                                    <span className={`rounded-full px-2 py-0.5 sm:px-2.5 sm:py-1 text-[10px] sm:text-xs font-medium border ${approvalMeta.className.replace('text-', 'text-').replace('bg-', 'bg-white border-')}`}>
                                       {approvalMeta.label}
                                     </span>
                                   </div>
                                   
                                   <div className="flex items-center gap-3 sm:gap-4 mt-1">
-                                    <p className={`text-[9px] sm:text-[10px] font-black uppercase tracking-widest ${
+                                    <p className={`text-xs font-medium ${
                                       item.inStock ? "text-green-500" : "text-rose-500"
                                     }`}>
-                                      {item.inStock ? "● Live" : `● ${getRuleStatusLabel(item.stockRule)}`}
+                                      {item.inStock ? "Available" : getRuleStatusLabel(item.stockRule)}
                                     </p>
                                     <button
                                       type="button"
                                       onClick={() => handleEditItem(category, item)}
-                                      className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 sm:px-3 sm:py-2 text-[9px] sm:text-[10px] font-black uppercase tracking-widest transition-all shadow-sm ${
+                                      className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 sm:px-3 sm:py-2 text-xs font-medium transition-colors ${
                                         isRejectedItem
                                           ? "bg-red-600 text-white hover:bg-red-700"
                                           : "bg-slate-100 text-slate-800 hover:bg-slate-800 hover:text-white"
@@ -2386,7 +2386,7 @@ export default function Inventory() {
                                   </div>
 
                                   {item.approvalStatus === "rejected" && item.rejectionReason && (
-                                    <p className="mt-2 text-[9px] sm:text-[10px] font-bold text-red-600 bg-red-50/50 border border-red-100/50 px-2.5 py-1 rounded-lg italic">
+                                    <p className="mt-2 rounded-md border border-red-100 bg-red-50 px-2.5 py-1 text-xs font-medium text-red-600">
                                       {item.rejectionReason}
                                     </p>
                                   )}
@@ -2399,9 +2399,9 @@ export default function Inventory() {
                                     e.stopPropagation()
                                     handleRecommendToggle(category.id, item.id)
                                   }}
-                                  className={`w-8 h-8 sm:w-10 sm:h-10 flex items-center justify-center rounded-[14px] sm:rounded-2xl transition-all shadow-sm border ${
+                                  className={`w-8 h-8 sm:w-10 sm:h-10 flex items-center justify-center rounded-lg transition-colors border ${
                                     item.isRecommended
-                                      ? "bg-blue-600 border-blue-600 text-white rotate-12 scale-110"
+                                      ? "bg-blue-600 border-blue-600 text-white"
                                       : "bg-white border-slate-100 text-slate-300 hover:border-slate-200 hover:text-slate-600"
                                   }`}
                                 >
@@ -2460,8 +2460,8 @@ export default function Inventory() {
                     <h2 className="text-lg font-bold text-gray-900">Filters</h2>
                     <p className="text-sm text-gray-500 mt-1">
                       {activeTab === "add-ons"
-                        ? "Refine the add-ons list by availability or approval status."
-                        : "Refine your inventory by stock state, recommendation, or food type."}
+                        ? "Filter add-ons by availability or approval status."
+                        : "Filter items by stock status, recommendation, or food type."}
                     </p>
                   </div>
                   {selectedFilter !== "all" ? (
@@ -2765,7 +2765,7 @@ export default function Inventory() {
             type="button"
             whileTap={{ scale: 0.96 }}
             onClick={() => setIsMenuOpen((prev) => !prev)}
-            className="flex items-center gap-2 rounded-full border border-[#ead6e3] bg-white/95 px-4 py-3 text-sm font-semibold text-[#55254b] shadow-[0_18px_36px_-28px_rgba(126,56,102,0.45)]"
+            className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-800 shadow-sm"
           >
             <span className="w-5 h-5 flex items-center justify-center">
               {isMenuOpen ? (
@@ -2795,11 +2795,11 @@ export default function Inventory() {
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: 20 }}
                   transition={{ duration: 0.2 }}
-                  className="fixed right-4 bottom-36 z-30 h-[45vh] w-[60vw] max-w-sm overflow-hidden rounded-[28px] border border-[#ead6e3] bg-white shadow-[0_24px_60px_-30px_rgba(126,56,102,0.45)]"
+                  className="fixed right-4 bottom-36 z-30 h-[45vh] w-[60vw] max-w-sm overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg"
                 >
                   <div className="h-full flex flex-col">
-                    <div className="bg-[linear-gradient(135deg,#fcf4f9_0%,#f6e8f1_100%)] px-4 pt-4 pb-3">
-                      <p className="text-sm font-semibold text-[#55254b]">Jump to category</p>
+                    <div className="bg-gray-50 px-4 pt-4 pb-3">
+                      <p className="text-sm font-semibold text-gray-900">Jump to category</p>
                     </div>
                     <div className="mx-4 h-px bg-slate-200" />
                     <div className="flex-1 overflow-y-auto px-4 py-2 space-y-1">

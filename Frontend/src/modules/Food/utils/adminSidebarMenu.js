@@ -98,10 +98,13 @@ export const adminSidebarMenu = [
     label: "APP CUSTOMIZATION",
     items: [
       {
-        type: "link",
+        type: "expandable",
         label: "App Customization",
-        path: "/admin/food/app-customization",
         icon: "Settings2",
+        subItems: [
+          { label: "Normal app", path: "/admin/food/app-customization" },
+          { label: "Timing", path: "/admin/food/app-customization/time-management" },
+        ],
       },
     ],
   },

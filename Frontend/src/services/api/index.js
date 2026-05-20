@@ -847,6 +847,12 @@ export const adminAPI = {
     apiClient.put("/food/admin/app-customization", body ?? {}, {
       contextModule: "admin",
     }),
+  sendAppCustomizationTestNotification: (type) =>
+    apiClient.post(
+      "/food/admin/app-customization/test-notification",
+      { type },
+      { contextModule: "admin" },
+    ),
 
   /** Safety / Emergency Reports (admin) */
   getSafetyEmergencyReports: (params) =>
@@ -2402,6 +2408,10 @@ export const subscriptionAPI = {
     apiClient.get("/food/subscriptions/my", {
       contextModule: "user",
     }),
+  getUpcomingSchedules: () =>
+    apiClient.get("/food/subscriptions/schedules/upcoming", {
+      contextModule: "user",
+    }),
   createOrder: (payload) =>
     apiClient.post("/food/subscriptions/create-order", payload ?? {}, {
       contextModule: "user",
@@ -2410,6 +2420,18 @@ export const subscriptionAPI = {
     apiClient.post("/food/subscriptions/verify-payment", body ?? {}, {
       contextModule: "user",
     }),
+  changeScheduleDish: (scheduleId, body) =>
+    apiClient.post(
+      `/food/subscriptions/schedules/${String(scheduleId)}/change-dish`,
+      body ?? {},
+      { contextModule: "user" },
+    ),
+  verifyDishChangePayment: (scheduleId, body) =>
+    apiClient.post(
+      `/food/subscriptions/schedules/${String(scheduleId)}/change-dish/verify-payment`,
+      body ?? {},
+      { contextModule: "user" },
+    ),
 };
 
 // Dining bookings now handled by backend

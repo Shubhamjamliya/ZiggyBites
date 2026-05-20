@@ -26,6 +26,8 @@ import {
   Utensils,
   Trash2,
   CalendarDays,
+  Bell,
+  Loader2,
 } from "lucide-react";
 
 import AnimatedPage from "@food/components/user/AnimatedPage";
@@ -91,6 +93,7 @@ export default function Profile() {
   const [deleteStep, setDeleteStep] = useState(1);
   const [deleteCaptcha, setDeleteCaptcha] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isTestingPush, setIsTestingPush] = useState(false);
   const [appCustomization, setAppCustomization] = useState(DEFAULT_APP_CUSTOMIZATION);
 
   // Trigger web push registration when profile mounts to ensure FCM token is saved
@@ -466,6 +469,71 @@ export default function Profile() {
     }
   };
 
+  const handleTestPushNotification = async () => {
+    if (isTestingPush) return;
+    setIsTestingPush(true);
+    try {
+      console.log("[Push Test] Starting user push notification test");
+      console.log("[Push Test] Notification permission:", typeof Notification !== "undefined" ? Notification.permission : "unsupported");
+      console.log("[Push Test] Service worker supported:", "serviceWorker" in navigator);
+      console.log("[Push Test] Registering/syncing web push token...");
+      await registerWebPushForCurrentModule();
+      console.log("[Push Test] Web push registration finished");
+      const savedToken = localStorage.getItem("fcm_web_registered_token_user") || "";
+      console.log("[Push Test] Local saved user token:", savedToken ? `${savedToken.slice(0, 14)}... (${savedToken.length})` : "not found");
+      if ("serviceWorker" in navigator) {
+        const registration = await navigator.serviceWorker.getRegistration("/firebase-messaging-sw.js");
+        console.log("[Push Test] Service worker registration:", registration ? {
+          scope: registration.scope,
+          active: Boolean(registration.active),
+          installing: Boolean(registration.installing),
+          waiting: Boolean(registration.waiting),
+        } : "not found");
+      }
+      console.log("[Push Test] Calling backend /fcm-tokens/test...");
+      const response = await userAPI.testFcmNotification();
+      console.log("[Push Test] Backend response:", response?.data);
+      const result = response?.data?.data || {};
+      if (Number(result.successCount || 0) < 1) {
+        const firstError = Array.isArray(result.results)
+          ? result.results.find((item) => item?.error)?.error
+          : "";
+        console.error("[Push Test] Firebase rejected the notification:", result);
+        throw new Error(firstError || "No active push token accepted by Firebase");
+      }
+      console.log("[Push Test] Notification accepted by Firebase:", result);
+      if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+        try {
+          const registration = "serviceWorker" in navigator
+            ? await navigator.serviceWorker.getRegistration()
+            : null;
+          if (registration) {
+            await registration.showNotification("Local display test", {
+              body: "Browser can display notifications on this device.",
+              icon: "/favicon.ico",
+              tag: "local-display-test",
+            });
+            console.log("[Push Test] Local service-worker notification displayed");
+          } else {
+            new Notification("Local display test", {
+              body: "Browser can display notifications on this device.",
+              icon: "/favicon.ico",
+            });
+            console.log("[Push Test] Local browser notification displayed");
+          }
+        } catch (displayError) {
+          console.error("[Push Test] Local notification display failed:", displayError);
+        }
+      }
+      toast.success("Test push notification sent");
+    } catch (error) {
+      console.error("[Push Test] Failed:", error);
+      toast.error(error?.response?.data?.message || error?.message || "Failed to send test notification");
+    } finally {
+      setIsTestingPush(false);
+    }
+  };
+
   return (
     <AnimatedPage className="min-h-screen bg-[#f5f5f5] dark:bg-[#0a0a0a]">
       <div className="max-w-md md:max-w-2xl lg:max-w-4xl xl:max-w-5xl mx-auto px-4 sm:px-6 md:px-8 lg:px-10 xl:px-12 py-4 sm:py-6 md:py-8 lg:py-10 pb-20 sm:pb-24">
@@ -559,6 +627,37 @@ export default function Profile() {
               </Card>
             </motion.div>
           </Link>
+
+          <motion.div
+            whileHover={{ x: 4, scale: 1.01 }}
+            transition={{ duration: 0.2, type: "spring", stiffness: 300 }}>
+            <Card
+              className="bg-white dark:bg-[#1a1a1a] py-0 rounded-xl shadow-sm border-0 dark:border-gray-800 cursor-pointer"
+              onClick={handleTestPushNotification}>
+              <CardContent className="p-4 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <motion.div
+                    className="bg-gray-100 dark:bg-gray-800 rounded-full p-2"
+                    whileHover={{ rotate: 15, scale: 1.1 }}
+                    transition={{ duration: 0.3 }}>
+                    {isTestingPush ? (
+                      <Loader2 className="h-5 w-5 animate-spin text-gray-700 dark:text-gray-300" />
+                    ) : (
+                      <Bell className="h-5 w-5 text-gray-700 dark:text-gray-300" />
+                    )}
+                  </motion.div>
+                  <span className="text-base font-medium text-gray-900 dark:text-white">
+                    Test push notification
+                  </span>
+                </div>
+                <motion.div
+                  whileHover={{ x: 4 }}
+                  transition={{ duration: 0.2 }}>
+                  <ChevronRight className="h-5 w-5 text-gray-400 dark:text-gray-500" />
+                </motion.div>
+              </CardContent>
+            </Card>
+          </motion.div>
 
           <Link to="/user/wallet" className="block">
             <motion.div

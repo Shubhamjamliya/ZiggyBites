@@ -112,6 +112,23 @@ async function getDishChangeWindow(schedule, appSettings) {
   };
 }
 
+async function getAddressChangeWindow(schedule, appSettings) {
+  const orderAt = await getMealOrderAt(schedule);
+  const leadHours = Math.max(
+    1,
+    Number(appSettings?.timeManagement?.addressChangeLeadHours || 3),
+  );
+  const deadline = new Date(orderAt.getTime() - leadHours * 60 * 60 * 1000);
+  return {
+    orderAt,
+    deadline,
+    leadHours,
+    canChange:
+      String(schedule.status) === 'scheduled' &&
+      (appSettings?.timeManagement?.devModeAllowAnytimeChanges === true || new Date() <= deadline),
+  };
+}
+
 function normalizeDishForClient(dish) {
   if (!dish) return null;
   return {
@@ -972,6 +989,7 @@ export async function listUpcomingSchedulesForUser(userId) {
   const rows = await Promise.all(
     schedules.map(async (schedule) => {
       const window = await getDishChangeWindow(schedule, appSettings);
+      const addressWindow = await getAddressChangeWindow(schedule, appSettings);
       return {
         ...schedule,
         scheduleId: schedule._id?.toString?.() || String(schedule._id),
@@ -980,6 +998,9 @@ export async function listUpcomingSchedulesForUser(userId) {
         dishChangeDeadline: window.deadline,
         canChangeDish: window.canChange,
         dishChangeLeadHours: window.leadHours,
+        addressChangeDeadline: addressWindow.deadline,
+        canChangeAddress: addressWindow.canChange,
+        addressChangeLeadHours: addressWindow.leadHours,
         availableDishes: dishesByRestaurant[String(schedule.restaurantId)] || [],
       };
     }),
@@ -1189,6 +1210,62 @@ export async function verifySubscriptionDishChangePayment(userId, scheduleId, dt
       payableAmount: pending.priceDifference,
       walletCreditAmount: 0,
     },
+  };
+}
+
+export async function changeSubscriptionAddress(userId, subscriptionId, dto = {}) {
+  if (!mongoose.isValidObjectId(userId)) throw new ValidationError('User not found');
+  if (!mongoose.isValidObjectId(subscriptionId)) {
+    throw new ValidationError('Subscription id is invalid');
+  }
+
+  const subscription = await FoodSubscription.findOne({
+    _id: new mongoose.Types.ObjectId(subscriptionId),
+    userId: new mongoose.Types.ObjectId(userId),
+    status: 'active',
+    paymentStatus: 'paid',
+  });
+  if (!subscription) throw new NotFoundError('Subscription not found');
+
+  const nextSchedule = await FoodSubscriptionSchedule.findOne({
+    subscriptionId: subscription._id,
+    userId: subscription.userId,
+    status: 'scheduled',
+    serviceDate: { $gte: new Date(new Date().setHours(0, 0, 0, 0)) },
+  }).sort({ serviceDate: 1, mealName: 1 });
+
+  if (!nextSchedule) {
+    throw new ValidationError('No upcoming scheduled subscription meal found');
+  }
+
+  const appSettings = await getAppCustomizationSettings();
+  const window = await getAddressChangeWindow(nextSchedule, appSettings);
+  if (!window.canChange) {
+    throw new ValidationError(
+      `Address changes close ${window.leadHours} hours before the subscription meal`,
+    );
+  }
+
+  const deliveryAddress = normalizeDeliveryAddress(dto.deliveryAddress, {
+    customerName: subscription.customerName,
+    customerPhone: subscription.customerPhone,
+  });
+  if (!deliveryAddress.street || !deliveryAddress.city || !deliveryAddress.state) {
+    throw new ValidationError('Delivery address is incomplete');
+  }
+
+  subscription.deliveryAddress = deliveryAddress;
+  if (deliveryAddress.phone) subscription.customerPhone = deliveryAddress.phone;
+  if (deliveryAddress.fullName || deliveryAddress.name) {
+    subscription.customerName = deliveryAddress.fullName || deliveryAddress.name;
+  }
+  await subscription.save();
+
+  return {
+    subscription: normalizeSubscriptionForClient(subscription),
+    nextScheduleId: String(nextSchedule._id),
+    addressChangeDeadline: window.deadline,
+    addressChangeLeadHours: window.leadHours,
   };
 }
 

@@ -78,6 +78,9 @@ const Accessibility = lazy(() => import("@food/pages/user/profile/Accessibility"
 const Logout = lazy(() => import("@food/pages/user/profile/Logout"))
 const ReferEarn = lazy(() => import("@food/pages/user/profile/ReferEarn"))
 const MySubscriptions = lazy(() => import("@food/pages/user/profile/MySubscriptions"))
+const SubscriptionDetails = lazy(() => import("@food/pages/user/profile/SubscriptionDetails"))
+const ChangeSubscriptionDish = lazy(() => import("@food/pages/user/profile/ChangeSubscriptionDish"))
+const ChangeSubscriptionDishCheckout = lazy(() => import("@food/pages/user/profile/ChangeSubscriptionDishCheckout"))
 
 // Auth
 const SignIn = lazy(() => import("@food/pages/user/auth/SignIn"))
@@ -235,6 +238,30 @@ export default function UserRouter() {
             element={
               <ProtectedRoute requiredRole="user" loginPath="/user/auth/login">
                 <MySubscriptions />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="profile/subscriptions/:subscriptionId"
+            element={
+              <ProtectedRoute requiredRole="user" loginPath="/user/auth/login">
+                <SubscriptionDetails />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="profile/subscriptions/:subscriptionId/change-dish/:scheduleId"
+            element={
+              <ProtectedRoute requiredRole="user" loginPath="/user/auth/login">
+                <ChangeSubscriptionDish />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="profile/subscriptions/:subscriptionId/change-dish/:scheduleId/checkout/:dishId"
+            element={
+              <ProtectedRoute requiredRole="user" loginPath="/user/auth/login">
+                <ChangeSubscriptionDishCheckout />
               </ProtectedRoute>
             }
           />

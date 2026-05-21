@@ -1,5 +1,6 @@
 import { sendResponse } from '../../../../utils/response.js';
 import {
+  validateChangeSubscriptionAddressDto,
   validateChangeSubscriptionDishDto,
   validateCreateSubscriptionOrderDto,
   validateVerifyDishChangePaymentDto,
@@ -59,6 +60,21 @@ export async function changeSubscriptionDishController(req, res, next) {
       dto,
     );
     return sendResponse(res, 200, 'Subscription dish change processed', result);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function changeSubscriptionAddressController(req, res, next) {
+  try {
+    const userId = req.user?.userId;
+    const dto = validateChangeSubscriptionAddressDto(req.body);
+    const result = await subscriptionService.changeSubscriptionAddress(
+      userId,
+      req.params.subscriptionId,
+      dto,
+    );
+    return sendResponse(res, 200, 'Subscription address updated', result);
   } catch (err) {
     next(err);
   }

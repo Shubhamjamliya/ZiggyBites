@@ -2420,6 +2420,12 @@ export const subscriptionAPI = {
     apiClient.post("/food/subscriptions/verify-payment", body ?? {}, {
       contextModule: "user",
     }),
+  changeAddress: (subscriptionId, body) =>
+    apiClient.patch(
+      `/food/subscriptions/${String(subscriptionId)}/address`,
+      body ?? {},
+      { contextModule: "user" },
+    ),
   changeScheduleDish: (scheduleId, body) =>
     apiClient.post(
       `/food/subscriptions/schedules/${String(scheduleId)}/change-dish`,

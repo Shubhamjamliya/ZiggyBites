@@ -42,6 +42,29 @@ const changeSubscriptionDishSchema = z.object({
   dishId: z.string().min(1, 'Dish id required'),
 });
 
+const subscriptionAddressSchema = z.object({
+  label: z.string().optional(),
+  name: z.string().optional(),
+  fullName: z.string().optional(),
+  street: z.string().optional(),
+  additionalDetails: z.string().optional(),
+  city: z.string().optional(),
+  state: z.string().optional(),
+  zipCode: z.string().optional(),
+  phone: z.string().optional(),
+  location: z.object({
+    type: z.string().optional(),
+    coordinates: z.array(z.number()).optional(),
+  }).optional(),
+}).passthrough();
+
+const changeSubscriptionAddressSchema = z.object({
+  deliveryAddress: subscriptionAddressSchema.optional(),
+  address: subscriptionAddressSchema.optional(),
+}).refine((value) => value.deliveryAddress || value.address, {
+  message: 'Delivery address is required',
+});
+
 const verifyDishChangePaymentSchema = z.object({
   razorpayOrderId: z.string().min(1, 'Razorpay order id required'),
   razorpayPaymentId: z.string().min(1, 'Razorpay payment id required'),
@@ -73,6 +96,14 @@ export function validateChangeSubscriptionDishDto(body) {
   const result = changeSubscriptionDishSchema.safeParse(body || {});
   if (!result.success) toValidationError(result);
   return result.data;
+}
+
+export function validateChangeSubscriptionAddressDto(body) {
+  const result = changeSubscriptionAddressSchema.safeParse(body || {});
+  if (!result.success) toValidationError(result);
+  return {
+    deliveryAddress: result.data.deliveryAddress || result.data.address,
+  };
 }
 
 export function validateVerifyDishChangePaymentDto(body) {

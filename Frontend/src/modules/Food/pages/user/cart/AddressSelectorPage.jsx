@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect, useRef, useCallback } from "react"
-import { useNavigate } from "react-router-dom"
+import { useLocation as useRouterLocation, useNavigate } from "react-router-dom"
 import { ChevronLeft, ChevronRight, Plus, MapPin, MoreHorizontal, Navigation, Home, Building2, Briefcase, Phone, X, Crosshair, Search } from "lucide-react"
 import { Button } from "@food/components/ui/button"
 import { Input } from "@food/components/ui/input"
@@ -8,7 +8,7 @@ import { Textarea } from "@food/components/ui/textarea"
 import { useLocation as useGeoLocation } from "@food/hooks/useLocation"
 import { useProfile } from "@food/context/ProfileContext"
 import { toast } from "sonner"
-import { locationAPI, userAPI } from "@food/api"
+import { locationAPI, subscriptionAPI, userAPI } from "@food/api"
 import { Loader } from '@googlemaps/js-api-loader'
 import AnimatedPage from "@food/components/user/AnimatedPage"
 import useAppBackNavigation from "@food/hooks/useAppBackNavigation"
@@ -45,8 +45,28 @@ const getAddressIcon = (address) => {
   return Home
 }
 
+const normalizeAddressForSubscription = (address = {}) => {
+  const coordinates = Array.isArray(address?.location?.coordinates)
+    ? address.location.coordinates.map(Number).filter((value) => Number.isFinite(value))
+    : undefined
+
+  return {
+    label: address.label || "Home",
+    name: address.name || address.fullName || "",
+    fullName: address.fullName || address.name || "",
+    street: address.street || address.address || address.formattedAddress || "",
+    additionalDetails: address.additionalDetails || "",
+    city: address.city || "",
+    state: address.state || "",
+    zipCode: address.zipCode || address.postalCode || "",
+    phone: address.phone || "",
+    location: coordinates?.length === 2 ? { type: "Point", coordinates } : undefined,
+  }
+}
+
 export default function AddressSelectorPage() {
   const navigate = useNavigate()
+  const routeLocation = useRouterLocation()
   const goBack = useAppBackNavigation()
   const { location, loading, requestLocation } = useGeoLocation()
   const { addresses = [], addAddress, updateAddress, setDefaultAddress, userProfile, isAuthenticated } = useProfile()
@@ -83,8 +103,37 @@ export default function AddressSelectorPage() {
   const ENABLE_LOCATION_REVERSE_GEOCODE = import.meta.env.VITE_ENABLE_LOCATION_REVERSE_GEOCODE !== "false"
   const ENABLE_NOMINATIM_SEARCH = import.meta.env.VITE_ENABLE_NOMINATIM_SEARCH !== "false"
   const getAddressId = (address) => address?.id || address?._id || null
+  const subscriptionAddressMode = routeLocation.state?.mode === "subscription-address"
+  const subscriptionId = routeLocation.state?.subscriptionId
+  const returnTo = routeLocation.state?.returnTo || routeLocation.state?.backTo
+
+  const finishSelection = useCallback(() => {
+    if (returnTo) {
+      navigate(returnTo, { replace: true })
+      return
+    }
+    goBack()
+  }, [goBack, navigate, returnTo])
+
+  const applySubscriptionAddress = useCallback(async (address) => {
+    if (!subscriptionAddressMode) return false
+    if (!subscriptionId) {
+      toast.error("Subscription not found")
+      return true
+    }
+
+    await subscriptionAPI.changeAddress(subscriptionId, {
+      deliveryAddress: normalizeAddressForSubscription(address),
+    })
+    toast.success("Subscription address updated")
+    return true
+  }, [subscriptionAddressMode, subscriptionId])
 
   const handleBack = () => {
+    if (subscriptionAddressMode && returnTo) {
+      navigate(returnTo, { replace: true })
+      return
+    }
     goBack()
   }
 
@@ -234,10 +283,22 @@ export default function AddressSelectorPage() {
         } catch {}
         
         toast.success("Location ready: " + (loc.area || loc.city || "Current Location"), { id: "geo" })
+
+        if (subscriptionAddressMode) {
+          setAddressFormData((prev) => ({
+            ...prev,
+            street: loc.formattedAddress || loc.address || prev.street,
+            city: loc.city || prev.city,
+            state: loc.state || prev.state,
+            additionalDetails: loc.area || prev.additionalDetails,
+          }))
+          setShowAddressForm(true)
+          return
+        }
         
         // Return to previous page after a short delay to allow map to pan visually
         setTimeout(() => {
-          handleBack()
+          finishSelection()
         }, 800)
       }
     } catch (e) {
@@ -248,10 +309,15 @@ export default function AddressSelectorPage() {
   const handleSelectSavedAddress = async (address) => {
     const id = getAddressId(address)
     if (id) {
-      await setDefaultAddress(id)
-      try { localStorage.setItem("deliveryAddressMode", "saved") } catch {}
-      toast.success("Address selected")
-      handleBack()
+      try {
+        await setDefaultAddress(id)
+        try { localStorage.setItem("deliveryAddressMode", "saved") } catch {}
+        const updatedSubscription = await applySubscriptionAddress(address)
+        if (!updatedSubscription) toast.success("Address selected")
+        finishSelection()
+      } catch (error) {
+        toast.error(error?.response?.data?.message || error?.message || "Failed to select address")
+      }
     }
   }
 
@@ -409,11 +475,12 @@ export default function AddressSelectorPage() {
         const id = getAddressId(created)
         if (id) await setDefaultAddress(id)
         try { localStorage.setItem("deliveryAddressMode", "saved") } catch {}
-        toast.success("Address saved")
-        handleBack()
+        const updatedSubscription = await applySubscriptionAddress(created)
+        if (!updatedSubscription) toast.success("Address saved")
+        finishSelection()
       }
     } catch (error) {
-      toast.error("Failed to save address")
+      toast.error(error?.response?.data?.message || error?.message || "Failed to save address")
     } finally {
       setLoadingAddress(false)
     }

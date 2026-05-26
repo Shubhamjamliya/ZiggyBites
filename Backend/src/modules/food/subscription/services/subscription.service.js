@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import { ValidationError, NotFoundError } from '../../../../core/auth/errors.js';
+import { buildPaginationOptions, buildPaginatedResult } from '../../../../utils/helpers.js';
 import { FoodRestaurant } from '../../restaurant/models/restaurant.model.js';
 import { FoodSubscriptionPlan } from '../../landing/models/subscriptionPlan.model.js';
 import { FoodSubscription } from '../models/subscription.model.js';
@@ -1401,5 +1402,214 @@ export async function listSubscriptionsForUser(userId) {
     subscriptions: subscriptions.map((subscription) =>
       normalizeSubscriptionForClient(subscription),
     ),
+  };
+}
+
+function getSubscriptionDateStatus(subscription) {
+  const rawStatus = String(subscription?.status || '').toLowerCase();
+  const paymentStatus = String(subscription?.paymentStatus || '').toLowerCase();
+  const now = new Date();
+
+  if (rawStatus === 'active' && subscription?.endDate && new Date(subscription.endDate) < now) {
+    return 'expired';
+  }
+  if (rawStatus === 'pending_payment' || paymentStatus === 'created' || paymentStatus === 'authenticated') {
+    return 'pending';
+  }
+  if (rawStatus === 'payment_failed' || paymentStatus === 'failed') {
+    return 'payment_failed';
+  }
+  return rawStatus || 'pending';
+}
+
+function getSubscriptionOrderType(planDays) {
+  const days = Number(planDays || 0);
+  if (days >= 28) return 'Monthly';
+  if (days >= 7) return 'Weekly';
+  return 'Daily';
+}
+
+function normalizeSubscriptionForAdmin(subscription, scheduleSummary = {}) {
+  const normalized = normalizeSubscriptionForClient(subscription);
+  const status = getSubscriptionDateStatus(subscription);
+  const totalOrders = Math.max(0, Number(scheduleSummary.total || normalized.totalCredits || 0));
+  const delivered = Math.max(0, Number(scheduleSummary.sent_to_delivery || normalized.usedCredits || 0));
+  const restaurant =
+    subscription?.restaurantId && typeof subscription.restaurantId === 'object'
+      ? subscription.restaurantId.restaurantName || subscription.restaurantName || ''
+      : subscription?.restaurantName || '';
+  const customer =
+    subscription?.userId && typeof subscription.userId === 'object'
+      ? subscription.userId
+      : null;
+
+  return {
+    ...normalized,
+    id: normalized.subscriptionId,
+    subscriptionId: normalized.subscriptionId,
+    shortId: `SUB-${String(normalized.subscriptionId).slice(-6).toUpperCase()}`,
+    orderType: getSubscriptionOrderType(subscription?.planDays),
+    duration: `${Number(subscription?.planDays || 0)} days`,
+    restaurant,
+    restaurantId:
+      subscription?.restaurantId?._id?.toString?.() ||
+      subscription?.restaurantId?.toString?.() ||
+      '',
+    customerName: subscription?.customerName || customer?.name || '',
+    customerPhone: subscription?.customerPhone || customer?.phone || '',
+    customerEmail: customer?.email || '',
+    planTitle: subscription?.planTitle || '',
+    status,
+    statusLabel: status
+      .split('_')
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(' '),
+    paymentStatus: subscription?.paymentStatus || '',
+    totalOrders,
+    delivered,
+    scheduled: Math.max(0, Number(scheduleSummary.scheduled || 0)),
+    skipped: Math.max(0, Number(scheduleSummary.skipped || 0)),
+    cancelled: Math.max(0, Number(scheduleSummary.cancelled || 0)),
+    totalAmount: Number(subscription?.totalAmount || 0),
+    currency: subscription?.currency || 'INR',
+    meals: Array.isArray(subscription?.meals) ? subscription.meals : [],
+    deliveryAddress: subscription?.deliveryAddress || null,
+    createdAt: subscription?.createdAt || null,
+    startDate: subscription?.startDate || null,
+    endDate: subscription?.endDate || null,
+  };
+}
+
+async function getScheduleSummaries(subscriptionIds = []) {
+  if (!subscriptionIds.length) return new Map();
+  const rows = await FoodSubscriptionSchedule.aggregate([
+    { $match: { subscriptionId: { $in: subscriptionIds } } },
+    {
+      $group: {
+        _id: { subscriptionId: '$subscriptionId', status: '$status' },
+        count: { $sum: 1 },
+      },
+    },
+  ]);
+
+  const summaryMap = new Map();
+  rows.forEach((row) => {
+    const id = String(row._id.subscriptionId);
+    const status = String(row._id.status || 'unknown');
+    const current = summaryMap.get(id) || { total: 0 };
+    current[status] = Number(row.count || 0);
+    current.total += Number(row.count || 0);
+    summaryMap.set(id, current);
+  });
+  return summaryMap;
+}
+
+export async function listSubscriptionsAdmin(query = {}) {
+  const { page, limit, skip } = buildPaginationOptions(query);
+  const filter = {};
+  const status = String(query.status || '').trim().toLowerCase();
+  const restaurantId = String(query.restaurantId || '').trim();
+  const search = String(query.search || '').trim();
+
+  if (status && status !== 'all' && status !== 'expired') {
+    filter.status = status;
+  }
+  if (restaurantId && mongoose.isValidObjectId(restaurantId)) {
+    filter.restaurantId = new mongoose.Types.ObjectId(restaurantId);
+  }
+  if (search) {
+    const regex = new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+    filter.$or = [
+      { dishName: regex },
+      { restaurantName: regex },
+      { customerName: regex },
+      { customerPhone: regex },
+      { planTitle: regex },
+      { razorpaySubscriptionId: regex },
+      { razorpayOrderId: regex },
+    ];
+    if (mongoose.isValidObjectId(search)) {
+      filter.$or.push({ _id: new mongoose.Types.ObjectId(search) });
+    }
+  }
+
+  const [docs, total, statsRows] = await Promise.all([
+    FoodSubscription.find(filter)
+      .populate('userId', 'name phone email')
+      .populate('restaurantId', 'restaurantName area city ownerPhone')
+      .populate('planId', 'title durationDays amount currency')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean(),
+    FoodSubscription.countDocuments(filter),
+    FoodSubscription.aggregate([
+      {
+        $group: {
+          _id: '$status',
+          count: { $sum: 1 },
+          amount: { $sum: '$totalAmount' },
+        },
+      },
+    ]),
+  ]);
+
+  const scheduleSummaries = await getScheduleSummaries(docs.map((doc) => doc._id));
+  let rows = docs.map((doc) =>
+    normalizeSubscriptionForAdmin(doc, scheduleSummaries.get(String(doc._id)) || {}),
+  );
+
+  if (status === 'expired') {
+    rows = rows.filter((row) => row.status === 'expired');
+  }
+
+  const stats = statsRows.reduce(
+    (acc, row) => {
+      const key = String(row._id || 'unknown');
+      acc.byStatus[key] = Number(row.count || 0);
+      acc.total += Number(row.count || 0);
+      acc.totalAmount += Number(row.amount || 0);
+      return acc;
+    },
+    { total: 0, totalAmount: 0, byStatus: {} },
+  );
+
+  const paginated = buildPaginatedResult({ docs: rows, total, page, limit });
+  return { ...paginated, subscriptions: paginated.data, stats };
+}
+
+export async function getSubscriptionAdmin(subscriptionId) {
+  if (!mongoose.isValidObjectId(subscriptionId)) {
+    throw new ValidationError('Subscription id is invalid');
+  }
+
+  const subscription = await FoodSubscription.findById(subscriptionId)
+    .populate('userId', 'name phone email')
+    .populate('restaurantId', 'restaurantName area city ownerPhone')
+    .populate('planId', 'title durationDays amount currency')
+    .lean();
+
+  if (!subscription) throw new NotFoundError('Subscription not found');
+
+  const schedules = await FoodSubscriptionSchedule.find({
+    subscriptionId: new mongoose.Types.ObjectId(subscriptionId),
+  })
+    .populate('orderId', 'order_id orderStatus payment pricing createdAt')
+    .sort({ serviceDate: 1, mealName: 1 })
+    .lean();
+
+  const scheduleSummary = schedules.reduce((acc, schedule) => {
+    const status = String(schedule.status || 'unknown');
+    acc[status] = Number(acc[status] || 0) + 1;
+    acc.total += 1;
+    return acc;
+  }, { total: 0 });
+
+  return {
+    subscription: normalizeSubscriptionForAdmin(subscription, scheduleSummary),
+    schedules: schedules.map((schedule) => ({
+      ...schedule,
+      scheduleId: schedule._id?.toString?.() || String(schedule._id || ''),
+    })),
   };
 }

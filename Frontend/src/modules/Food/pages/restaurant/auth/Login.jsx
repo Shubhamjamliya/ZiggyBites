@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from "react"
-import { useNavigate, Link } from "react-router-dom"
-import { motion, AnimatePresence } from "framer-motion"
-import { ShieldCheck, Utensils, Star, Heart, ArrowRight, Loader2, Store, ShieldQuestion } from "lucide-react"
-import { Button } from "@food/components/ui/button"
+import { Link, useNavigate } from "react-router-dom"
+import { motion } from "framer-motion"
+import { ArrowRight, Loader2, Phone } from "lucide-react"
 import { toast } from "sonner"
 import { restaurantAPI } from "@food/api"
 import { getCachedSettings, loadBusinessSettings } from "@food/utils/businessSettings"
@@ -11,13 +10,12 @@ const DEFAULT_COUNTRY_CODE = "+91"
 
 export default function RestaurantLogin() {
   const navigate = useNavigate()
-  const phoneInputRef = useRef(null)
   const [phone, setPhone] = useState(() => sessionStorage.getItem("restaurantLoginPhone") || "")
   const [loading, setLoading] = useState(false)
   const [brand, setBrand] = useState(() => {
     const cached = getCachedSettings()
     return {
-      logoUrl: cached?.logo?.url || null,
+      logoUrl: cached?.restaurantLogo?.url || cached?.logo?.url || null,
       companyName: cached?.companyName || "ZiggyBites",
     }
   })
@@ -29,21 +27,15 @@ export default function RestaurantLogin() {
     const applySettings = (settings) => {
       if (!settings || cancelled) return
       setBrand({
-        logoUrl: settings.logo?.url || null,
+        logoUrl: settings.restaurantLogo?.url || settings.logo?.url || null,
         companyName: settings.companyName || "ZiggyBites",
       })
     }
 
     applySettings(getCachedSettings())
+    loadBusinessSettings().then(applySettings).catch(() => {})
 
-    loadBusinessSettings()
-      .then(applySettings)
-      .catch(() => {})
-
-    const handleSettingsUpdate = () => {
-      applySettings(getCachedSettings())
-    }
-
+    const handleSettingsUpdate = () => applySettings(getCachedSettings())
     window.addEventListener("businessSettingsUpdated", handleSettingsUpdate)
     return () => {
       cancelled = true
@@ -53,8 +45,7 @@ export default function RestaurantLogin() {
 
   const validatePhone = (num) => {
     const digits = num.replace(/\D/g, "")
-    if (digits.length !== 10) return false
-    return ["6", "7", "8", "9"].includes(digits[0])
+    return digits.length === 10 && ["6", "7", "8", "9"].includes(digits[0])
   }
 
   const handleSendOTP = async (e) => {
@@ -71,157 +62,114 @@ export default function RestaurantLogin() {
 
     try {
       await restaurantAPI.sendOTP(fullPhone, "login")
-      const authData = {
+      sessionStorage.setItem("restaurantAuthData", JSON.stringify({
         method: "phone",
         phone: fullPhone,
         isSignUp: false,
         module: "restaurant",
-      }
-      sessionStorage.setItem("restaurantAuthData", JSON.stringify(authData))
+      }))
       sessionStorage.setItem("restaurantLoginPhone", phone)
       toast.success("Verification code sent!")
       navigate("/food/restaurant/otp")
     } catch (apiErr) {
-      const msg = apiErr?.response?.data?.message || apiErr?.message || "Failed to send OTP."
-      toast.error(msg)
+      toast.error(apiErr?.response?.data?.message || apiErr?.message || "Failed to send OTP.")
     } finally {
       setLoading(false)
       submitting.current = false
     }
   }
 
-  const primaryColor = "#7e3866"
-
   return (
-    <div className="min-h-screen bg-white dark:bg-[#0a0a0a] flex flex-col relative overflow-hidden font-['Poppins']">
-      {/* Decorative Background Elements */}
-      <div className="absolute top-0 left-0 w-full h-[600px] bg-gradient-to-b from-[#7e3866]/10 via-[#7e3866]/5 to-transparent pointer-events-none" />
-      <div className="absolute top-[-100px] right-[-100px] w-[500px] h-[500px] bg-[#7e3866]/5 rounded-full blur-[120px] pointer-events-none animate-pulse" />
-      <div className="absolute bottom-[-100px] left-[-100px] w-[400px] h-[400px] bg-[#7e3866]/5 rounded-full blur-[120px] pointer-events-none" />
-
-      {/* Main Content */}
-      <div className="absolute top-6 right-6 z-20">
-        <Link to="/restaurant/auth/support">
-          <Button variant="ghost" className="text-gray-500 hover:text-[#7e3866] font-semibold flex items-center gap-2">
-            <ShieldQuestion className="w-5 h-5" />
-            Support
-          </Button>
-        </Link>
+    <div className="min-h-screen bg-white flex flex-col relative overflow-hidden font-['Poppins'] text-[#202030]">
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="absolute left-8 top-14 h-8 w-8 rounded-full border border-red-100 opacity-70" />
+        <div className="absolute right-10 top-24 h-5 w-5 rotate-12 rounded border border-red-100 opacity-60" />
+        <div className="absolute left-6 top-44 h-4 w-4 rotate-45 rounded-sm border border-red-100 opacity-60" />
+        <div className="absolute bottom-0 left-0 right-0 h-28 bg-red-50" style={{ clipPath: "polygon(0 60%, 18% 78%, 38% 67%, 58% 84%, 78% 62%, 100% 48%, 100% 100%, 0 100%)" }} />
+        <div className="absolute bottom-0 left-0 right-0 h-20 bg-[#ff1f1f]" style={{ clipPath: "polygon(0 82%, 22% 70%, 46% 84%, 70% 64%, 100% 42%, 100% 100%, 0 100%)" }} />
       </div>
 
-      <div className="flex-1 flex flex-col items-center justify-center px-6 py-12 relative z-10">
+      <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-sm flex-col px-7 pb-24 pt-10">
         <motion.div
-          initial={{ opacity: 0, y: 30 }}
+          initial={{ opacity: 0, y: 24 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, ease: "easeOut" }}
-          className="w-full max-w-[440px]"
+          transition={{ duration: 0.45, ease: "easeOut" }}
+          className="w-full"
         >
-          {/* Logo & Header */}
-          <div className="text-center mb-8">
-            <motion.div
-              initial={{ scale: 0, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              transition={{ type: "spring", stiffness: 200, damping: 20 }}
-              className="relative inline-block mb-4"
-            >
+          <div className="text-center">
+            <div className="relative mx-auto mb-2 flex h-36 w-36 items-center justify-center rounded-full bg-[#fff7f2]">
               {brand.logoUrl ? (
-                <img 
-                  src={brand.logoUrl} 
-                  alt={`${brand.companyName || "Company"} Logo`} 
-                  className="w-32 h-32 md:w-36 md:h-36 object-contain mx-auto"
+                <img
+                  src={brand.logoUrl}
+                  alt={`${brand.companyName || "Company"} Restaurant Logo`}
+                  className="h-32 w-32 object-contain"
                   onError={() => setBrand((prev) => ({ ...prev, logoUrl: null }))}
                 />
               ) : (
-                <div className="w-32 h-32 md:w-36 md:h-36 mx-auto rounded-full bg-[#7e3866]/10 text-[#7e3866] flex items-center justify-center text-4xl md:text-5xl font-black">
+                <div className="flex h-28 w-28 items-center justify-center rounded-full bg-red-50 text-5xl font-black text-[#ff1f1f]">
                   {(brand.companyName || "Z").trim().charAt(0).toUpperCase()}
                 </div>
               )}
-            </motion.div>
-
-            <motion.p
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.5 }}
-              className="text-gray-400 dark:text-gray-500 font-bold text-xs uppercase tracking-[0.3em]"
-            >
-              RESTAURANT PARTNER
-            </motion.p>
+            </div>
+            <h1 className="text-4xl font-black italic tracking-tight text-[#ff1f1f] drop-shadow-sm">
+              {brand.companyName || "ZiggyBites"}
+            </h1>
+            <div className="mx-auto mt-2 h-1 w-16 rounded-full bg-[#ff1f1f]" />
           </div>
 
-          {/* Login Card */}
-          <div className="bg-white/80 dark:bg-[#1a1a1a]/80 backdrop-blur-2xl rounded-[3rem] p-8 sm:p-12 shadow-[0_40px_80px_-20px_rgba(126,56,102,0.2)] dark:shadow-none border border-white/20 dark:border-gray-800 relative overflow-hidden">
-            <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-transparent via-[#7e3866]/20 to-transparent" />
-
-            <div className="mb-10 text-center sm:text-left">
-              <h2 className="text-3xl font-black text-gray-900 dark:text-white mb-2 font-['Outfit'] tracking-tight">
-                Partner Login
-              </h2>
-              <div className="h-1 w-10 bg-[#7e3866] rounded-full mb-3 hidden sm:block" />
-              <p className="text-base text-gray-500 dark:text-gray-400 font-medium">
-                Enter your registered mobile number to manage your restaurant
-              </p>
-            </div>
-
-            <form onSubmit={handleSendOTP} className="space-y-8">
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-[#7e3866] uppercase tracking-[0.2em] ml-1">Mobile Number</label>
-                <div className="relative group">
-                  <div className="absolute inset-y-0 left-5 flex items-center pointer-events-none">
-                    <span className="text-sm font-bold text-[#7e3866] border-r border-gray-200 dark:border-gray-800 pr-3">+91</span>
-                  </div>
-                  <input
-                    ref={phoneInputRef}
-                    type="tel"
-                    required
-                    autoFocus
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
-                    maxLength={10}
-                    className="block w-full pl-16 pr-6 py-4 bg-gray-50 dark:bg-gray-900/50 text-gray-900 dark:text-white border-2 border-transparent focus:border-[#7e3866]/50 rounded-2xl outline-none transition-all placeholder:text-gray-300 font-bold text-lg shadow-sm"
-                    placeholder="00000 00000"
-                  />
+          <div className="mt-8">
+            <motion.form
+              initial={{ opacity: 0, x: -16 }}
+              animate={{ opacity: 1, x: 0 }}
+              onSubmit={handleSendOTP}
+              className="space-y-4"
+            >
+              <div className="relative rounded-xl bg-white shadow-[0_8px_28px_rgba(15,23,42,0.08)] ring-1 ring-gray-100">
+                <div className="absolute inset-y-0 left-4 flex items-center">
+                  <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-red-50 text-[#ff1f1f]">
+                    <Phone className="h-4 w-4" />
+                  </span>
+                </div>
+                <span className="absolute left-16 top-[33px] -translate-y-1/2 text-sm font-black leading-none text-[#202030]">
+                  +91
+                </span>
+                <input
+                  type="tel"
+                  required
+                  autoFocus
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                  maxLength={10}
+                  className="block h-14 w-full rounded-xl bg-transparent pl-[92px] pr-4 pt-4 text-sm font-black leading-none text-[#202030] outline-none placeholder:text-gray-300"
+                  placeholder="98765 43210"
+                />
+                <div className="pointer-events-none absolute left-16 top-2 text-[9px] font-semibold text-gray-400">
+                  Enter restaurant phone number
                 </div>
               </div>
+
+              <label className="flex items-center gap-2 text-[10px] font-semibold text-[#5f5f6f]">
+                <input type="checkbox" defaultChecked className="h-3.5 w-3.5 rounded border-red-200 accent-[#ff2727]" />
+                Remember me for faster sign-in
+              </label>
 
               <button
                 type="submit"
                 disabled={loading || phone.length < 10}
-                className="w-full py-4.5 bg-[#7e3866] hover:bg-[#6a2f56] disabled:bg-gray-200 dark:disabled:bg-gray-800 disabled:text-gray-400 text-white rounded-2xl font-bold text-lg shadow-xl shadow-[#7e3866]/20 transition-all active:scale-[0.98] flex items-center justify-center gap-2 group overflow-hidden relative"
+                className="relative flex h-12 w-full items-center justify-center rounded-xl bg-gradient-to-r from-[#ef1f1f] to-[#ff641f] text-sm font-black text-white shadow-[0_12px_24px_rgba(255,49,31,0.25)] transition active:scale-[0.98] disabled:opacity-60"
               >
-                {loading ? (
-                  <Loader2 className="w-6 h-6 animate-spin" />
-                ) : (
-                  <>
-                    <span>Get Start</span>
-                    <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-                  </>
-                )}
-                <motion.div
-                  className="absolute inset-0 bg-white/20 translate-x-[-100%]"
-                  whileHover={{ translateX: "100%" }}
-                  transition={{ duration: 0.6 }}
-                />
+                {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : "Continue"}
+                {!loading && <ArrowRight className="absolute right-5 h-4 w-4" />}
               </button>
-            </form>
+            </motion.form>
           </div>
 
-          <div className="mt-8 text-center">
-            <p className="text-[11px] text-gray-400 font-medium leading-relaxed max-w-[320px] mx-auto">
-              By continuing, you agree to {brand.companyName || "ZiggyBites"}'s <br />
-              <Link to="/food/restaurant/profile/terms" className="text-gray-900 dark:text-white font-bold hover:text-[#7e3866] transition-colors">Terms of Service</Link> & <Link to="/food/restaurant/profile/privacy" className="text-gray-900 dark:text-white font-bold hover:text-[#7e3866] transition-colors">Privacy Policy</Link>
-            </p>
-          </div>
-
-          <div className="mt-12 flex justify-center items-center gap-6 opacity-30 grayscale hover:opacity-60 transition-opacity">
-            <div className="flex items-center gap-1.5">
-              <ShieldCheck className="w-4 h-4" />
-              <span className="text-[10px] font-black uppercase tracking-widest">Business Verified</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <Heart className="w-4 h-4" />
-              <span className="text-[10px] font-black uppercase tracking-widest">Partner Success</span>
-            </div>
-          </div>
+          <p className="mx-auto mt-5 max-w-[260px] text-center text-[9px] font-semibold leading-4 text-gray-400">
+            By continuing, you agree to our<br />
+            <Link to="/food/restaurant/profile/terms" className="font-black text-[#ff2727] underline">Terms of Service</Link>
+            <span> - </span>
+            <Link to="/food/restaurant/profile/privacy" className="font-black text-[#ff2727] underline">Privacy Policy</Link>
+          </p>
         </motion.div>
       </div>
     </div>

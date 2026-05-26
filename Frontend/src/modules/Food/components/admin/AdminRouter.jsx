@@ -12,6 +12,8 @@ const NewRefundRequests = lazy(() => import("@food/pages/admin/refunds/NewRefund
 const FoodApproval = lazy(() => import("@food/pages/admin/restaurant/FoodApproval"));
 const OrdersPage = lazy(() => import("@food/pages/admin/orders/OrdersPage"));
 const OrderDetectDelivery = lazy(() => import("@food/pages/admin/OrderDetectDelivery"));
+const SubscriptionOrders = lazy(() => import("@food/pages/admin/SubscriptionOrders"));
+const SubscriptionStatus = lazy(() => import("@food/pages/admin/SubscriptionStatus"));
 const AppCustomization = lazy(() => import("@food/pages/admin/app-customization/AppCustomization"));
 const TimeManagement = lazy(() => import("@food/pages/admin/app-customization/TimeManagement"));
 const Category = lazy(() => import("@food/pages/admin/categories/Category"));
@@ -177,6 +179,10 @@ export default function AdminRouter() {
             <Route path="app-customization/time-management" element={<TimeManagement />} />
             <Route path="order-detect-delivery" element={<OrderDetectDelivery />} />
             <Route path="order-refunds/new" element={<NewRefundRequests />} />
+
+            {/* SUBSCRIPTION MANAGEMENT */}
+            <Route path="subscriptions/all" element={<SubscriptionOrders />} />
+            <Route path="subscriptions/status" element={<SubscriptionStatus />} />
 
             {/* RESTAURANT MANAGEMENT */}
             <Route path="zone-setup" element={<ZoneSetup />} />

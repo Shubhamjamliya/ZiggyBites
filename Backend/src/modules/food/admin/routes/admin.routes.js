@@ -8,6 +8,7 @@ import * as feedbackExperienceController from '../controllers/feedbackExperience
 import * as notificationBroadcastController from '../controllers/notificationBroadcast.controller.js';
 import * as diningAdminController from '../../dining/controllers/diningAdmin.controller.js';
 import * as orderController from '../../orders/controllers/order.controller.js';
+import * as subscriptionController from '../../subscription/controllers/subscription.controller.js';
 import {
     getAppCustomizationController,
     sendAppCustomizationTestNotificationController,
@@ -150,7 +151,9 @@ router.get('/business-settings/public', businessSettingsController.getBusinessSe
 router.get('/business-settings', businessSettingsController.getBusinessSettings);
 router.patch('/business-settings', upload.fields([
     { name: 'logo', maxCount: 1 },
-    { name: 'favicon', maxCount: 1 }
+    { name: 'favicon', maxCount: 1 },
+    { name: 'restaurantLogo', maxCount: 1 },
+    { name: 'deliveryLogo', maxCount: 1 }
 ]), businessSettingsController.updateBusinessSettings);
 
 // ----- Delivery Cash Limit -----
@@ -220,6 +223,10 @@ router.patch('/dining/requests/:id/reject', diningAdminController.rejectDiningRe
 router.get('/orders', orderController.listOrdersAdminController);
 router.get('/orders/:orderId', orderController.getOrderByIdAdminController);
 router.delete('/orders/:orderId', orderController.deleteOrderAdminController);
+
+// ----- Subscriptions -----
+router.get('/subscriptions', subscriptionController.listSubscriptionsAdminController);
+router.get('/subscriptions/:subscriptionId', subscriptionController.getSubscriptionAdminController);
 
 // ----- CMS Pages (About + legal) -----
 router.get('/pages-social-media/:key', getAdminPageController);

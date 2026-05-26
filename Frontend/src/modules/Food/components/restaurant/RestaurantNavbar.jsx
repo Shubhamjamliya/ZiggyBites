@@ -104,12 +104,12 @@ export default function RestaurantNavbar({
       const cached = getCachedSettings()
       if (cached) {
         if (cached.companyName) setCompanyName(cached.companyName)
-        if (cached.logo?.url) setLogoUrl(cached.logo.url)
+        if (cached.restaurantLogo?.url || cached.logo?.url) setLogoUrl(cached.restaurantLogo?.url || cached.logo.url)
       } else {
         const settings = await loadBusinessSettings()
         if (settings) {
           if (settings.companyName) setCompanyName(settings.companyName)
-          if (settings.logo?.url) setLogoUrl(settings.logo.url)
+          if (settings.restaurantLogo?.url || settings.logo?.url) setLogoUrl(settings.restaurantLogo?.url || settings.logo.url)
         }
       }
     }
@@ -119,7 +119,7 @@ export default function RestaurantNavbar({
       const cached = getCachedSettings()
       if (cached) {
         if (cached.companyName) setCompanyName(cached.companyName)
-        if (cached.logo?.url) setLogoUrl(cached.logo.url)
+        if (cached.restaurantLogo?.url || cached.logo?.url) setLogoUrl(cached.restaurantLogo?.url || cached.logo.url)
       }
     }
     window.addEventListener('businessSettingsUpdated', handleSettingsUpdate)

@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Link, useNavigate } from "react-router-dom"
-import { Phone, ArrowRight, Loader2, Mail, ShieldCheck, Heart, ShieldQuestion } from "lucide-react"
+import { Phone, ArrowRight, Loader2, ShieldCheck, Heart, ShieldQuestion } from "lucide-react"
 import { toast } from "sonner"
 import { authAPI, userAPI } from "@food/api"
 import { setAuthData } from "@food/utils/auth"
@@ -420,21 +420,6 @@ export default function UnifiedOTPFastLogin() {
                 </motion.form>
               )}
             </AnimatePresence>
-          </div>
-
-          <div className="mt-5 flex items-center gap-3">
-            <div className="h-px flex-1 bg-gray-100" />
-            <span className="text-[10px] font-semibold text-gray-400">or continue with</span>
-            <div className="h-px flex-1 bg-gray-100" />
-          </div>
-
-          <div className="mt-4 flex justify-center gap-6">
-            <button type="button" className="flex h-11 w-14 items-center justify-center rounded-full bg-white text-lg font-black text-[#4285f4] shadow-[0_8px_24px_rgba(15,23,42,0.08)] ring-1 ring-gray-100">
-              G
-            </button>
-            <button type="button" className="flex h-11 w-14 items-center justify-center rounded-full bg-white text-[#ff3027] shadow-[0_8px_24px_rgba(15,23,42,0.08)] ring-1 ring-gray-100">
-              <Mail className="h-5 w-5 fill-red-50" />
-            </button>
           </div>
 
           <p className="mx-auto mt-5 max-w-[260px] text-center text-[9px] font-semibold leading-4 text-gray-400">

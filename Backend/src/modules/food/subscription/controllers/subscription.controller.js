@@ -40,6 +40,24 @@ export async function listMySubscriptionsController(req, res, next) {
   }
 }
 
+export async function listSubscriptionsAdminController(req, res, next) {
+  try {
+    const result = await subscriptionService.listSubscriptionsAdmin(req.query || {});
+    return sendResponse(res, 200, 'Subscriptions retrieved', result);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function getSubscriptionAdminController(req, res, next) {
+  try {
+    const result = await subscriptionService.getSubscriptionAdmin(req.params.subscriptionId);
+    return sendResponse(res, 200, 'Subscription retrieved', result);
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function listUpcomingSubscriptionSchedulesController(req, res, next) {
   try {
     const userId = req.user?.userId;

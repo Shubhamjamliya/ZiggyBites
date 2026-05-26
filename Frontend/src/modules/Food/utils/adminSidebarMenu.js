@@ -95,6 +95,22 @@ export const adminSidebarMenu = [
   },
   {
     type: "section",
+    label: "SUBSCRIPTION",
+    items: [
+      {
+        type: "expandable",
+        label: "Subscription",
+        icon: "Package",
+        subItems: [
+          { label: "All", path: "/admin/food/subscriptions/all" },
+          { label: "Status", path: "/admin/food/subscriptions/status" },
+          { label: "Plans", path: "/admin/food/subscription-plan-management" },
+        ],
+      },
+    ],
+  },
+  {
+    type: "section",
     label: "APP CUSTOMIZATION",
     items: [
       {
@@ -104,6 +120,8 @@ export const adminSidebarMenu = [
         subItems: [
           { label: "Normal app", path: "/admin/food/app-customization" },
           { label: "Timing", path: "/admin/food/app-customization/time-management" },
+          { label: "User App Home UI", path: "/admin/food/hero-banner-management" },
+          { label: "Meal Time Management", path: "/admin/food/meal-time-management" },
         ],
       },
     ],
@@ -207,15 +225,6 @@ export const adminSidebarMenu = [
     label: "TRANSACTION MANAGEMENT",
     items: [
       { type: "link", label: "Restaurant Withdraws", path: "/admin/food/restaurant-withdraws", icon: "CreditCard" },
-    ],
-  },
-  {
-    type: "section",
-    label: "BANNER SETTINGS",
-    items: [
-      { type: "link", label: "Landing Page Management", path: "/admin/food/hero-banner-management", icon: "Image" },
-      { type: "link", label: "Meal Time Management", path: "/admin/food/meal-time-management", icon: "Calendar" },
-      { type: "link", label: "Subscription Plans", path: "/admin/food/subscription-plan-management", icon: "Calendar" },
     ],
   },
   {

@@ -67,12 +67,12 @@ export default function FeedNavbar({ className = "" }) {
   useEffect(() => {
     const loadLogo = async () => {
       const cached = getCachedSettings()
-      if (cached?.logo?.url) {
-        setLogoUrl(cached.logo.url)
+      if (cached?.deliveryLogo?.url || cached?.logo?.url) {
+        setLogoUrl(cached.deliveryLogo?.url || cached.logo.url)
       } else {
         const settings = await loadBusinessSettings()
-        if (settings?.logo?.url) {
-          setLogoUrl(settings.logo.url)
+        if (settings?.deliveryLogo?.url || settings?.logo?.url) {
+          setLogoUrl(settings.deliveryLogo?.url || settings.logo.url)
         }
       }
     }
@@ -80,8 +80,8 @@ export default function FeedNavbar({ className = "" }) {
 
     const handleSettingsUpdate = () => {
       const cached = getCachedSettings()
-      if (cached?.logo?.url) {
-        setLogoUrl(cached.logo.url)
+      if (cached?.deliveryLogo?.url || cached?.logo?.url) {
+        setLogoUrl(cached.deliveryLogo?.url || cached.logo.url)
       }
     }
     window.addEventListener('businessSettingsUpdated', handleSettingsUpdate)

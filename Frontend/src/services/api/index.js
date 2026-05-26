@@ -559,6 +559,15 @@ export const adminAPI = {
     apiClient.delete(`/food/admin/orders/${String(orderId)}`, {
       contextModule: "admin",
     }),
+  getSubscriptions: (params = {}) =>
+    apiClient.get("/food/admin/subscriptions", {
+      params: { limit: 100, page: 1, ...params },
+      contextModule: "admin",
+    }),
+  getSubscriptionById: (subscriptionId) =>
+    apiClient.get(`/food/admin/subscriptions/${String(subscriptionId)}`, {
+      contextModule: "admin",
+    }),
   /** Dispatch settings – auto vs manual assign (global) */
   /** Create restaurant (admin). Single API: POST /food/admin/restaurants. Body: JSON with image URLs. */
   createRestaurant: (body) =>
@@ -617,6 +626,8 @@ export const adminAPI = {
     formData.append("data", JSON.stringify(data));
     if (files.logo) formData.append("logo", files.logo);
     if (files.favicon) formData.append("favicon", files.favicon);
+    if (files.restaurantLogo) formData.append("restaurantLogo", files.restaurantLogo);
+    if (files.deliveryLogo) formData.append("deliveryLogo", files.deliveryLogo);
 
     return apiClient.patch("/food/admin/business-settings", formData, {
       contextModule: "admin",
@@ -933,6 +944,8 @@ export const adminAPI = {
     // Add files
     if (files.logo) formData.append("logo", files.logo);
     if (files.favicon) formData.append("favicon", files.favicon);
+    if (files.restaurantLogo) formData.append("restaurantLogo", files.restaurantLogo);
+    if (files.deliveryLogo) formData.append("deliveryLogo", files.deliveryLogo);
 
     return apiClient.patch(API_ENDPOINTS.ADMIN.BUSINESS_SETTINGS, formData, {
       headers: { "Content-Type": "multipart/form-data" },

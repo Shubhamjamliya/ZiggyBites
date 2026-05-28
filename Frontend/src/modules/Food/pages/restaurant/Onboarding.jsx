@@ -237,6 +237,7 @@ const formatNameToCapital = (str) => {
 const normalizeIFSC = (val) => String(val || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 11)
 const normalizePAN = (val) => String(val || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 10)
 const normalizeGST = (val) => String(val || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 15)
+const normalizeFssaiNumber = (val) => String(val || "").replace(/\D/g, "").slice(0, 14)
 const normalizeBankAcc = (val) => String(val || "").replace(/\D/g, "").slice(0, 18)
 
 const getTodayLocalYMD = () => formatDateToLocalYMD(new Date())
@@ -1376,7 +1377,7 @@ export default function RestaurantOnboarding() {
     if (!step3.ifscCode?.trim()) {
       errors.push("IFSC code is required")
     } else if (!IFSC_CODE_REGEX.test(step3.ifscCode.trim().toUpperCase())) {
-      errors.push("IFSC code must contain exactly 11 alphanumeric characters")
+      errors.push("Bank IFSC code must be valid (11 characters, e.g., HDFC0001234)")
     }
     if (!step3.accountHolderName?.trim()) {
       errors.push("Account holder name is required")
@@ -2764,10 +2765,12 @@ export default function RestaurantOnboarding() {
           <Input
             value={step3.fssaiNumber || ""}
             onChange={(e) =>
-              setStep3({ ...step3, fssaiNumber: e.target.value.replace(/\D/g, "").slice(0, 14) })
+              setStep3({ ...step3, fssaiNumber: normalizeFssaiNumber(e.target.value) })
             }
             className="bg-white text-sm"
             placeholder="FSSAI number (14 digits)"
+            inputMode="numeric"
+            maxLength={14}
           />
           <div>
             <Label className="text-xs text-gray-700 mb-1 block">FSSAI expiry date</Label>
@@ -2888,7 +2891,8 @@ export default function RestaurantOnboarding() {
             value={step3.ifscCode || ""}
             onChange={(e) => setStep3({ ...step3, ifscCode: normalizeIFSC(e.target.value) })}
             className="bg-white text-sm"
-            placeholder="IFSC code"
+            placeholder="IFSC code (e.g., HDFC0001234)"
+            maxLength={11}
           />
           <Select
             value={step3.accountType || ""}

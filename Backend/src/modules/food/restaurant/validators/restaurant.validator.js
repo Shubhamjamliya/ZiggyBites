@@ -18,6 +18,7 @@ const requiredBooleanSchema = z.preprocess((value) => {
 }, z.boolean({ required_error: 'Please select whether the restaurant is pure veg' }));
 
 const panRegex = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/;
+const fssaiRegex = /^\d{14}$/;
 
 const normalizeTimeValue = (value) => {
     const raw = String(value || '').trim();
@@ -95,7 +96,11 @@ const restaurantRegisterSchema = z.object({
     gstNumber: z.string().optional(),
     gstLegalName: z.string().optional(),
     gstAddress: z.string().optional(),
-    fssaiNumber: z.string().optional(),
+    fssaiNumber: z
+        .string()
+        .regex(fssaiRegex, 'FSSAI number must contain exactly 14 digits')
+        .optional()
+        .or(z.literal('')),
     fssaiExpiry: z.string().optional(),
     accountNumber: z.string().optional(),
     ifscCode: z.string().optional(),

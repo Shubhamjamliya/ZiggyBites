@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Cookie, CupSoda, IceCreamBowl, Pizza, ShoppingBag } from 'lucide-react';
-import { getCachedSettings, loadBusinessSettings } from '@/modules/Food/utils/businessSettings';
+import { getCachedSettings, loadBusinessSettings, normalizeKitchenAppName } from '@/modules/Food/utils/businessSettings';
 
 export default function SplashScreen({ onFinish }) {
   const [isFinishing, setIsFinishing] = useState(false);
@@ -9,7 +9,7 @@ export default function SplashScreen({ onFinish }) {
     const cached = getCachedSettings();
     return {
       logoUrl: cached?.logo?.url || '',
-      companyName: cached?.companyName || 'ZiggyBites',
+      companyName: normalizeKitchenAppName(cached?.companyName) || 'ZiggyBites',
     };
   });
 
@@ -20,7 +20,7 @@ export default function SplashScreen({ onFinish }) {
         if (!mounted || !settings) return;
         setBrand({
           logoUrl: settings.logo?.url || '',
-          companyName: settings.companyName || 'ZiggyBites',
+          companyName: normalizeKitchenAppName(settings.companyName) || 'ZiggyBites',
         });
       })
       .catch(() => {});

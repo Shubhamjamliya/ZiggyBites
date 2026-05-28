@@ -485,7 +485,7 @@ export default function AddRestaurant() {
     }
     if (step3.accountNumber !== step3.confirmAccountNumber) errors.push("Account number and confirmation do not match")
     if (!step3.ifscCode?.trim()) errors.push("IFSC code is required")
-    if (step3.ifscCode?.trim() && !IFSC_REGEX.test(step3.ifscCode.trim())) errors.push("IFSC code must be in valid format")
+    if (step3.ifscCode?.trim() && !IFSC_REGEX.test(step3.ifscCode.trim())) errors.push("Bank IFSC code must be valid (11 characters, e.g., HDFC0001234)")
     if (!step3.accountHolderName?.trim()) errors.push("Account holder name is required")
     if (step3.accountHolderName?.trim() && (!NAME_REGEX.test(step3.accountHolderName.trim()) || !hasLetters(step3.accountHolderName))) {
       errors.push("Account holder name must contain characters only")
@@ -1381,7 +1381,7 @@ export default function AddRestaurant() {
       <section className="bg-white p-4 sm:p-6 rounded-md space-y-4">
         <h2 className="text-lg font-semibold text-black">FSSAI details</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Input value={step3.fssaiNumber || ""} onChange={(e) => setStep3({ ...step3, fssaiNumber: sanitizeFssai(e.target.value) })} className="bg-white text-sm" placeholder="FSSAI number*" inputMode="numeric" maxLength={14} />
+          <Input value={step3.fssaiNumber || ""} onChange={(e) => setStep3({ ...step3, fssaiNumber: sanitizeFssai(e.target.value) })} className="bg-white text-sm" placeholder="FSSAI number (14 digits)*" inputMode="numeric" maxLength={14} />
           <div>
             <Label className="text-xs text-gray-700 mb-1 block">FSSAI expiry date*</Label>
             <Input
@@ -1412,7 +1412,7 @@ export default function AddRestaurant() {
           <Input value={step3.confirmAccountNumber || ""} onChange={(e) => setStep3({ ...step3, confirmAccountNumber: sanitizeDigits(e.target.value).slice(0, 18) })} className="bg-white text-sm" placeholder="Re-enter account number*" inputMode="numeric" maxLength={18} />
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Input value={step3.ifscCode || ""} onChange={(e) => setStep3({ ...step3, ifscCode: sanitizeIfsc(e.target.value) })} className="bg-white text-sm" placeholder="IFSC code*" maxLength={11} />
+          <Input value={step3.ifscCode || ""} onChange={(e) => setStep3({ ...step3, ifscCode: sanitizeIfsc(e.target.value) })} className="bg-white text-sm" placeholder="IFSC code (e.g., HDFC0001234)*" maxLength={11} />
           <select value={step3.accountType || ""} onChange={(e) => setStep3({ ...step3, accountType: e.target.value })} className="bg-white text-sm border border-input rounded-md h-10 px-3">
             <option value="">Select account type</option>
             <option value="Saving">Saving</option>

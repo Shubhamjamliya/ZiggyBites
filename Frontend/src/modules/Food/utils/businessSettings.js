@@ -8,12 +8,21 @@ import { API_ENDPOINTS } from "@food/api/config";
 import { publicGetOnce } from "@food/api";
 
 const SETTINGS_KEY = 'food_business_settings';
+const KITCHEN_APP_NAME = "ZiggyBites Kitchen";
+
+export const normalizeKitchenAppName = (value) => {
+  const text = String(value || "").trim();
+  if (!text) return text;
+  return text.replace(/ziggybites\s+reastaurants/gi, KITCHEN_APP_NAME).replace(/\breastaurants\b/gi, "Kitchen");
+};
 
 // Initialize from localStorage immediately so it's available for components on mount
 let cachedSettings = (() => {
   try {
     const saved = localStorage.getItem(SETTINGS_KEY);
-    return saved ? JSON.parse(saved) : null;
+    const parsed = saved ? JSON.parse(saved) : null;
+    if (parsed?.companyName) parsed.companyName = normalizeKitchenAppName(parsed.companyName);
+    return parsed;
   } catch (e) {
     return null;
   }
@@ -52,6 +61,7 @@ export const loadBusinessSettings = async () => {
       const settings = response?.data?.data || response?.data;
 
       if (settings) {
+        if (settings.companyName) settings.companyName = normalizeKitchenAppName(settings.companyName);
         cachedSettings = settings;
         try {
           localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
@@ -97,8 +107,9 @@ export const updateFavicon = (url) => {
  * Update page title
  */
 export const updateTitle = (companyName) => {
-  if (companyName && typeof document !== 'undefined') {
-    document.title = companyName;
+  const normalizedName = normalizeKitchenAppName(companyName);
+  if (normalizedName && typeof document !== 'undefined') {
+    document.title = normalizedName;
   }
 };
 
@@ -140,7 +151,7 @@ export const getCachedSettings = () => {
  */
 export const getCompanyName = () => {
   const settings = getCachedSettings();
-  return settings?.companyName || "ZiggyBites";
+  return normalizeKitchenAppName(settings?.companyName) || "ZiggyBites";
 };
 
 /**
@@ -150,7 +161,7 @@ export const getCompanyName = () => {
 export const getCompanyNameAsync = async () => {
   try {
     const settings = await loadBusinessSettings();
-    return settings?.companyName || "ZiggyBites";
+    return normalizeKitchenAppName(settings?.companyName) || "ZiggyBites";
   } catch (error) {
     return "ZiggyBites";
   }

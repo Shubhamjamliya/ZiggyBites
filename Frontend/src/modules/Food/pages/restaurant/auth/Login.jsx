@@ -4,7 +4,7 @@ import { motion } from "framer-motion"
 import { ArrowRight, Loader2, Phone } from "lucide-react"
 import { toast } from "sonner"
 import { restaurantAPI } from "@food/api"
-import { getCachedSettings, loadBusinessSettings } from "@food/utils/businessSettings"
+import { getCachedSettings, loadBusinessSettings, normalizeKitchenAppName } from "@food/utils/businessSettings"
 
 const DEFAULT_COUNTRY_CODE = "+91"
 
@@ -16,7 +16,7 @@ export default function RestaurantLogin() {
     const cached = getCachedSettings()
     return {
       logoUrl: cached?.restaurantLogo?.url || cached?.logo?.url || null,
-      companyName: cached?.companyName || "ZiggyBites",
+      companyName: normalizeKitchenAppName(cached?.companyName) || "ZiggyBites",
     }
   })
   const submitting = useRef(false)
@@ -28,7 +28,7 @@ export default function RestaurantLogin() {
       if (!settings || cancelled) return
       setBrand({
         logoUrl: settings.restaurantLogo?.url || settings.logo?.url || null,
-        companyName: settings.companyName || "ZiggyBites",
+        companyName: normalizeKitchenAppName(settings.companyName) || "ZiggyBites",
       })
     }
 

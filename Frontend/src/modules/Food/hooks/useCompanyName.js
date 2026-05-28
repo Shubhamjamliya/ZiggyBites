@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { loadBusinessSettings, getCachedSettings, getCompanyName } from '@food/utils/businessSettings';
+import { loadBusinessSettings, getCachedSettings, normalizeKitchenAppName } from '@food/utils/businessSettings';
 
 /**
  * Custom hook to get company name from business settings
@@ -9,7 +9,7 @@ export const useCompanyName = () => {
   const [companyName, setCompanyName] = useState(() => {
     // Initialize with cached value if available
     const cached = getCachedSettings();
-    return cached?.companyName || 'ZiggyBites Food';
+    return normalizeKitchenAppName(cached?.companyName) || 'ZiggyBites Food';
   });
 
   useEffect(() => {
@@ -17,7 +17,7 @@ export const useCompanyName = () => {
       try {
         const settings = await loadBusinessSettings();
         if (settings?.companyName) {
-          setCompanyName(settings.companyName);
+          setCompanyName(normalizeKitchenAppName(settings.companyName));
         }
       } catch (error) {
         // Keep default value on error
@@ -30,14 +30,14 @@ export const useCompanyName = () => {
     if (!cached?.companyName) {
       loadCompanyName();
     } else {
-      setCompanyName(cached.companyName);
+      setCompanyName(normalizeKitchenAppName(cached.companyName));
     }
 
     // Listen for business settings updates
     const handleSettingsUpdate = () => {
       const updated = getCachedSettings();
       if (updated?.companyName) {
-        setCompanyName(updated.companyName);
+        setCompanyName(normalizeKitchenAppName(updated.companyName));
       }
     };
 

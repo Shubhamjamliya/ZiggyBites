@@ -4,8 +4,6 @@ import { SlidersHorizontal, MapPin } from "lucide-react";
 export default function FilterBar({
   setIsFilterOpen,
   foodPreferenceFilters,
-  vegMode,
-  applyHomeFoodPreference,
   activeFilters,
   setActiveFilters,
   applyFiltersAndRefetch,
@@ -35,13 +33,27 @@ export default function FilterBar({
                     {foodPreferenceFilters.map((filter) => {
                       const Icon = filter.icon;
                       const isActive =
-                        (filter.id === "healthy" && vegMode) ||
-                        (filter.id === "all" && !vegMode);
+                        filter.id === "healthy"
+                          ? activeFilters.has("healthy")
+                          : !activeFilters.has("healthy");
                       return (
                         <button
                           key={filter.id}
                           type="button"
-                          onClick={() => applyHomeFoodPreference(filter.id)}
+                          onClick={() => {
+                            const nextFilters = new Set(activeFilters);
+                            if (filter.id === "healthy") {
+                              nextFilters.add("healthy");
+                            } else {
+                              nextFilters.delete("healthy");
+                            }
+                            setActiveFilters(nextFilters);
+                            void applyFiltersAndRefetch(
+                              nextFilters,
+                              sortBy,
+                              selectedCuisine,
+                            );
+                          }}
                           className={`h-9 px-4 rounded-full flex items-center gap-2 whitespace-nowrap flex-shrink-0 transition-all font-bold shadow-sm active:scale-95 ${
                             isActive
                               ? filter.id === "healthy"

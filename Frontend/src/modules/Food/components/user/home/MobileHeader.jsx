@@ -6,33 +6,33 @@ export default function MobileHeader({
   handleLocationClick, 
   handleSearchFocus, 
   vegMode, 
-  applyHomeFoodPreference 
+  handleVegModeChange
 }) {
   return (
     <header className="sticky top-0 z-50 bg-[#fff9f2]/95 backdrop-blur-md px-5 pt-3 pb-2">
-            <div className="flex items-center justify-between gap-3">
+            <div className="relative flex min-h-[34px] items-center justify-between gap-3">
               <button
                 type="button"
                 onClick={handleLocationClick}
-                className="min-w-0 flex items-center gap-1.5 text-left"
+                className="min-w-0 max-w-[34%] flex items-center gap-1.5 text-left"
               >
                 <MapPin className="h-4 w-4 text-black fill-black" />
-                <span className="text-[11px] font-black text-gray-900 truncate max-w-[120px]">
+                <span className="text-[11px] font-black text-gray-900 truncate">
                   {effectiveLocation?.area || effectiveLocation?.city || "Select location"}
                 </span>
                 <ChevronDown className="h-3.5 w-3.5 text-gray-700" />
               </button>
 
-              <div className="text-center shrink-0">
-                <div className="text-[22px] leading-none font-black italic text-[#e92823] tracking-tight">
+              <div className="pointer-events-none absolute left-1/2 top-1/2 w-[34%] -translate-x-1/2 -translate-y-1/2 text-center">
+                <div className="text-[18px] leading-none font-black italic text-[#e92823] tracking-tight">
                   ZiggyBites
                 </div>
-                <div className="text-[6px] font-black text-gray-700 tracking-[0.08em]">
+                <div className="truncate text-[5px] font-black text-gray-700 tracking-[0.08em]">
                   Homemade. Healthy. Delivered.
                 </div>
               </div>
 
-              <div className="flex items-center gap-3 text-gray-900">
+              <div className="ml-auto flex w-[34%] items-center justify-end gap-3 text-gray-900">
                 <ShoppingCart className="h-5 w-5" />
               </div>
             </div>
@@ -51,7 +51,7 @@ export default function MobileHeader({
               </button>
               <button
                 type="button"
-                onClick={() => applyHomeFoodPreference(vegMode ? "all" : "healthy")}
+                onClick={() => handleVegModeChange?.(!vegMode)}
                 className="relative h-10 w-12 rounded-xl bg-[#6aad37] text-white flex flex-col items-center justify-center shadow-sm"
                 aria-label="Toggle veg mode"
               >

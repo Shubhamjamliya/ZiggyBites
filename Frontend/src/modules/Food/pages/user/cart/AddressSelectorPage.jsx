@@ -104,8 +104,22 @@ export default function AddressSelectorPage() {
   const ENABLE_NOMINATIM_SEARCH = import.meta.env.VITE_ENABLE_NOMINATIM_SEARCH !== "false"
   const getAddressId = (address) => address?.id || address?._id || null
   const subscriptionAddressMode = routeLocation.state?.mode === "subscription-address"
+  const checkoutAddressMode = routeLocation.state?.mode === "subscription-checkout-address"
   const subscriptionId = routeLocation.state?.subscriptionId
   const returnTo = routeLocation.state?.returnTo || routeLocation.state?.backTo
+  const checkoutState = routeLocation.state?.checkoutState || {}
+
+  const finishCheckoutAddressSelection = useCallback((address) => {
+    if (!checkoutAddressMode || !returnTo) return false
+    navigate(returnTo, {
+      replace: true,
+      state: {
+        ...checkoutState,
+        selectedDeliveryAddress: normalizeAddressForSubscription(address),
+      },
+    })
+    return true
+  }, [checkoutAddressMode, checkoutState, navigate, returnTo])
 
   const finishSelection = useCallback(() => {
     if (returnTo) {
@@ -130,8 +144,11 @@ export default function AddressSelectorPage() {
   }, [subscriptionAddressMode, subscriptionId])
 
   const handleBack = () => {
-    if (subscriptionAddressMode && returnTo) {
-      navigate(returnTo, { replace: true })
+    if ((subscriptionAddressMode || checkoutAddressMode) && returnTo) {
+      navigate(returnTo, {
+        replace: true,
+        state: checkoutAddressMode ? checkoutState : undefined,
+      })
       return
     }
     goBack()
@@ -284,6 +301,23 @@ export default function AddressSelectorPage() {
         
         toast.success("Location ready: " + (loc.area || loc.city || "Current Location"), { id: "geo" })
 
+        if (checkoutAddressMode && returnTo) {
+          finishCheckoutAddressSelection({
+            label: "Current Location",
+            street: loc.formattedAddress || loc.address || "",
+            additionalDetails: loc.area || "",
+            city: loc.city || "",
+            state: loc.state || "",
+            zipCode: loc.postalCode || loc.zipCode || "",
+            phone: userProfile?.phone || "",
+            location: {
+              type: "Point",
+              coordinates: [loc.longitude, loc.latitude],
+            },
+          })
+          return
+        }
+
         if (subscriptionAddressMode) {
           setAddressFormData((prev) => ({
             ...prev,
@@ -312,6 +346,10 @@ export default function AddressSelectorPage() {
       try {
         await setDefaultAddress(id)
         try { localStorage.setItem("deliveryAddressMode", "saved") } catch {}
+        if (finishCheckoutAddressSelection(address)) {
+          toast.success("Address selected")
+          return
+        }
         const updatedSubscription = await applySubscriptionAddress(address)
         if (!updatedSubscription) toast.success("Address selected")
         finishSelection()
@@ -475,6 +513,10 @@ export default function AddressSelectorPage() {
         const id = getAddressId(created)
         if (id) await setDefaultAddress(id)
         try { localStorage.setItem("deliveryAddressMode", "saved") } catch {}
+        if (finishCheckoutAddressSelection(created)) {
+          toast.success("Address saved")
+          return
+        }
         const updatedSubscription = await applySubscriptionAddress(created)
         if (!updatedSubscription) toast.success("Address saved")
         finishSelection()

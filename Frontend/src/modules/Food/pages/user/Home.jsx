@@ -127,13 +127,22 @@ const placeholders = [
 ];
 
 const WEBVIEW_SESSION_CACHE_BUSTER = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-const HOME_FOOD_PREFERENCE_KEY = "userHomeFoodPreference";
-
 const normalizeHealthyFlag = (value) => {
   if (typeof value === "boolean") return value;
   if (typeof value === "number") return value === 1;
   if (typeof value === "string") return ["true", "1", "yes", "healthy"].includes(value.trim().toLowerCase());
   return false;
+};
+
+const isVegFoodItem = (item) => {
+  const foodType = String(item?.foodType || item?.type || item?.category || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_-]/g, "");
+  if (foodType === "nonveg" || foodType === "nonvegetarian" || foodType.includes("nonveg")) {
+    return false;
+  }
+  return item?.isVeg === true || foodType === "veg" || foodType === "vegetarian";
 };
 
 const getRestaurantDisplayName = (restaurant) => {
@@ -731,20 +740,6 @@ export default function Home() {
       setPrevVegMode(newValue);
     }
   };
-
-  const applyHomeFoodPreference = useCallback(
-    (preference) => {
-      const nextPreference = preference === "healthy" ? "healthy" : "all";
-      localStorage.setItem(HOME_FOOD_PREFERENCE_KEY, nextPreference);
-      localStorage.setItem("userVegMode", String(nextPreference === "healthy"));
-      setVegModeContext(nextPreference === "healthy");
-      setPrevVegMode(nextPreference === "healthy");
-      setShowVegModePopup(false);
-      setShowSwitchOffPopup(false);
-      isHandlingSwitchOff.current = false;
-    },
-    [setVegModeContext],
-  );
 
   // Update popup position on scroll/resize
   useEffect(() => {
@@ -1383,8 +1378,8 @@ export default function Home() {
       healthy: normalizeHealthyFlag(category.healthy),
     }));
 
-    return (vegMode ? mapped.filter((category) => category.healthy) : mapped).slice(0, 8);
-  }, [displayCategories, slugifyCategory, vegMode]);
+    return mapped.slice(0, 8);
+  }, [displayCategories, slugifyCategory]);
 
   useEffect(() => {
     if (!selectedHomeCategory) return;
@@ -1433,7 +1428,7 @@ export default function Home() {
       const normalizeItem = (item, itemIndex, sourceName = sectionName) => {
         if (!item || typeof item !== "object") return null;
         const itemTag = String(item.tag || "").trim();
-        if (vegMode && itemTag !== "Healthy") return null;
+        if (vegMode && !isVegFoodItem(item)) return null;
         const itemCategoryId = String(item.categoryId || "").trim();
         const itemCategory = String(item.categoryName || item.category || sourceName || "").trim().toLowerCase();
         const itemName = String(item.name || item.itemName || item.title || "").trim().toLowerCase();
@@ -1549,7 +1544,7 @@ export default function Home() {
             fallbackParams.categoryId = selectedHomeCategory.categoryId;
           }
           if (vegMode) {
-            fallbackParams.tag = "Healthy";
+            fallbackParams.foodType = "Veg";
           }
 
           try {
@@ -1626,7 +1621,7 @@ export default function Home() {
       const itemName = String(item?.name || item?.itemName || item?.title || "").trim();
       if (!itemName) return null;
       const itemTag = String(item?.tag || "").trim();
-      if (vegMode && itemTag !== "Healthy") return null;
+      if (vegMode && !isVegFoodItem(item)) return null;
 
       const restaurantSlug = getRestaurantSlug(restaurant, itemIndex);
       const itemCategory = String(
@@ -2130,7 +2125,7 @@ export default function Home() {
   handleLocationClick={handleLocationClick} 
   handleSearchFocus={handleSearchFocus} 
   vegMode={vegMode} 
-  applyHomeFoodPreference={applyHomeFoodPreference} 
+  handleVegModeChange={handleVegModeChange} 
 />
 
           <main className="px-5">
@@ -2219,8 +2214,6 @@ export default function Home() {
       displayCategories={displayCategories}
       setIsFilterOpen={setIsFilterOpen}
       foodPreferenceFilters={foodPreferenceFilters}
-      vegMode={vegMode}
-      applyHomeFoodPreference={applyHomeFoodPreference}
       activeFilters={activeFilters}
       toggleFilter={toggleFilter}
     />
@@ -2232,8 +2225,6 @@ export default function Home() {
                 <FilterBar 
   setIsFilterOpen={setIsFilterOpen} 
   foodPreferenceFilters={foodPreferenceFilters} 
-  vegMode={vegMode} 
-  applyHomeFoodPreference={applyHomeFoodPreference} 
   activeFilters={activeFilters} 
   setActiveFilters={setActiveFilters} 
   applyFiltersAndRefetch={applyFiltersAndRefetch} 

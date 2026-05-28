@@ -3,6 +3,7 @@ import { Toaster } from 'sonner'
 import { StrictMode } from 'react'
 import { Provider as ReduxProvider } from 'react-redux'
 import { store } from './store'
+import SmoothScroll from './SmoothScroll.js'
 
 function shouldUseHashRouter() {
   if (typeof window === 'undefined') return false
@@ -26,6 +27,7 @@ export function AppProviders({ children }) {
     <StrictMode>
       <ReduxProvider store={store}>
         <Router>
+          <SmoothScroll />
           {children}
           <Toaster position="top-center" richColors offset="80px" />
         </Router>

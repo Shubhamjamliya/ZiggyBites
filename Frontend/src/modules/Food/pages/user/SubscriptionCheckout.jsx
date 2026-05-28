@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   CalendarDays,
   CheckCircle2,
+  ChevronRight,
   HelpCircle,
   IndianRupee,
   Lock,
@@ -22,6 +23,10 @@ const SUBSCRIPTION_GST_RATE = 5;
 const SUBSCRIPTION_DELIVERY_FEE_PER_DAY = 10;
 
 const roundMoney = (value) => Math.round((Number(value) || 0) * 100) / 100;
+const formatCurrency = (value) =>
+  `${RUPEE_SYMBOL}${Number(value || 0).toLocaleString("en-IN", {
+    maximumFractionDigits: 2,
+  })}`;
 
 const formatFullAddress = (address) => {
   if (!address) return "";
@@ -51,7 +56,7 @@ export default function SubscriptionCheckout() {
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
   const [appCustomization, setAppCustomization] = useState(DEFAULT_APP_CUSTOMIZATION);
 
-  const { dish, selectedMeals = [], subscriptionPlan } = location.state || {};
+  const { dish, selectedMeals = [], subscriptionPlan, selectedDeliveryAddress } = location.state || {};
 
   useEffect(() => {
     let mounted = true;
@@ -77,9 +82,11 @@ export default function SubscriptionCheckout() {
   const deliveryFeePerDay = SUBSCRIPTION_DELIVERY_FEE_PER_DAY;
   const totalDeliveryCharges = roundMoney(deliveryFeePerDay * days);
   const totalAmount = roundMoney(totalFoodCost + gstAmount + totalDeliveryCharges);
+  const totalDeliveries = mealCount * days;
 
   const savedAddress = getDefaultAddress();
   const defaultAddress = useMemo(() => {
+    if (selectedDeliveryAddress) return selectedDeliveryAddress;
     if (savedAddress) return savedAddress;
     if (!currentLocation?.latitude || !currentLocation?.longitude) return null;
 
@@ -106,7 +113,7 @@ export default function SubscriptionCheckout() {
         coordinates: [currentLocation.longitude, currentLocation.latitude],
       },
     };
-  }, [currentLocation, savedAddress, userProfile?.phone]);
+  }, [currentLocation, savedAddress, selectedDeliveryAddress, userProfile?.phone]);
 
   const addressLabel = formatFullAddress(defaultAddress);
   const selectedMealLabel = selectedMeals
@@ -121,6 +128,21 @@ export default function SubscriptionCheckout() {
     ].filter(Boolean);
     return noteParts.join(" | ");
   }, [days, selectedMealLabel, subscriptionPlan?.title]);
+
+  const handleChangeAddress = () => {
+    navigate("/food/user/address-selector", {
+      state: {
+        mode: "subscription-checkout-address",
+        returnTo: "/food/user/checkout",
+        checkoutState: {
+          ...(location.state || {}),
+          dish,
+          selectedMeals,
+          subscriptionPlan,
+        },
+      },
+    });
+  };
 
   const handlePlaceOrder = async () => {
     if (appCustomization.subscriptionFlowEnabled === false) {
@@ -335,7 +357,7 @@ export default function SubscriptionCheckout() {
 
   return (
     <div className="min-h-screen bg-[#fafafa] text-gray-900 pb-12 font-sans">
-      <header className="sticky top-0 z-10 bg-white px-4 py-4 flex items-center justify-between shadow-sm">
+      <header className="sticky top-0 z-50 border-b border-gray-100 bg-white px-4 py-4 flex items-center justify-between shadow-sm">
         <div className="flex items-center gap-4">
           <button onClick={() => navigate(-1)} className="text-gray-800">
             <ArrowLeft className="h-6 w-6" />
@@ -382,16 +404,24 @@ export default function SubscriptionCheckout() {
         </div>
 
         <div className="bg-white rounded-[20px] p-5 shadow-sm border border-gray-100">
-          <div className="flex items-center gap-3 mb-4">
+          <div className="flex items-start gap-3">
             <div className="w-8 h-8 rounded-lg bg-red-50 flex items-center justify-center text-[#e3282c]">
               <MapPin className="h-4 w-4" strokeWidth={2.5} />
             </div>
-            <div>
+            <div className="min-w-0 flex-1">
               <h2 className="font-bold text-[15px]">Delivery address</h2>
-              <p className="text-xs text-gray-500">
+              <p className="mt-1 text-xs text-gray-500 leading-snug">
                 {addressLabel || "Add a default address from profile"}
               </p>
             </div>
+            <button
+              type="button"
+              onClick={handleChangeAddress}
+              className="inline-flex shrink-0 items-center gap-1 rounded-full border border-red-100 bg-red-50 px-3 py-1.5 text-xs font-bold text-[#e3282c] active:bg-red-100"
+            >
+              {addressLabel ? "Change" : "Add"}
+              <ChevronRight className="h-3.5 w-3.5" />
+            </button>
           </div>
         </div>
 
@@ -403,32 +433,59 @@ export default function SubscriptionCheckout() {
             <h2 className="font-bold text-[15px]">Price breakdown</h2>
           </div>
 
-          <div className="space-y-3.5 text-sm">
-            <div className="flex justify-between items-center">
-              <span className="text-gray-600 font-medium">Food cost</span>
-              <span className="font-bold">
-                {RUPEE_SYMBOL}
-                {totalFoodCost.toLocaleString("en-IN")}
-              </span>
+          <div className="mb-4 rounded-[12px] border border-gray-100 bg-[#fafafa] p-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-xs font-bold text-gray-900 truncate">
+                  {dish.name || "Subscription meal"}
+                </p>
+                <p className="mt-1 text-[11px] font-semibold text-gray-500">
+                  {mealCount} meal{mealCount === 1 ? "" : "s"} per day x {days} days
+                </p>
+              </div>
+              <div className="shrink-0 rounded-full bg-red-50 px-3 py-1 text-xs font-black text-[#e3282c]">
+                {totalDeliveries} deliveries
+              </div>
             </div>
-            <div className="flex justify-between items-center">
-              <span className="text-gray-600 font-medium">
-                GST ({SUBSCRIPTION_GST_RATE}%)
-              </span>
-              <span className="font-bold">
-                {RUPEE_SYMBOL}
-                {gstAmount.toLocaleString("en-IN")}
-              </span>
+          </div>
+
+          <div className="space-y-4 text-sm">
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <p className="font-semibold text-gray-700">Dish price</p>
+                <p className="mt-0.5 text-xs font-medium text-gray-400">Base price for one meal</p>
+              </div>
+              <span className="shrink-0 font-bold">{formatCurrency(basePrice)}</span>
             </div>
-            <div className="flex justify-between items-center">
-              <span className="text-gray-600 font-medium">
-                Delivery charges ({days} x {RUPEE_SYMBOL}
-                {deliveryFeePerDay}/day)
-              </span>
-              <span className="font-bold">
-                {RUPEE_SYMBOL}
-                {totalDeliveryCharges.toLocaleString("en-IN")}
-              </span>
+
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <p className="font-semibold text-gray-700">Food subtotal</p>
+                <p className="mt-0.5 text-xs font-medium text-gray-400">
+                  {formatCurrency(basePrice)} x {mealCount} meal{mealCount === 1 ? "" : "s"} x {days} days
+                </p>
+              </div>
+              <span className="shrink-0 font-bold">{formatCurrency(totalFoodCost)}</span>
+            </div>
+
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <p className="font-semibold text-gray-700">GST</p>
+                <p className="mt-0.5 text-xs font-medium text-gray-400">
+                  {SUBSCRIPTION_GST_RATE}% of food subtotal
+                </p>
+              </div>
+              <span className="shrink-0 font-bold">{formatCurrency(gstAmount)}</span>
+            </div>
+
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <p className="font-semibold text-gray-700">Delivery charges</p>
+                <p className="mt-0.5 text-xs font-medium text-gray-400">
+                  {formatCurrency(deliveryFeePerDay)} x {days} days
+                </p>
+              </div>
+              <span className="shrink-0 font-bold">{formatCurrency(totalDeliveryCharges)}</span>
             </div>
 
             <div className="border-t border-dashed border-gray-200 my-4"></div>
@@ -436,8 +493,7 @@ export default function SubscriptionCheckout() {
             <div className="flex justify-between items-center">
               <span className="font-bold text-[15px]">Total amount</span>
               <span className="font-bold text-xl text-[#e3282c]">
-                {RUPEE_SYMBOL}
-                {totalAmount.toLocaleString("en-IN")}
+                {formatCurrency(totalAmount)}
               </span>
             </div>
           </div>

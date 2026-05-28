@@ -4,8 +4,30 @@ import { ArrowRight, Leaf, Plus } from "lucide-react";
 import { RestaurantGridSkeleton } from "@food/components/ui/loading-skeletons";
 import { getNutritionSummary } from "@food/utils/nutrition";
 
+const getFoodTypeTag = (item, fallbackLabel) => {
+  const rawLabel = String(item.foodType || fallbackLabel || "").trim();
+  if (!rawLabel) return null;
+
+  const normalized = rawLabel.toLowerCase().replace(/[\s_-]/g, "");
+  const isNonVeg =
+    normalized === "nonveg" ||
+    normalized === "nonvegetarian" ||
+    normalized.includes("nonveg");
+  const isVeg =
+    !isNonVeg &&
+    (normalized === "veg" ||
+      normalized === "vegetarian" ||
+      item.isVeg === true);
+
+  return {
+    label: isNonVeg ? "Non-Veg" : isVeg ? "Veg" : rawLabel,
+    colorClass: isNonVeg ? "text-red-600" : "text-[#6aad37]",
+  };
+};
+
 function RecommendedDishCard({ item, fallbackLabel, handleAddHomeItemToCart }) {
   const nutritionSummary = getNutritionSummary(item.nutrition);
+  const foodTypeTag = getFoodTypeTag(item, fallbackLabel);
 
   return (
     <Link
@@ -55,10 +77,10 @@ function RecommendedDishCard({ item, fallbackLabel, handleAddHomeItemToCart }) {
         </p>
 
         <div className="mt-2 flex items-center justify-between">
-          {(item.foodType || fallbackLabel) && (
-            <span className="inline-flex items-center gap-1 text-[8px] font-black text-[#6aad37]">
+          {foodTypeTag && (
+            <span className={`inline-flex items-center gap-1 text-[8px] font-black ${foodTypeTag.colorClass}`}>
               <Leaf className="h-3 w-3" />
-              {item.foodType || fallbackLabel}
+              {foodTypeTag.label}
             </span>
           )}
           <button
@@ -123,7 +145,7 @@ export default function RecommendedItems({
               <RecommendedDishCard
                 key={`${item.restaurantSlug}-${item.id}-${index}`}
                 item={item}
-                fallbackLabel={selectedHomeCategory.healthy ? "Healthy" : "Meal"}
+                fallbackLabel=""
                 handleAddHomeItemToCart={handleAddHomeItemToCart}
               />
             ))

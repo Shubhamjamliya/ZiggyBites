@@ -11,8 +11,6 @@ export default function StickyHeader({
   displayCategories,
   setIsFilterOpen,
   foodPreferenceFilters,
-  vegMode,
-  applyHomeFoodPreference,
   activeFilters,
   toggleFilter
 }) {
@@ -90,13 +88,21 @@ export default function StickyHeader({
                           {foodPreferenceFilters.map((filter) => {
                             const Icon = filter.icon;
                             const isActive =
-                              (filter.id === "healthy" && vegMode) ||
-                              (filter.id === "all" && !vegMode);
+                              filter.id === "healthy"
+                                ? activeFilters.has("healthy")
+                                : !activeFilters.has("healthy");
                             return (
                               <button
                                 key={filter.id}
                                 type="button"
-                                onClick={() => applyHomeFoodPreference(filter.id)}
+                                onClick={() => {
+                                  if (filter.id === "healthy" && !activeFilters.has("healthy")) {
+                                    toggleFilter("healthy");
+                                  }
+                                  if (filter.id === "all" && activeFilters.has("healthy")) {
+                                    toggleFilter("healthy");
+                                  }
+                                }}
                                 className={`h-8 px-4 rounded-full flex items-center gap-2 whitespace-nowrap transition-all font-bold text-[10px] uppercase ${
                                   isActive
                                     ? filter.id === "healthy"

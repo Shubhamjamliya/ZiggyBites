@@ -4,7 +4,6 @@ import {
   ArrowLeft,
   CalendarDays,
   CheckCircle2,
-  CreditCard,
   HelpCircle,
   IndianRupee,
   Lock,
@@ -19,6 +18,10 @@ import { useLocation as useUserLocation } from "@food/hooks/useLocation";
 import { DEFAULT_APP_CUSTOMIZATION, loadAppCustomization } from "@food/utils/appCustomization";
 
 const RUPEE_SYMBOL = "\u20B9";
+const SUBSCRIPTION_GST_RATE = 5;
+const SUBSCRIPTION_DELIVERY_FEE_PER_DAY = 10;
+
+const roundMoney = (value) => Math.round((Number(value) || 0) * 100) / 100;
 
 const formatFullAddress = (address) => {
   if (!address) return "";
@@ -45,7 +48,6 @@ export default function SubscriptionCheckout() {
   const { userProfile, getDefaultAddress } = useProfile();
   const { location: currentLocation } = useUserLocation();
 
-  const [autoPay, setAutoPay] = useState(true);
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
   const [appCustomization, setAppCustomization] = useState(DEFAULT_APP_CUSTOMIZATION);
 
@@ -67,15 +69,14 @@ export default function SubscriptionCheckout() {
     };
   }, [navigate]);
 
-  const basePrice = Number.parseFloat(dish?.price || 0) || 319;
+  const basePrice = Math.max(0, Number.parseFloat(dish?.price || 0) || 0);
   const mealCount = selectedMeals.length || 1;
   const days = subscriptionPlan?.durationDays || 30;
-  const fixedPlanAmount = Number(subscriptionPlan?.amount || 0);
-  const totalFoodCost = basePrice * mealCount * days;
-  const deliveryFeePerDay = 10;
-  const totalDeliveryCharges = deliveryFeePerDay * days;
-  const calculatedAmount = totalFoodCost + totalDeliveryCharges;
-  const totalAmount = fixedPlanAmount > 0 ? fixedPlanAmount : calculatedAmount;
+  const totalFoodCost = roundMoney(basePrice * mealCount * days);
+  const gstAmount = roundMoney(totalFoodCost * (SUBSCRIPTION_GST_RATE / 100));
+  const deliveryFeePerDay = SUBSCRIPTION_DELIVERY_FEE_PER_DAY;
+  const totalDeliveryCharges = roundMoney(deliveryFeePerDay * days);
+  const totalAmount = roundMoney(totalFoodCost + gstAmount + totalDeliveryCharges);
 
   const savedAddress = getDefaultAddress();
   const defaultAddress = useMemo(() => {
@@ -117,10 +118,9 @@ export default function SubscriptionCheckout() {
     const noteParts = [
       `Subscription plan: ${subscriptionPlan?.title || `${days} Days`}`,
       selectedMealLabel ? `Meals: ${selectedMealLabel}` : "",
-      `Auto-renew: ${autoPay ? "Enabled" : "Disabled"}`,
     ].filter(Boolean);
     return noteParts.join(" | ");
-  }, [autoPay, days, selectedMealLabel, subscriptionPlan?.title]);
+  }, [days, selectedMealLabel, subscriptionPlan?.title]);
 
   const handlePlaceOrder = async () => {
     if (appCustomization.subscriptionFlowEnabled === false) {
@@ -137,6 +137,7 @@ export default function SubscriptionCheckout() {
       addressLabel,
       totalFoodCost,
       totalDeliveryCharges,
+      gstAmount,
       totalAmount,
     });
 
@@ -164,8 +165,8 @@ export default function SubscriptionCheckout() {
       return;
     }
 
-    if (!subscriptionPlan?.isRazorpaySynced || fixedPlanAmount <= 0) {
-      toast.error("This subscription plan is not available for Razorpay yet.");
+    if (basePrice <= 0) {
+      toast.error("Dish price is missing for this subscription.");
       return;
     }
 
@@ -190,8 +191,14 @@ export default function SubscriptionCheckout() {
           .filter(Boolean),
         planId: subscriptionPlan?.id || undefined,
         planDays: days,
+        itemPrice: basePrice,
+        mealCount,
+        foodSubtotal: totalFoodCost,
+        gstRate: SUBSCRIPTION_GST_RATE,
+        gstAmount,
+        deliveryFeePerDay,
+        deliveryCharges: totalDeliveryCharges,
         totalAmount,
-        totalCount: autoPay ? 12 : 1,
         currency: "INR",
         customerName,
         customerPhone,
@@ -201,16 +208,16 @@ export default function SubscriptionCheckout() {
       console.log("[SubscriptionCheckout] Subscription create-order payload", payload);
 
       const response = await subscriptionAPI.createOrder(payload);
-      const { subscription, razorpay, razorpaySubscription } = response?.data?.data || {};
+      const { subscription, razorpay, order } = response?.data?.data || {};
 
       console.log("[SubscriptionCheckout] Create-order response", {
         response: response?.data,
         subscription,
         razorpay,
-        razorpaySubscription,
+        order,
       });
 
-      if (!subscription || !razorpay?.subscriptionId || !razorpay?.key) {
+      if (!subscription || !razorpay?.orderId || !razorpay?.key) {
         throw new Error("Unable to initialize subscription payment.");
       }
 
@@ -225,7 +232,7 @@ export default function SubscriptionCheckout() {
         key: razorpay.key,
         amount: razorpay.amount,
         currency: razorpay.currency || "INR",
-        subscription_id: razorpay.subscriptionId,
+        order_id: razorpay.orderId,
         name: companyName,
         description: `${subscriptionPlan?.title || `${days} Days`} - ${dish.name || "Meal Subscription"}`,
         prefill: {
@@ -251,9 +258,9 @@ export default function SubscriptionCheckout() {
             const verifyPayload = {
               subscriptionId:
                 subscription.subscriptionId || subscription._id || "",
-              razorpaySubscriptionId:
-                razorpayResponse.razorpay_subscription_id ||
-                razorpay.subscriptionId,
+              razorpayOrderId:
+                razorpayResponse.razorpay_order_id ||
+                razorpay.orderId,
               razorpayPaymentId: razorpayResponse.razorpay_payment_id,
               razorpaySignature: razorpayResponse.razorpay_signature,
             };
@@ -401,21 +408,28 @@ export default function SubscriptionCheckout() {
               <span className="text-gray-600 font-medium">Food cost</span>
               <span className="font-bold">
                 {RUPEE_SYMBOL}
-                {(fixedPlanAmount > 0 ? fixedPlanAmount : totalFoodCost).toLocaleString("en-IN")}
+                {totalFoodCost.toLocaleString("en-IN")}
               </span>
             </div>
-            {fixedPlanAmount <= 0 && (
-              <div className="flex justify-between items-center">
-                <span className="text-gray-600 font-medium">
-                  Delivery charges ({days} x {RUPEE_SYMBOL}
-                  {deliveryFeePerDay}/day)
-                </span>
-                <span className="font-bold">
-                  {RUPEE_SYMBOL}
-                  {totalDeliveryCharges.toLocaleString("en-IN")}
-                </span>
-              </div>
-            )}
+            <div className="flex justify-between items-center">
+              <span className="text-gray-600 font-medium">
+                GST ({SUBSCRIPTION_GST_RATE}%)
+              </span>
+              <span className="font-bold">
+                {RUPEE_SYMBOL}
+                {gstAmount.toLocaleString("en-IN")}
+              </span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-gray-600 font-medium">
+                Delivery charges ({days} x {RUPEE_SYMBOL}
+                {deliveryFeePerDay}/day)
+              </span>
+              <span className="font-bold">
+                {RUPEE_SYMBOL}
+                {totalDeliveryCharges.toLocaleString("en-IN")}
+              </span>
+            </div>
 
             <div className="border-t border-dashed border-gray-200 my-4"></div>
 
@@ -429,45 +443,13 @@ export default function SubscriptionCheckout() {
           </div>
         </div>
 
-        <div className="bg-white rounded-[20px] p-5 shadow-sm border border-gray-100 flex items-center justify-between">
-          <div className="flex items-start gap-3">
-            <div className="w-8 h-8 rounded-lg bg-red-50 flex items-center justify-center text-[#e3282c] shrink-0 mt-0.5">
-              <CreditCard className="h-4 w-4" strokeWidth={2.5} />
-            </div>
-            <div>
-              <p className="font-bold text-sm">
-                Auto-pay{" "}
-                <span className="text-gray-400 font-medium text-xs ml-1">
-                  (Recommended)
-                </span>
-              </p>
-              <p className="text-xs text-gray-500 font-medium mt-1">
-                Automatically renews your plan on expiry.
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={() => setAutoPay(!autoPay)}
-            className={`w-[44px] h-[24px] rounded-full relative transition-colors duration-200 shrink-0 ml-2 ${
-              autoPay ? "bg-[#e3282c]" : "bg-gray-300"
-            }`}
-          >
-            <span
-              className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow-sm transition-all duration-200 ${
-                autoPay ? "left-[26px]" : "left-1"
-              }`}
-            />
-          </button>
-        </div>
-
         <div className="px-1 mt-6 pt-2">
           <h3 className="font-bold text-[15px] mb-4">What you get</h3>
           <ul className="space-y-4">
             {[
               "24-hour prior delivery notification before each meal",
               "Modify, skip, or confirm each delivery",
-              "Recurring Razorpay subscription activation",
+              "One-time secure checkout for this meal plan",
               "No refunds on cancellation (ZiggyBites policy)",
             ].map((feature) => (
               <li key={feature} className="flex items-start gap-3">

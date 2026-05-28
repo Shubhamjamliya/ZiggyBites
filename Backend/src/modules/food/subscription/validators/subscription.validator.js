@@ -9,8 +9,14 @@ const createSubscriptionOrderSchema = z.object({
   meals: z.array(z.string().min(1)).min(1, 'At least one meal is required'),
   planId: z.string().optional(),
   planDays: z.number().int().min(1, 'Plan days must be at least 1'),
+  itemPrice: z.number().min(0).optional(),
+  mealCount: z.number().int().min(1).optional(),
+  foodSubtotal: z.number().min(0).optional(),
+  gstRate: z.number().min(0).max(100).optional(),
+  gstAmount: z.number().min(0).optional(),
+  deliveryFeePerDay: z.number().min(0).optional(),
+  deliveryCharges: z.number().min(0).optional(),
   totalAmount: z.number().positive('Total amount must be greater than 0'),
-  totalCount: z.number().int().min(1).max(1200).optional(),
   currency: z.string().optional(),
   customerName: z.string().optional(),
   customerPhone: z.string().optional(),
@@ -33,7 +39,7 @@ const createSubscriptionOrderSchema = z.object({
 
 const verifySubscriptionPaymentSchema = z.object({
   subscriptionId: z.string().min(1, 'Subscription id required'),
-  razorpaySubscriptionId: z.string().min(1, 'Razorpay subscription id required'),
+  razorpayOrderId: z.string().min(1, 'Razorpay order id required'),
   razorpayPaymentId: z.string().min(1, 'Razorpay payment id required'),
   razorpaySignature: z.string().min(1, 'Razorpay signature required'),
 });

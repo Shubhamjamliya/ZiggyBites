@@ -11,19 +11,18 @@ import {
 
 const toItem = (plan) => {
     if (!plan) return plan;
-    const {
-        sortOrder,
-        razorpayPlans,
-        razorpayPlanId,
-        razorpayPlanAmountPaise,
-        razorpayPlanPeriod,
-        razorpayPlanInterval,
-        ...rest
-    } = plan;
+    const item = { ...plan };
+    delete item.sortOrder;
+    delete item.amount;
+    delete item.priceLabel;
+    delete item.razorpayPlans;
+    delete item.razorpayPlanId;
+    delete item.razorpayPlanAmountPaise;
+    delete item.razorpayPlanPeriod;
+    delete item.razorpayPlanInterval;
     return {
-        ...rest,
-        order: sortOrder,
-        isRazorpaySynced: Boolean(razorpayPlanId)
+        ...item,
+        order: plan.sortOrder,
     };
 };
 

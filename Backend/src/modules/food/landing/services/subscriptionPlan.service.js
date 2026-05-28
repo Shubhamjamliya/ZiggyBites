@@ -1,8 +1,4 @@
 import { FoodSubscriptionPlan } from '../models/subscriptionPlan.model.js';
-import {
-    createRazorpayPlan,
-    isRazorpayConfigured
-} from '../../orders/helpers/razorpay.helper.js';
 
 const defaultPlans = [
     {
@@ -37,67 +33,12 @@ const defaultFeatures = [
     'No refunds on cancellation'
 ];
 
-const getRazorpayBillingCycle = (durationDays) => {
-    const days = Math.max(1, Number(durationDays) || 1);
-    if (days % 365 === 0) return { period: 'yearly', interval: days / 365 };
-    if (days % 30 === 0) return { period: 'monthly', interval: days / 30 };
-    if (days % 7 === 0) return { period: 'weekly', interval: days / 7 };
-    return { period: 'daily', interval: Math.max(7, days) };
-};
-
-const syncRazorpayPlan = async (doc) => {
-    if (!doc) return doc;
-    if (!isRazorpayConfigured()) {
-        throw new Error('Razorpay is not configured');
-    }
-
-    const amount = Number(doc.amount || 0);
-    if (!Number.isFinite(amount) || amount <= 0) {
-        throw new Error('Plan amount must be greater than 0 to create a Razorpay plan');
-    }
-
-    const amountPaise = Math.round(amount * 100);
-    const currency = String(doc.currency || 'INR').trim().toUpperCase();
-    const billingCycle = getRazorpayBillingCycle(doc.durationDays);
-
-    if (
-        doc.razorpayPlanId &&
-        Number(doc.razorpayPlanAmountPaise) === amountPaise &&
-        String(doc.currency || '').toUpperCase() === currency &&
-        doc.razorpayPlanPeriod === billingCycle.period &&
-        Number(doc.razorpayPlanInterval) === Number(billingCycle.interval)
-    ) {
-        return doc;
-    }
-
-    const razorpayPlan = await createRazorpayPlan({
-        ...billingCycle,
-        amountPaise,
-        currency,
-        name: String(doc.title || 'Subscription Plan').trim(),
-        description: String(doc.description || doc.subtitle || '').trim(),
-        notes: {
-            foodSubscriptionPlanId: doc._id?.toString?.() || '',
-            durationDays: Number(doc.durationDays || 0)
-        }
-    });
-
-    doc.razorpayPlanId = razorpayPlan.id;
-    doc.razorpayPlanAmountPaise = amountPaise;
-    doc.razorpayPlanPeriod = billingCycle.period;
-    doc.razorpayPlanInterval = billingCycle.interval;
-    doc.currency = currency;
-    await doc.save();
-    return doc;
-};
-
 const ensureDefaultPlans = async () => {
     const count = await FoodSubscriptionPlan.countDocuments();
     if (count > 0) return;
     await FoodSubscriptionPlan.insertMany(
         defaultPlans.map((plan) => ({
             ...plan,
-            priceLabel: 'Price based on your meal selection',
             features: defaultFeatures,
             isActive: true
         }))
@@ -129,8 +70,6 @@ const normalizePlanPayload = (payload = {}) => {
         subtitle: String(payload.subtitle || '').trim(),
         description: String(payload.description || '').trim(),
         badge: String(payload.badge || '').trim(),
-        priceLabel: String(payload.priceLabel || 'Price based on your meal selection').trim(),
-        amount: Number(payload.amount || 0),
         currency: 'INR',
         features
     };
@@ -142,18 +81,9 @@ export const createSubscriptionPlan = async (payload) => {
     if (!Number.isFinite(data.durationDays) || data.durationDays <= 0) {
         throw new Error('Duration days must be greater than 0');
     }
-    if (!Number.isFinite(data.amount) || data.amount <= 0) {
-        throw new Error('Plan amount must be greater than 0');
-    }
     data.sortOrder = await getNextSortOrder();
     data.isActive = true;
     const doc = await FoodSubscriptionPlan.create(data);
-    try {
-        await syncRazorpayPlan(doc);
-    } catch (error) {
-        await doc.deleteOne();
-        throw error;
-    }
     return doc.toObject();
 };
 
@@ -168,17 +98,12 @@ export const updateSubscriptionPlan = async (id, payload) => {
     if (payload.subtitle !== undefined) updates.subtitle = data.subtitle;
     if (payload.description !== undefined) updates.description = data.description;
     if (payload.badge !== undefined) updates.badge = data.badge;
-    if (payload.priceLabel !== undefined) updates.priceLabel = data.priceLabel;
-    if (payload.amount !== undefined) updates.amount = data.amount;
     updates.currency = 'INR';
     if (payload.features !== undefined) updates.features = data.features;
 
     if (Object.keys(updates).length === 0) return doc.toObject();
     Object.assign(doc, updates);
-    if (!Number.isFinite(Number(doc.amount)) || Number(doc.amount) <= 0) {
-        throw new Error('Plan amount must be greater than 0');
-    }
-    await syncRazorpayPlan(doc);
+    await doc.save();
     return doc.toObject();
 };
 

@@ -61,6 +61,7 @@ export default function SubscriptionPlans() {
   }, [location.state]);
 
   const selectedMealCount = selectedMeals.length || 1;
+  const selectedDishPrice = Number(dish.price || 0) || 0;
 
   useEffect(() => {
     let cancelled = false;
@@ -79,10 +80,7 @@ export default function SubscriptionPlans() {
             subtitle: plan.subtitle || "",
             description: plan.description || "",
             badge: plan.badge || "",
-            priceLabel: plan.priceLabel || "Price based on your meal selection",
-            amount: Number(plan.amount || 0),
             currency: plan.currency || "INR",
-            isRazorpaySynced: Boolean(plan.isRazorpaySynced),
             features: Array.isArray(plan.features) ? plan.features : [],
           }));
 
@@ -196,20 +194,20 @@ export default function SubscriptionPlans() {
                     Pricing
                   </p>
                   <p className="mt-1 text-[15px] font-bold text-gray-900">
-                    {plan.amount > 0
-                      ? `${plan.currency || "INR"} ${plan.amount.toLocaleString("en-IN")}`
-                      : plan.priceLabel}
+                    {selectedDishPrice > 0
+                      ? `INR ${(selectedDishPrice * selectedMealCount * plan.durationDays).toLocaleString("en-IN")} + GST + delivery`
+                      : "Price is calculated from selected dish and duration"}
                   </p>
-                  {plan.amount > 0 && (
-                    <p className="mt-1 text-xs font-medium text-gray-500">
-                      {plan.priceLabel}
-                    </p>
-                  )}
+                  <p className="mt-1 text-xs font-medium text-gray-500">
+                    {selectedDishPrice > 0
+                      ? `${plan.durationDays} days x ${selectedMealCount} meal${selectedMealCount === 1 ? "" : "s"} x INR ${selectedDishPrice.toLocaleString("en-IN")}`
+                      : "Select a priced dish to continue"}
+                  </p>
                 </div>
 
                 <button
                   type="button"
-                  disabled={!plan.isRazorpaySynced || plan.amount <= 0}
+                  disabled={selectedDishPrice <= 0}
                   onClick={() =>
                     navigate("/food/user/checkout", {
                       state: { dish, selectedMeals, subscriptionPlan: plan },
@@ -217,7 +215,7 @@ export default function SubscriptionPlans() {
                   }
                   className="mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#e3282c] text-sm font-bold text-white transition active:bg-[#c42226] disabled:bg-gray-300 disabled:text-gray-500"
                 >
-                  {plan.isRazorpaySynced && plan.amount > 0 ? "Continue" : "Unavailable"}
+                  {selectedDishPrice > 0 ? "Continue" : "Unavailable"}
                   <ChevronRight className="h-4 w-4" />
                 </button>
 

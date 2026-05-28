@@ -9,13 +9,10 @@ import { FoodOrder } from '../../orders/models/order.model.js';
 import { FoodItem } from '../../admin/models/food.model.js';
 import { FoodUser } from '../../../../core/users/user.model.js';
 import {
-  createRazorpaySubscription,
   createRazorpayOrder,
-  fetchRazorpaySubscription,
   getRazorpayKeyId,
   isRazorpayConfigured,
   verifyPaymentSignature,
-  verifySubscriptionSignature,
 } from '../../orders/helpers/razorpay.helper.js';
 import * as userWalletService from '../../user/services/userWallet.service.js';
 import * as foodTransactionService from '../../orders/services/foodTransaction.service.js';
@@ -190,40 +187,8 @@ function getCreditPerOrder(totalAmount, totalCredits) {
   return Number((safeTotalAmount / safeCredits).toFixed(2));
 }
 
-function getRazorpayBillingCycle(planDays) {
-  const days = Math.max(1, Number(planDays) || 1);
-  if (days % 365 === 0) return { period: 'yearly', interval: days / 365 };
-  if (days % 30 === 0) return { period: 'monthly', interval: days / 30 };
-  if (days % 7 === 0) return { period: 'weekly', interval: days / 7 };
-  return { period: 'daily', interval: Math.max(7, days) };
-}
-
-function getSyncedRazorpayPlan({
-  dbPlan,
-  billingCycle,
-  amountPaise,
-  currency,
-}) {
-  if (
-    dbPlan?.razorpayPlanId &&
-    Number(dbPlan.razorpayPlanAmountPaise) === Number(amountPaise) &&
-    String(dbPlan.currency || '').toUpperCase() === currency &&
-    String(dbPlan.razorpayPlanPeriod || '') === billingCycle.period &&
-    Number(dbPlan.razorpayPlanInterval) === Number(billingCycle.interval)
-  ) {
-    return {
-      id: dbPlan.razorpayPlanId,
-      item: {
-        amount: dbPlan.razorpayPlanAmountPaise,
-        currency,
-      },
-      reused: true,
-    };
-  }
-
-  throw new ValidationError(
-    'Selected subscription plan is not synced with Razorpay. Please edit and save the plan from admin.',
-  );
+function roundMoney(value) {
+  return Math.round((Number(value) || 0) * 100) / 100;
 }
 
 function normalizeSubscriptionForClient(doc) {
@@ -516,15 +481,38 @@ export async function createSubscriptionOrder(userId, dto) {
     throw new ValidationError('Plan days must be greater than 0');
   }
 
-  const totalAmount = Number(dto.totalAmount || 0);
-  if (!Number.isFinite(totalAmount) || totalAmount <= 0) {
-    throw new ValidationError('Total amount must be greater than 0');
-  }
-
   const meals = normalizeMeals(dto.meals);
   if (!meals.length) {
     throw new ValidationError('At least one meal is required');
   }
+  const mealCount = meals.length;
+  let itemPrice = Number(dto.itemPrice || 0);
+  if (!Number.isFinite(itemPrice) || itemPrice <= 0) {
+    const dish = mongoose.isValidObjectId(dto.dishId)
+      ? await FoodItem.findById(dto.dishId).select('price').lean()
+      : null;
+    itemPrice = Number(dish?.price || 0);
+  }
+  if (!Number.isFinite(itemPrice) || itemPrice <= 0) {
+    throw new ValidationError('Dish price is required for subscription');
+  }
+
+  const foodSubtotal = roundMoney(itemPrice * mealCount * planDays);
+  const gstRate = Number.isFinite(Number(dto.gstRate)) ? Number(dto.gstRate) : 5;
+  const gstAmount = roundMoney(foodSubtotal * (gstRate / 100));
+  const deliveryFeePerDay = Number.isFinite(Number(dto.deliveryFeePerDay))
+    ? Number(dto.deliveryFeePerDay)
+    : 10;
+  const deliveryCharges = roundMoney(deliveryFeePerDay * planDays);
+  const payableAmount = roundMoney(foodSubtotal + gstAmount + deliveryCharges);
+  const dtoTotalAmount = roundMoney(dto.totalAmount || 0);
+  if (!Number.isFinite(dtoTotalAmount) || dtoTotalAmount <= 0) {
+    throw new ValidationError('Total amount must be greater than 0');
+  }
+  if (Math.abs(dtoTotalAmount - payableAmount) > 1) {
+    throw new ValidationError('Subscription amount mismatch. Please refresh and try again.');
+  }
+
   const customerName = String(dto.customerName || '').trim();
   const customerPhone = String(dto.customerPhone || '').trim();
   const deliveryAddress = normalizeDeliveryAddress(dto.deliveryAddress, {
@@ -534,13 +522,6 @@ export async function createSubscriptionOrder(userId, dto) {
   if (!deliveryAddress.street || !deliveryAddress.city || !deliveryAddress.state) {
     throw new ValidationError('Delivery address is required for subscription');
   }
-  const planAmount = Number(plan?.amount || 0);
-  if (!Number.isFinite(planAmount) || planAmount <= 0) {
-    throw new ValidationError(
-      'Selected subscription plan does not have a fixed admin amount',
-    );
-  }
-  const payableAmount = planAmount;
   const payableAmountPaise = Math.round(payableAmount * 100);
   if (payableAmountPaise < 100) {
     throw new ValidationError('Amount too low for online payment');
@@ -548,30 +529,11 @@ export async function createSubscriptionOrder(userId, dto) {
   const totalCredits = getTotalCredits(planDays, meals);
   const creditPerOrder = getCreditPerOrder(payableAmount, totalCredits);
   const currency = String(plan?.currency || dto.currency || 'INR').trim().toUpperCase();
-  const billingCycle = getRazorpayBillingCycle(planDays);
-  const notes = {
-    userId: String(userId),
-    restaurantId: String(dto.restaurantId),
-    planId: plan?._id?.toString?.() || '',
-    dishId: String(dto.dishId || ''),
-    meals: meals.join(', '),
-  };
-
-  const razorpayPlan = getSyncedRazorpayPlan({
-    dbPlan: plan,
-    billingCycle,
-    amountPaise: payableAmountPaise,
+  const razorpayOrder = await createRazorpayOrder(
+    payableAmountPaise,
     currency,
-  });
-
-  const razorpaySubscription = await createRazorpaySubscription({
-    planId: razorpayPlan.id,
-    totalCount: dto.totalCount || 12,
-    quantity: 1,
-    customerNotify: true,
-    expireBy: Math.floor(Date.now() / 1000) + 30 * 60,
-    notes,
-  });
+    `sub_${Date.now()}`,
+  );
 
   const subscription = await FoodSubscription.create({
     userId: new mongoose.Types.ObjectId(userId),
@@ -592,23 +554,21 @@ export async function createSubscriptionOrder(userId, dto) {
     totalCredits,
     usedCredits: 0,
     currency,
-    razorpayPlanId: razorpayPlan.id,
-    razorpaySubscriptionId: razorpaySubscription.id,
-    razorpayOrderId: razorpaySubscription.id,
+    razorpayPlanId: '',
+    razorpaySubscriptionId: '',
+    razorpayOrderId: razorpayOrder.id,
     status: 'pending_payment',
     paymentStatus: 'created',
   });
 
   return {
     subscription: normalizeSubscriptionForClient(subscription),
-    order: null,
-    razorpaySubscription,
+    order: razorpayOrder,
     razorpay: {
       key: getRazorpayKeyId(),
-      subscriptionId: razorpaySubscription.id,
-      planId: razorpayPlan.id,
-      amount: razorpayPlan.item?.amount || payableAmountPaise,
-      currency: razorpayPlan.item?.currency || currency,
+      orderId: razorpayOrder.id,
+      amount: razorpayOrder.amount || payableAmountPaise,
+      currency: razorpayOrder.currency || currency,
     },
   };
 }
@@ -628,16 +588,13 @@ export async function verifySubscriptionPayment(userId, dto) {
     return { subscription: normalizeSubscriptionForClient(subscription) };
   }
 
-  const razorpaySubscriptionId =
-    subscription.razorpaySubscriptionId || subscription.razorpayOrderId;
-
-  if (String(razorpaySubscriptionId) !== String(dto.razorpaySubscriptionId)) {
-    throw new ValidationError('Razorpay subscription mismatch');
+  if (String(subscription.razorpayOrderId) !== String(dto.razorpayOrderId)) {
+    throw new ValidationError('Razorpay order mismatch');
   }
 
-  const valid = verifySubscriptionSignature(
+  const valid = verifyPaymentSignature(
+    dto.razorpayOrderId,
     dto.razorpayPaymentId,
-    dto.razorpaySubscriptionId,
     dto.razorpaySignature,
   );
   if (!valid) {
@@ -645,25 +602,6 @@ export async function verifySubscriptionPayment(userId, dto) {
     subscription.status = 'payment_failed';
     await subscription.save();
     throw new ValidationError('Payment verification failed');
-  }
-
-  let remoteSubscription = null;
-  try {
-    remoteSubscription = await fetchRazorpaySubscription(dto.razorpaySubscriptionId);
-  } catch (error) {
-    console.warn(
-      '[Subscription] Could not fetch Razorpay subscription after checkout:',
-      error?.message || error,
-    );
-  }
-  if (
-    remoteSubscription?.status &&
-    ['cancelled', 'expired', 'halted'].includes(remoteSubscription.status)
-  ) {
-    subscription.paymentStatus = 'failed';
-    subscription.status = 'payment_failed';
-    await subscription.save();
-    throw new ValidationError('Razorpay subscription is not active');
   }
 
   const appSettings = await getAppCustomizationSettings();
@@ -674,7 +612,7 @@ export async function verifySubscriptionPayment(userId, dto) {
   );
   const totalCredits = getTotalCredits(subscription.planDays, subscription.meals);
   const creditPerOrder = getCreditPerOrder(subscription.totalAmount, totalCredits);
-  subscription.razorpaySubscriptionId = dto.razorpaySubscriptionId;
+  subscription.razorpayOrderId = dto.razorpayOrderId;
   subscription.razorpayPaymentId = dto.razorpayPaymentId;
   subscription.razorpaySignature = dto.razorpaySignature;
   subscription.paymentStatus = 'paid';

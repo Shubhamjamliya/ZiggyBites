@@ -21,8 +21,6 @@ const emptyForm = {
   subtitle: "",
   description: "",
   badge: "",
-  priceLabel: "Price based on your meal selection",
-  amount: "",
   features: "24-hour prior delivery notification\nModify, skip, or confirm each delivery\nNo refunds on cancellation",
 };
 
@@ -68,8 +66,6 @@ export default function SubscriptionPlanManagement() {
       subtitle: plan.subtitle || "",
       description: plan.description || "",
       badge: plan.badge || "",
-      priceLabel: plan.priceLabel || "Price based on your meal selection",
-      amount: plan.amount || "",
       features: Array.isArray(plan.features) ? plan.features.join("\n") : "",
     });
   };
@@ -86,8 +82,6 @@ export default function SubscriptionPlanManagement() {
       subtitle: form.subtitle,
       description: form.description,
       badge: form.badge,
-      priceLabel: form.priceLabel,
-      amount: Number(form.amount),
       features: form.features,
     };
 
@@ -212,28 +206,6 @@ export default function SubscriptionPlanManagement() {
               </label>
             </div>
 
-            <div className="grid grid-cols-[1fr_96px] gap-3">
-              <label className="block">
-                <span className="text-sm font-bold text-slate-700">Amount</span>
-                <input
-                  type="number"
-                  min="1"
-                  step="0.01"
-                  value={form.amount}
-                  onChange={(event) => setForm((current) => ({ ...current, amount: event.target.value }))}
-                  placeholder="999"
-                  className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#ef2b24]"
-                  required
-                />
-              </label>
-              <div className="block">
-                <span className="text-sm font-bold text-slate-700">Currency</span>
-                <div className="mt-1 flex h-[38px] items-center rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm font-bold text-slate-700">
-                  INR
-                </div>
-              </div>
-            </div>
-
             <label className="block">
               <span className="text-sm font-bold text-slate-700">Subtitle</span>
               <input
@@ -252,15 +224,6 @@ export default function SubscriptionPlanManagement() {
                 placeholder="Standard month-long consistency plan."
                 rows={2}
                 className="mt-1 w-full resize-none rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#ef2b24]"
-              />
-            </label>
-
-            <label className="block">
-              <span className="text-sm font-bold text-slate-700">Price Label</span>
-              <input
-                value={form.priceLabel}
-                onChange={(event) => setForm((current) => ({ ...current, priceLabel: event.target.value }))}
-                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#ef2b24]"
               />
             </label>
 
@@ -306,6 +269,9 @@ export default function SubscriptionPlanManagement() {
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <h3 className="text-2xl font-black text-slate-950">{plan.title}</h3>
+                      <p className="mt-2 inline-flex rounded-full bg-red-50 px-3 py-1 text-xs font-black uppercase tracking-wider text-[#ef2b24]">
+                        {Number(plan.durationDays || 0)} days
+                      </p>
                       <p className="mt-1 text-sm font-semibold text-slate-600">{plan.subtitle}</p>
                       <p className="mt-2 text-sm text-slate-500">{plan.description}</p>
                     </div>
@@ -315,16 +281,6 @@ export default function SubscriptionPlanManagement() {
                       </span>
                     )}
                   </div>
-                  <p className="mt-4 text-xs font-black uppercase tracking-widest text-[#ef2b24]">Pricing</p>
-                  <p className="mt-1 text-sm font-black text-slate-950">
-                    {plan.currency || "INR"} {Number(plan.amount || 0).toLocaleString("en-IN")}
-                  </p>
-                  <p className="mt-1 text-xs font-semibold text-slate-500">
-                    {plan.priceLabel}
-                  </p>
-                  <p className={`mt-2 text-xs font-bold ${plan.isRazorpaySynced ? "text-emerald-600" : "text-red-600"}`}>
-                    {plan.isRazorpaySynced ? "Razorpay synced" : "Razorpay not synced"}
-                  </p>
                   <div className="mt-4 space-y-2 border-t border-slate-100 pt-3">
                     {(plan.features || []).map((feature) => (
                       <p key={feature} className="text-sm font-semibold text-slate-600">- {feature}</p>

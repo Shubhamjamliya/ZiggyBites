@@ -25,7 +25,7 @@ export default function SplashScreen({ onFinish }) {
           companyName: normalizeKitchenAppName(settings.companyName) || 'ZiggyBites',
         });
       })
-      .catch(() => {});
+      .catch(() => { });
     return () => {
       mounted = false;
     };
@@ -86,9 +86,9 @@ export default function SplashScreen({ onFinish }) {
 
             <div className="absolute left-1/2 top-[35%] flex w-full -translate-x-1/2 -translate-y-1/2 flex-col items-center px-8">
               <motion.div
-                initial={{ x: '-58vw', opacity: 0 }}
+                initial={{ x: '-70vw', opacity: 0 }}
                 animate={{ x: 0, opacity: 1 }}
-                transition={{ duration: 1.15, ease: [0.22, 1, 0.36, 1] }}
+                transition={{ duration: 2.25, ease: [0.22, 1, 0.36, 1] }}
                 className="relative flex h-48 w-48 items-center justify-center"
               >
                 <div className="absolute left-2 top-1/2 h-0.5 w-14 -translate-y-8 rounded-full bg-gray-800/35" />
@@ -97,7 +97,7 @@ export default function SplashScreen({ onFinish }) {
                 <img
                   src={riderSplashImage}
                   alt={`${brand.companyName} rider`}
-                  className="relative z-10 h-40 w-40 object-contain"
+                  className="relative z-10 h-44 w-44 object-contain"
                 />
               </motion.div>
 

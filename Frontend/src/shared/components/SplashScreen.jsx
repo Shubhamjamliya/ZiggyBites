@@ -3,6 +3,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Cookie, CupSoda, IceCreamBowl, Pizza, ShoppingBag } from 'lucide-react';
 import { getCachedSettings, loadBusinessSettings, normalizeKitchenAppName } from '@/modules/Food/utils/businessSettings';
 
+const riderSplashImage = '/Rider.jpeg';
+
 export default function SplashScreen({ onFinish }) {
   const [isFinishing, setIsFinishing] = useState(false);
   const [brand, setBrand] = useState(() => {
@@ -30,14 +32,18 @@ export default function SplashScreen({ onFinish }) {
   }, []);
 
   useEffect(() => {
+    let finishTimer;
     const timer = setTimeout(() => {
       setIsFinishing(true);
-      setTimeout(() => {
+      finishTimer = setTimeout(() => {
         if (onFinish) onFinish();
       }, 550);
-    }, 1800);
+    }, 4200);
 
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      clearTimeout(finishTimer);
+    };
   }, [onFinish]);
 
   const doodles = [
@@ -80,32 +86,25 @@ export default function SplashScreen({ onFinish }) {
 
             <div className="absolute left-1/2 top-[35%] flex w-full -translate-x-1/2 -translate-y-1/2 flex-col items-center px-8">
               <motion.div
-                initial={{ y: 16, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                transition={{ delay: 0.12, duration: 0.45 }}
-                className="relative flex h-48 w-48 items-center justify-center rounded-full bg-[#fff7f2]"
+                initial={{ x: '-58vw', opacity: 0 }}
+                animate={{ x: 0, opacity: 1 }}
+                transition={{ duration: 1.15, ease: [0.22, 1, 0.36, 1] }}
+                className="relative flex h-48 w-48 items-center justify-center"
               >
-                <div className="absolute left-2 top-1/2 h-0.5 w-14 -translate-y-8 rounded-full bg-gray-800/40" />
-                <div className="absolute left-0 top-1/2 h-0.5 w-20 -translate-y-3 rounded-full bg-gray-800/35" />
-                <div className="absolute left-6 top-1/2 h-0.5 w-12 translate-y-2 rounded-full bg-gray-800/30" />
-                {brand.logoUrl ? (
-                  <img
-                    src={brand.logoUrl}
-                    alt={`${brand.companyName} logo`}
-                    className="relative z-10 h-40 w-40 object-contain"
-                    onError={() => setBrand((current) => ({ ...current, logoUrl: '' }))}
-                  />
-                ) : (
-                  <div className="relative z-10 flex h-32 w-32 items-center justify-center rounded-full bg-red-50 text-6xl font-black text-[#f21d1d]">
-                    {String(brand.companyName || 'Z').charAt(0).toUpperCase()}
-                  </div>
-                )}
+                <div className="absolute left-2 top-1/2 h-0.5 w-14 -translate-y-8 rounded-full bg-gray-800/35" />
+                <div className="absolute left-0 top-1/2 h-0.5 w-20 -translate-y-3 rounded-full bg-gray-800/30" />
+                <div className="absolute left-6 top-1/2 h-0.5 w-12 translate-y-2 rounded-full bg-gray-800/25" />
+                <img
+                  src={riderSplashImage}
+                  alt={`${brand.companyName} rider`}
+                  className="relative z-10 h-40 w-40 object-contain"
+                />
               </motion.div>
 
               <motion.h1
                 initial={{ y: 10, opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}
-                transition={{ delay: 0.25, duration: 0.45 }}
+                transition={{ delay: 1.25, duration: 0.55, ease: 'easeOut' }}
                 className="mt-1 text-4xl font-black italic tracking-tight text-[#f21d1d]"
               >
                 {brand.companyName || 'ZiggyBites'}
@@ -115,7 +114,7 @@ export default function SplashScreen({ onFinish }) {
             <motion.p
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.55, duration: 0.4 }}
+              transition={{ delay: 1.75, duration: 0.4 }}
               className="absolute bottom-28 left-0 right-0 text-center text-xs font-black text-[#202030]"
             >
               Delivering Happiness, <span className="italic text-[#f21d1d]">Fast!</span>

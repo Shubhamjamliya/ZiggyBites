@@ -21,6 +21,15 @@ function validateAppCustomizationPayload(body = {}) {
     payload.diningFlowEnabled = Boolean(body.diningFlowEnabled);
   }
 
+  if (body.theme !== undefined) {
+    const primaryColor = String(body.theme?.primaryColor || '').trim();
+    if (primaryColor && !/^#[0-9a-f]{6}$/i.test(primaryColor)) {
+      throw new ValidationError('Theme color must be a valid hex color');
+    }
+    payload.theme = {};
+    if (primaryColor) payload.theme.primaryColor = primaryColor.toLowerCase();
+  }
+
   if (body.subscriptionOrders !== undefined) {
     const startFrom = String(body.subscriptionOrders?.startFrom || '').toLowerCase();
     if (startFrom && !['today', 'tomorrow'].includes(startFrom)) {

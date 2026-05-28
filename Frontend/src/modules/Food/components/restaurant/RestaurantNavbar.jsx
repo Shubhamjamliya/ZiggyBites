@@ -384,27 +384,6 @@ export default function RestaurantNavbar({
         {logoUrl && (
           <img src={logoUrl} alt="Logo" className="h-10 w-10 object-contain rounded-lg" />
         )}
-        <div className="min-w-0">
-          {/* Restaurant Name & Company */}
-          <div className="flex items-baseline gap-1.5 min-w-0">
-            <h1 className="text-[15px] font-bold text-gray-900 truncate">
-              {loading ? "Loading..." : (restaurantName || "Restaurant")}
-            </h1>
-            {companyName && !loading && (
-              <span className="text-[9px] text-gray-400 font-bold uppercase tracking-tight shrink-0">
-                {companyName}
-              </span>
-            )}
-          </div>
-          {!loading && location && location.trim() !== "" && (
-            <div className="flex items-center gap-1 mt-0.5 opacity-80">
-              <MapPin className="w-2.5 h-2.5 text-gray-500 shrink-0" />
-              <p className="text-[10px] text-gray-500 truncate font-medium" title={location}>
-                {location}
-              </p>
-            </div>
-          )}
-        </div>
       </div>
 
       {/* Right Side - Interactive Elements */}

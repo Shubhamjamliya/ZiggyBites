@@ -1,11 +1,12 @@
 .restaurant-theme {
-  --rt-primary: #7e3866;
-  --rt-primary-strong: #55254b;
-  --rt-primary-soft: #f9f0f7;
+  --rt-primary: var(--app-theme-primary);
+  --rt-primary-strong: color-mix(in srgb, var(--app-theme-primary) 82%, #000000);
+  --rt-primary-soft: color-mix(in srgb, var(--app-theme-primary) 9%, #ffffff);
   --rt-surface: #ffffff;
-  --rt-border: #ead6e3;
+  --rt-border: color-mix(in srgb, var(--app-theme-primary) 22%, #ffffff);
   --rt-text: #1f1f24;
   --rt-muted: #6d6470;
+  font-family: var(--font-poppins);
   color: var(--rt-text);
 }
 

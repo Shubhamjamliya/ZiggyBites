@@ -5,6 +5,9 @@ export const DEFAULT_APP_CUSTOMIZATION_SETTINGS = {
   normalOrderFlowEnabled: true,
   subscriptionFlowEnabled: true,
   diningFlowEnabled: true,
+  theme: {
+    primaryColor: '#e92823',
+  },
   subscriptionOrders: {
     startFrom: 'tomorrow',
     devModePlaceNow: false,
@@ -40,10 +43,17 @@ function normalizeAppCustomizationSettings(settings = {}) {
   const startFrom = String(settings.subscriptionOrders?.startFrom || settings.subscriptionStartFrom || 'tomorrow').toLowerCase();
   const dishChangeLeadHours = Number(settings.timeManagement?.dishChangeLeadHours);
   const addressChangeLeadHours = Number(settings.timeManagement?.addressChangeLeadHours);
+  const primaryColor = String(settings.theme?.primaryColor || settings.primaryColor || DEFAULT_APP_CUSTOMIZATION_SETTINGS.theme.primaryColor).trim();
+  const normalizedPrimaryColor = /^#[0-9a-f]{6}$/i.test(primaryColor)
+    ? primaryColor.toLowerCase()
+    : DEFAULT_APP_CUSTOMIZATION_SETTINGS.theme.primaryColor;
   return {
     normalOrderFlowEnabled: settings.normalOrderFlowEnabled !== false,
     subscriptionFlowEnabled: settings.subscriptionFlowEnabled !== false,
     diningFlowEnabled: settings.diningFlowEnabled !== false,
+    theme: {
+      primaryColor: normalizedPrimaryColor,
+    },
     subscriptionOrders: {
       startFrom: startFrom === 'today' ? 'today' : 'tomorrow',
       devModePlaceNow: Boolean(settings.subscriptionOrders?.devModePlaceNow),
@@ -90,6 +100,10 @@ export async function updateAppCustomizationSettings(payload = {}, adminId) {
       ...current.scheduledOrders,
       ...(payload.scheduledOrders || {}),
     },
+    theme: {
+      ...current.theme,
+      ...(payload.theme || {}),
+    },
     timeManagement: {
       ...current.timeManagement,
       ...(payload.timeManagement || {}),
@@ -113,6 +127,7 @@ export async function updateAppCustomizationSettings(payload = {}, adminId) {
         diningFlowEnabled: next.diningFlowEnabled,
         subscriptionOrders: next.subscriptionOrders,
         scheduledOrders: next.scheduledOrders,
+        theme: next.theme,
         timeManagement: next.timeManagement,
         updatedBy: { role: "ADMIN", adminId, at: new Date() },
       },

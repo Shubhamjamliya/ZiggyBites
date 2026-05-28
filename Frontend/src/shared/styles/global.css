@@ -23,7 +23,8 @@
   --card-foreground: #3c0f3d;
   --popover: #ffffff;
   --popover-foreground: #3c0f3d;
-  --primary: #7e3866;
+  --app-theme-primary: #e92823;
+  --primary: var(--app-theme-primary);
   --primary-foreground: #ffffff;
   --secondary: #55254b;
   --secondary-foreground: #ffffff;
@@ -34,15 +35,15 @@
   --destructive: #ef4444;
   --border: #e2e8f0;
   --input: #e2e8f0;
-  --ring: #7e3866;
+  --ring: var(--app-theme-primary);
   --sidebar: #ffffff;
   --sidebar-foreground: #3c0f3d;
-  --sidebar-primary: #7e3866;
+  --sidebar-primary: var(--app-theme-primary);
   --sidebar-primary-foreground: #ffffff;
   --sidebar-accent: #55254b;
   --sidebar-accent-foreground: #ffffff;
   --sidebar-border: #e2e8f0;
-  --sidebar-ring: #7e3866;
+  --sidebar-ring: var(--app-theme-primary);
 }
 
 @theme inline {
@@ -78,7 +79,7 @@
   --color-sidebar-ring: var(--sidebar-ring);
   
   --color-page-bg: #F9F9FB;
-  --color-primary-orange: #7e3866;
+  --color-primary-orange: var(--app-theme-primary);
   --font-poppins: var(--font-poppins);
   --font-outfit: var(--font-outfit);
 }
@@ -131,6 +132,87 @@
   }
   body {
     @apply bg-background text-foreground m-0 min-h-screen;
+  }
+}
+
+@layer utilities {
+  [class~="bg-[#7e3866]"] {
+    background-color: var(--app-theme-primary) !important;
+  }
+  [class~="text-[#7e3866]"] {
+    color: var(--app-theme-primary) !important;
+  }
+  [class~="border-[#7e3866]"] {
+    border-color: var(--app-theme-primary) !important;
+  }
+  [class~="border-t-[#7e3866]"] {
+    border-top-color: var(--app-theme-primary) !important;
+  }
+  [class~="border-r-[#7e3866]"] {
+    border-right-color: var(--app-theme-primary) !important;
+  }
+  [class~="border-b-[#7e3866]"] {
+    border-bottom-color: var(--app-theme-primary) !important;
+  }
+  [class~="border-l-[#7e3866]"] {
+    border-left-color: var(--app-theme-primary) !important;
+  }
+  [class~="ring-[#7e3866]"] {
+    --tw-ring-color: var(--app-theme-primary) !important;
+  }
+  [class~="fill-[#7e3866]"] {
+    fill: var(--app-theme-primary) !important;
+  }
+  [class~="stroke-[#7e3866]"] {
+    stroke: var(--app-theme-primary) !important;
+  }
+  [class~="focus:ring-[#7e3866]"]:focus {
+    --tw-ring-color: var(--app-theme-primary) !important;
+  }
+  [class~="focus:border-[#7e3866]"]:focus {
+    border-color: var(--app-theme-primary) !important;
+  }
+  [class~="hover:text-[#7e3866]"]:hover {
+    color: var(--app-theme-primary) !important;
+  }
+  [class~="hover:border-[#7e3866]"]:hover {
+    border-color: var(--app-theme-primary) !important;
+  }
+  [class~="hover:bg-[#7e3866]"]:hover {
+    background-color: var(--app-theme-primary) !important;
+  }
+  .dark [class~="dark:bg-[#7e3866]"] {
+    background-color: var(--app-theme-primary) !important;
+  }
+  .dark [class~="dark:text-[#7e3866]"] {
+    color: var(--app-theme-primary) !important;
+  }
+  .dark [class~="dark:border-[#7e3866]"] {
+    border-color: var(--app-theme-primary) !important;
+  }
+  [class~="from-[#7e3866]"] {
+    --tw-gradient-from: var(--app-theme-primary) var(--tw-gradient-from-position) !important;
+    --tw-gradient-to: color-mix(in srgb, var(--app-theme-primary) 0%, transparent) var(--tw-gradient-to-position) !important;
+    --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important;
+  }
+  [class~="via-[#7e3866]"] {
+    --tw-gradient-via: var(--app-theme-primary) var(--tw-gradient-via-position) !important;
+    --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-via), var(--tw-gradient-to) !important;
+  }
+  [class~="to-[#7e3866]"] {
+    --tw-gradient-to: var(--app-theme-primary) var(--tw-gradient-to-position) !important;
+  }
+  [class*="bg-[#7e3866]/"] {
+    background-color: color-mix(in srgb, var(--app-theme-primary) 10%, transparent) !important;
+  }
+  [class*="border-[#7e3866]/"] {
+    border-color: color-mix(in srgb, var(--app-theme-primary) 30%, transparent) !important;
+  }
+  [class*="ring-[#7e3866]/"] {
+    --tw-ring-color: color-mix(in srgb, var(--app-theme-primary) 30%, transparent) !important;
+  }
+  [class*="shadow-[#7e3866]/"] {
+    --tw-shadow-color: color-mix(in srgb, var(--app-theme-primary) 20%, transparent) !important;
   }
 }
 

@@ -1,13 +1,17 @@
 import { useEffect, useState } from "react"
-import { CalendarClock, Loader2, Save, Settings2, ShoppingCart, Utensils, UtensilsCrossed } from "lucide-react"
+import { CalendarClock, Loader2, Palette, Save, Settings2, ShoppingCart, Utensils, UtensilsCrossed } from "lucide-react"
 import { Button } from "@food/components/ui/button"
 import { adminAPI } from "@food/api"
 import { toast } from "sonner"
+import { applyAppTheme, normalizeThemeColor } from "@food/utils/appCustomization"
 
 const DEFAULT_SETTINGS = {
   normalOrderFlowEnabled: true,
   subscriptionFlowEnabled: true,
   diningFlowEnabled: true,
+  theme: {
+    primaryColor: "#e92823",
+  },
   subscriptionOrders: {
     startFrom: "tomorrow",
     devModePlaceNow: false,
@@ -22,6 +26,30 @@ const DEFAULT_SETTINGS = {
     dishChangeLeadHours: 24,
     addressChangeLeadHours: 3,
   },
+}
+
+function mergeSettings(data) {
+  return {
+    ...DEFAULT_SETTINGS,
+    ...data,
+    theme: {
+      ...DEFAULT_SETTINGS.theme,
+      ...(data.theme || {}),
+      primaryColor: normalizeThemeColor(data.theme?.primaryColor || data.primaryColor),
+    },
+    subscriptionOrders: {
+      ...DEFAULT_SETTINGS.subscriptionOrders,
+      ...(data.subscriptionOrders || {}),
+    },
+    scheduledOrders: {
+      ...DEFAULT_SETTINGS.scheduledOrders,
+      ...(data.scheduledOrders || {}),
+    },
+    timeManagement: {
+      ...DEFAULT_SETTINGS.timeManagement,
+      ...(data.timeManagement || {}),
+    },
+  }
 }
 
 function ToggleSwitch({ checked, onChange, ariaLabel }) {
@@ -66,6 +94,8 @@ export default function AppCustomization() {
   const [settings, setSettings] = useState(DEFAULT_SETTINGS)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [activePanel, setActivePanel] = useState("flows")
+  const themeColorValid = /^#[0-9a-f]{6}$/i.test(settings.theme.primaryColor)
 
   useEffect(() => {
     let mounted = true
@@ -75,22 +105,9 @@ export default function AppCustomization() {
         const response = await adminAPI.getAppCustomization()
         const data = response?.data?.data?.settings
         if (mounted && data) {
-          setSettings({
-            ...DEFAULT_SETTINGS,
-            ...data,
-            subscriptionOrders: {
-              ...DEFAULT_SETTINGS.subscriptionOrders,
-              ...(data.subscriptionOrders || {}),
-            },
-            scheduledOrders: {
-              ...DEFAULT_SETTINGS.scheduledOrders,
-              ...(data.scheduledOrders || {}),
-            },
-            timeManagement: {
-              ...DEFAULT_SETTINGS.timeManagement,
-              ...(data.timeManagement || {}),
-            },
-          })
+          const merged = mergeSettings(data)
+          setSettings(merged)
+          applyAppTheme(merged)
         }
       } catch (error) {
         toast.error(error?.response?.data?.message || "Failed to load app customization")
@@ -116,13 +133,35 @@ export default function AppCustomization() {
     }))
   }
 
+  const updateThemeColor = (value) => {
+    setSettings((prev) => {
+      const next = {
+        ...prev,
+        theme: {
+          ...prev.theme,
+          primaryColor: value,
+        },
+      }
+      if (/^#[0-9a-f]{6}$/i.test(value)) applyAppTheme(next)
+      return next
+    })
+  }
+
   const handleSave = async () => {
+    if (!/^#[0-9a-f]{6}$/i.test(settings.theme.primaryColor)) {
+      toast.error("Enter a valid 6-digit theme color")
+      return
+    }
+
     try {
       setSaving(true)
       const response = await adminAPI.updateAppCustomization({
         normalOrderFlowEnabled: Boolean(settings.normalOrderFlowEnabled),
         subscriptionFlowEnabled: Boolean(settings.subscriptionFlowEnabled),
         diningFlowEnabled: Boolean(settings.diningFlowEnabled),
+        theme: {
+          primaryColor: normalizeThemeColor(settings.theme.primaryColor),
+        },
         subscriptionOrders: {
           startFrom: settings.subscriptionOrders.startFrom,
           devModePlaceNow: Boolean(settings.subscriptionOrders.devModePlaceNow),
@@ -130,22 +169,9 @@ export default function AppCustomization() {
       })
       const saved = response?.data?.data?.settings
       if (saved) {
-        setSettings({
-          ...DEFAULT_SETTINGS,
-          ...saved,
-          subscriptionOrders: {
-            ...DEFAULT_SETTINGS.subscriptionOrders,
-            ...(saved.subscriptionOrders || {}),
-          },
-          scheduledOrders: {
-            ...DEFAULT_SETTINGS.scheduledOrders,
-            ...(saved.scheduledOrders || {}),
-          },
-          timeManagement: {
-            ...DEFAULT_SETTINGS.timeManagement,
-            ...(saved.timeManagement || {}),
-          },
-        })
+        const merged = mergeSettings(saved)
+        setSettings(merged)
+        applyAppTheme(merged)
       }
       toast.success("App customization saved")
     } catch (error) {
@@ -170,7 +196,7 @@ export default function AppCustomization() {
               </p>
             </div>
           </div>
-          <Button onClick={handleSave} disabled={loading || saving} className="bg-[#7e3866] text-white hover:bg-[#55254b]">
+          <Button onClick={handleSave} disabled={loading || saving || !themeColorValid} className="bg-[#7e3866] text-white hover:bg-[#55254b]">
             {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
             Save Settings
           </Button>
@@ -184,74 +210,176 @@ export default function AppCustomization() {
           </div>
         ) : (
           <div className="space-y-6">
-            <ToggleRow
-              icon={ShoppingCart}
-              title="Normal order flow"
-              description="When off, cart access is hidden and users cannot place regular restaurant orders."
-              checked={settings.normalOrderFlowEnabled}
-              onChange={(value) => updateRoot("normalOrderFlowEnabled", value)}
-            />
-
-            <ToggleRow
-              icon={Utensils}
-              title="Subscription flow"
-              description="When off, users cannot open meal time, subscription plan, or subscription checkout flows."
-              checked={settings.subscriptionFlowEnabled}
-              onChange={(value) => updateRoot("subscriptionFlowEnabled", value)}
-            />
-
-            <ToggleRow
-              icon={UtensilsCrossed}
-              title="Dining flow"
-              description="When off, dining pages, dining navigation, and user dining booking APIs are disabled."
-              checked={settings.diningFlowEnabled}
-              onChange={(value) => updateRoot("diningFlowEnabled", value)}
-            />
-
-            <div className="rounded-lg border border-slate-200 p-4">
-              <div className="mb-4 flex items-start gap-3">
-                <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-700">
-                  <CalendarClock className="h-4 w-4" />
-                </span>
-                <div>
-                  <h2 className="text-sm font-semibold text-slate-900">Subscription order start</h2>
-                  <p className="mt-1 text-sm text-slate-500">
-                    Choose whether newly paid subscriptions start from today or tomorrow.
-                  </p>
-                </div>
-              </div>
-
-              <div className="grid gap-3 sm:grid-cols-2">
-                {["today", "tomorrow"].map((value) => (
+            <div className="flex flex-wrap gap-2 rounded-lg bg-slate-100 p-1">
+              {[
+                { id: "flows", label: "Flows", icon: Settings2 },
+                { id: "theme", label: "Theme", icon: Palette },
+              ].map((panel) => {
+                const Icon = panel.icon
+                const isActive = activePanel === panel.id
+                return (
                   <button
-                    key={value}
+                    key={panel.id}
                     type="button"
-                    onClick={() => updateSubscriptionOrders("startFrom", value)}
-                    className={`rounded-lg border px-4 py-3 text-left text-sm font-semibold capitalize transition-colors ${
-                      settings.subscriptionOrders.startFrom === value
-                        ? "border-[#7e3866] bg-[#7e3866]/10 text-[#7e3866]"
-                        : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"
+                    onClick={() => setActivePanel(panel.id)}
+                    className={`inline-flex h-10 items-center gap-2 rounded-md px-4 text-sm font-bold transition-colors ${
+                      isActive ? "bg-white text-[#7e3866] shadow-sm" : "text-slate-600 hover:text-slate-900"
                     }`}
                   >
-                    {value}
+                    <Icon className="h-4 w-4" />
+                    {panel.label}
                   </button>
-                ))}
-              </div>
-
-              <div className="mt-4 flex items-center justify-between gap-4 rounded-lg bg-slate-50 p-4">
-                <span>
-                  <span className="block text-sm font-semibold text-slate-900">Dev mode: place subscription meals now</span>
-                  <span className="mt-1 block text-sm text-slate-500">
-                    Only applies outside production; first subscription schedule starts immediately for testing.
-                  </span>
-                </span>
-                <ToggleSwitch
-                  checked={settings.subscriptionOrders.devModePlaceNow}
-                  onChange={(value) => updateSubscriptionOrders("devModePlaceNow", value)}
-                  ariaLabel="Dev mode: place subscription meals now"
-                />
-              </div>
+                )
+              })}
             </div>
+
+            {activePanel === "flows" ? (
+              <>
+                <ToggleRow
+                  icon={ShoppingCart}
+                  title="Normal order flow"
+                  description="When off, cart access is hidden and users cannot place regular restaurant orders."
+                  checked={settings.normalOrderFlowEnabled}
+                  onChange={(value) => updateRoot("normalOrderFlowEnabled", value)}
+                />
+
+                <ToggleRow
+                  icon={Utensils}
+                  title="Subscription flow"
+                  description="When off, users cannot open meal time, subscription plan, or subscription checkout flows."
+                  checked={settings.subscriptionFlowEnabled}
+                  onChange={(value) => updateRoot("subscriptionFlowEnabled", value)}
+                />
+
+                <ToggleRow
+                  icon={UtensilsCrossed}
+                  title="Dining flow"
+                  description="When off, dining pages, dining navigation, and user dining booking APIs are disabled."
+                  checked={settings.diningFlowEnabled}
+                  onChange={(value) => updateRoot("diningFlowEnabled", value)}
+                />
+
+                <div className="rounded-lg border border-slate-200 p-4">
+                  <div className="mb-4 flex items-start gap-3">
+                    <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-700">
+                      <CalendarClock className="h-4 w-4" />
+                    </span>
+                    <div>
+                      <h2 className="text-sm font-semibold text-slate-900">Subscription order start</h2>
+                      <p className="mt-1 text-sm text-slate-500">
+                        Choose whether newly paid subscriptions start from today or tomorrow.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {["today", "tomorrow"].map((value) => (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => updateSubscriptionOrders("startFrom", value)}
+                        className={`rounded-lg border px-4 py-3 text-left text-sm font-semibold capitalize transition-colors ${
+                          settings.subscriptionOrders.startFrom === value
+                            ? "border-[#7e3866] bg-[#7e3866]/10 text-[#7e3866]"
+                            : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"
+                        }`}
+                      >
+                        {value}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="mt-4 flex items-center justify-between gap-4 rounded-lg bg-slate-50 p-4">
+                    <span>
+                      <span className="block text-sm font-semibold text-slate-900">Dev mode: place subscription meals now</span>
+                      <span className="mt-1 block text-sm text-slate-500">
+                        Only applies outside production; first subscription schedule starts immediately for testing.
+                      </span>
+                    </span>
+                    <ToggleSwitch
+                      checked={settings.subscriptionOrders.devModePlaceNow}
+                      onChange={(value) => updateSubscriptionOrders("devModePlaceNow", value)}
+                      ariaLabel="Dev mode: place subscription meals now"
+                    />
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
+                <div className="rounded-lg border border-slate-200 p-4">
+                  <div className="mb-5 flex items-start gap-3">
+                    <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-700">
+                      <Palette className="h-4 w-4" />
+                    </span>
+                    <div>
+                      <h2 className="text-sm font-semibold text-slate-900">Theme color</h2>
+                      <p className="mt-1 text-sm text-slate-500">
+                        This color is applied to primary buttons, active states, rings, and theme accents across the application.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-4 sm:grid-cols-[96px_1fr] sm:items-end">
+                    <label className="block">
+                      <span className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-500">Pick color</span>
+                      <input
+                        type="color"
+                        value={normalizeThemeColor(settings.theme.primaryColor)}
+                        onChange={(event) => updateThemeColor(event.target.value)}
+                        className="h-12 w-24 cursor-pointer rounded-lg border border-slate-200 bg-white p-1"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-500">Hex value</span>
+                      <input
+                        type="text"
+                        value={settings.theme.primaryColor}
+                        onChange={(event) => updateThemeColor(event.target.value)}
+                        placeholder="#e92823"
+                        className="h-12 w-full rounded-lg border border-slate-200 px-4 text-sm font-semibold text-slate-900 outline-none transition-colors focus:border-[#7e3866] focus:ring-4 focus:ring-[#7e3866]/10"
+                      />
+                    </label>
+                  </div>
+
+                  {!themeColorValid && (
+                    <p className="mt-3 text-sm font-medium text-red-600">Enter a valid 6-digit hex color, for example #e92823.</p>
+                  )}
+                </div>
+
+                <div className="rounded-lg border border-slate-200 p-4">
+                  <p className="mb-4 text-xs font-bold uppercase tracking-wide text-slate-500">Preview</p>
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-3">
+                      <span
+                        className="h-12 w-12 rounded-lg shadow-sm"
+                        style={{ backgroundColor: normalizeThemeColor(settings.theme.primaryColor) }}
+                      />
+                      <div>
+                        <p className="text-sm font-bold text-slate-900">{normalizeThemeColor(settings.theme.primaryColor)}</p>
+                        <p className="text-xs text-slate-500">Primary app theme</p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      className="h-11 w-full rounded-lg text-sm font-bold text-white shadow-sm"
+                      style={{ backgroundColor: normalizeThemeColor(settings.theme.primaryColor) }}
+                    >
+                      Primary Button
+                    </button>
+                    <div
+                      className="rounded-lg border p-3 text-sm font-semibold"
+                      style={{
+                        borderColor: normalizeThemeColor(settings.theme.primaryColor),
+                        color: normalizeThemeColor(settings.theme.primaryColor),
+                        backgroundColor: `${normalizeThemeColor(settings.theme.primaryColor)}14`,
+                      }}
+                    >
+                      Active selection state
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

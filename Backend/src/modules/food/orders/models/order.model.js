@@ -362,6 +362,9 @@ const settingsSchema = new mongoose.Schema(
         normalOrderFlowEnabled: { type: Boolean, default: true },
         subscriptionFlowEnabled: { type: Boolean, default: true },
         diningFlowEnabled: { type: Boolean, default: true },
+        theme: {
+            primaryColor: { type: String, default: '#e92823', trim: true }
+        },
         subscriptionOrders: {
             startFrom: { type: String, enum: ['today', 'tomorrow'], default: 'tomorrow' },
             devModePlaceNow: { type: Boolean, default: false }

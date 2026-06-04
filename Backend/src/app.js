@@ -9,9 +9,9 @@ import errorHandler from './middleware/errorHandler.js';
 import { apiRateLimiter } from './middleware/rateLimit.js';
 import { responseTimeLogger } from './middleware/responseTimeLogger.js';
 import { requestIdMiddleware } from './middleware/requestId.js';
+import { requestLogger } from './middleware/requestLogger.js';
 import { healthCheck } from './config/health.js';
 import { config } from './config/env.js';
-
 const app = express();
 
 // Trust first proxy (essential for express-rate-limit if behind a proxy)
@@ -42,7 +42,8 @@ app.use(helmet({
     referrerPolicy: { policy: 'strict-origin-when-cross-origin' }
 }));
 app.use(cors());
-app.use(morgan('dev'));
+// Replaced morgan with custom structured request logger
+app.use(requestLogger);
 app.use(express.json({
     verify: (req, res, buf) => {
         // ✅ Store rawBody for signature verification (Razorpay Webhooks)

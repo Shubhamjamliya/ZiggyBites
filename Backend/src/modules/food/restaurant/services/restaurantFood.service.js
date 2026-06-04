@@ -14,6 +14,7 @@ import {
     categoryAllowsFoodType,
     GLOBAL_CATEGORY_FILTER
 } from '../../shared/categoryWorkflow.js';
+import { logger } from '../../../../utils/logger.js';
 
 const toStr = (v) => (v != null ? String(v).trim() : '');
 const APPROVED_CATEGORY_FILTER = [
@@ -201,8 +202,14 @@ export async function createRestaurantFood(restaurantId, body = {}) {
     const context = await getRestaurantContext(restaurantId);
 
     const name = toStr(body.name);
-    if (!name) throw new ValidationError('Item name is required');
-    if (name.length > 200) throw new ValidationError('Item name is too long');
+    if (!name) {
+        logger.warn(`Inventory Failure: Item name is missing (restaurantId: ${restaurantId})`);
+        throw new ValidationError('Item name is required');
+    }
+    if (name.length > 200) {
+        logger.warn(`Inventory Failure: Item name too long (restaurantId: ${restaurantId}, name: ${name})`);
+        throw new ValidationError('Item name is too long');
+    }
 
     const { price, variants } = getCreateFoodPricing(body);
 
@@ -251,6 +258,7 @@ export async function createRestaurantFood(restaurantId, body = {}) {
         console.error('Failed to notify admins of new food approval request:', e);
     }
 
+    logger.info(`Inventory success: Added new food item ${doc._id} by restaurant ${restaurantId}`);
     return doc.toObject();
 }
 
@@ -267,8 +275,14 @@ export async function updateRestaurantFood(restaurantId, foodId, body = {}) {
 
     if (body.name !== undefined) {
         const name = toStr(body.name);
-        if (!name) throw new ValidationError('Item name is required');
-        if (name.length > 200) throw new ValidationError('Item name is too long');
+        if (!name) {
+            logger.warn(`Inventory Failure: Item name is missing during update (restaurantId: ${restaurantId}, foodId: ${foodId})`);
+            throw new ValidationError('Item name is required');
+        }
+        if (name.length > 200) {
+            logger.warn(`Inventory Failure: Item name too long during update (restaurantId: ${restaurantId}, foodId: ${foodId})`);
+            throw new ValidationError('Item name is too long');
+        }
         update.name = name;
     }
     if (body.description !== undefined) update.description = toStr(body.description);
@@ -335,5 +349,6 @@ export async function updateRestaurantFood(restaurantId, foodId, body = {}) {
         }
     }
 
+    logger.info(`Inventory success: Updated food item ${foodId} by restaurant ${restaurantId}`);
     return updated;
 }

@@ -144,11 +144,18 @@ export async function createOrder(userId, dto) {
   const restaurant = await FoodRestaurant.findById(dto.restaurantId)
     .select("status restaurantName zoneId location isAcceptingOrders")
     .lean();
-  if (!restaurant) throw new ValidationError("Restaurant not found");
-  if (restaurant.status !== "approved")
+  if (!restaurant) {
+    logger.warn(`Order Failure: Restaurant not found for order attempt by user ${userId}`, { restaurantId: dto.restaurantId });
+    throw new ValidationError("Restaurant not found");
+  }
+  if (restaurant.status !== "approved") {
+    logger.warn(`Order Failure: Restaurant ${dto.restaurantId} is not approved (status: ${restaurant.status})`);
     throw new ValidationError("Restaurant not accepting orders");
-  if (restaurant.isAcceptingOrders === false)
+  }
+  if (restaurant.isAcceptingOrders === false) {
+    logger.warn(`Order Failure: Restaurant ${dto.restaurantId} is not accepting orders`);
     throw new ValidationError("Restaurant not accepting orders");
+  }
 
 
   const settings = await getDispatchSettings();
@@ -361,6 +368,7 @@ export async function createOrder(userId, dto) {
       payment.razorpay = { orderId: rzOrder.id, paymentId: "", signature: "" };
       payment.status = "created";
     } catch (err) {
+      logger.error(`Order Failure: Payment gateway error for order ${order._id}`, { error: err.message });
       throw new ValidationError(err?.message || "Payment gateway error");
     }
   }
@@ -477,6 +485,7 @@ export async function createOrder(userId, dto) {
   }
 
   const saved = normalizeOrderForClient(order);
+  logger.info(`Order successfully created: ${order._id}`, { userId, restaurantId: dto.restaurantId, amountDue: payment.amountDue });
   return { order: saved, razorpay: razorpayPayload };
 }
 
@@ -498,7 +507,10 @@ export async function verifyPayment(userId, dto) {
     dto.razorpayPaymentId,
     dto.razorpaySignature,
   );
-  if (!valid) throw new ValidationError("Payment verification failed");
+  if (!valid) {
+    logger.warn(`Payment Failure: Verification failed for order ${order._id}`, { razorpayOrderId: dto.razorpayOrderId });
+    throw new ValidationError("Payment verification failed");
+  }
 
   order.payment.status = "paid";
   order.payment.razorpay.paymentId = dto.razorpayPaymentId;
@@ -564,6 +576,7 @@ export async function verifyPayment(userId, dto) {
     } catch {}
   }
 
+  logger.info(`Payment verified successfully for order ${order._id}`, { paymentId: dto.razorpayPaymentId });
   return { order: normalizeOrderForClient(order), payment: order.payment };
 }
 

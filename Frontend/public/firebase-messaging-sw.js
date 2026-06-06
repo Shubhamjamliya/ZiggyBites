@@ -5,6 +5,17 @@ importScripts("https://www.gstatic.com/firebasejs/10.13.2/firebase-messaging-com
 const sanitize = (value) => String(value || "").trim().replace(/^['"]|['"]$/g, "");
 const PUSH_DEBUG_PREFIX = "[push-sw]";
 const pushDebugLog = () => {};
+const SW_VERSION = "2026-06-06-notification-dedupe";
+
+self.addEventListener("install", () => {
+  pushDebugLog(PUSH_DEBUG_PREFIX, "Service worker install", { version: SW_VERSION });
+  self.skipWaiting();
+});
+
+self.addEventListener("activate", (event) => {
+  pushDebugLog(PUSH_DEBUG_PREFIX, "Service worker activate", { version: SW_VERSION });
+  event.waitUntil(clients.claim());
+});
 const getNotificationKey = (payload) =>
   payload?.data?.notificationId ||
   payload?.data?.messageId ||
@@ -122,8 +133,9 @@ async function loadFirebaseWebConfig() {
     pushDebugLog(PUSH_DEBUG_PREFIX, "Received Firebase background message", { payload });
     
     const visibleClient = await hasVisibleClientForTarget(payload);
+    const shouldShowManualNotification = !payload?.notification;
     
-    if (!visibleClient) {
+    if (!visibleClient && shouldShowManualNotification) {
       const title = payload?.notification?.title || payload?.data?.title || "New Notification";
       const body = payload?.notification?.body || payload?.data?.body || "";
       const image =
@@ -150,6 +162,11 @@ async function loadFirebaseWebConfig() {
         requireInteraction: false,
         vibrate: [200, 100, 200, 100, 300],
         data: payload?.data || {},
+      });
+    } else {
+      pushDebugLog(PUSH_DEBUG_PREFIX, "Skipping manual service worker notification", {
+        hasVisibleClient: visibleClient,
+        hasFirebaseNotificationPayload: Boolean(payload?.notification),
       });
     }
 

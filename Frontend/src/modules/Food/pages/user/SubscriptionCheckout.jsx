@@ -50,7 +50,7 @@ const formatFullAddress = (address) => {
 export default function SubscriptionCheckout() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { userProfile, getDefaultAddress } = useProfile();
+  const { userProfile, getDefaultAddress, isAuthenticated } = useProfile();
   const { location: currentLocation } = useUserLocation();
 
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
@@ -129,7 +129,19 @@ export default function SubscriptionCheckout() {
     return noteParts.join(" | ");
   }, [days, selectedMealLabel, subscriptionPlan?.title]);
 
+  const redirectToLogin = () => {
+    navigate("/user/auth/login", {
+      replace: true,
+      state: { from: location.pathname },
+    });
+  };
+
   const handleChangeAddress = () => {
+    if (!isAuthenticated) {
+      redirectToLogin();
+      return;
+    }
+
     navigate("/food/user/address-selector", {
       state: {
         mode: "subscription-checkout-address",
@@ -145,6 +157,12 @@ export default function SubscriptionCheckout() {
   };
 
   const handlePlaceOrder = async () => {
+    if (!isAuthenticated) {
+      toast.info("Please login to continue with payment.");
+      redirectToLogin();
+      return;
+    }
+
     if (appCustomization.subscriptionFlowEnabled === false) {
       toast.error("Subscription ordering is currently unavailable.");
       return;
@@ -302,6 +320,12 @@ export default function SubscriptionCheckout() {
             toast.success("Subscription activated successfully.");
             navigate("/food/user/profile", { replace: true });
           } catch (error) {
+            if (error?.response?.status === 401) {
+              toast.info("Please login to continue.");
+              redirectToLogin();
+              return;
+            }
+
             toast.error(
               error?.response?.data?.message ||
                 error?.message ||
@@ -331,6 +355,13 @@ export default function SubscriptionCheckout() {
         },
       });
     } catch (error) {
+      if (error?.response?.status === 401) {
+        toast.info("Please login to continue with payment.");
+        redirectToLogin();
+        setIsPlacingOrder(false);
+        return;
+      }
+
       console.error("[SubscriptionCheckout] Failed to start subscription payment", error);
       toast.error(
         error?.response?.data?.message ||

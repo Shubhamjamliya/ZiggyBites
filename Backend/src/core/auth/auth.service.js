@@ -123,6 +123,7 @@ export const verifyUserOtpAndLogin = async (
   const result = await verifyOtp(phone, otp);
 
   if (!result.valid) {
+    logger.warn(`Auth Failure: OTP verification failed for user (phone: ${phone})`, { reason: result.reason });
     throw new AuthError(result.reason || "OTP verification failed");
   }
 
@@ -277,6 +278,8 @@ export const verifyUserOtpAndLogin = async (
     expiresAt,
   });
 
+  logger.info(`User login success: ${user._id}`, { role: payload.role, isNewUser });
+
   return {
     token: accessToken,
     accessToken,
@@ -293,11 +296,13 @@ export const adminLogin = async (email, password) => {
 
   const admin = await FoodAdmin.findOne({ email });
   if (!admin) {
+    logger.warn(`Auth Failure: Admin login attempt with non-existent email`, { email });
     throw new AuthError("Invalid credentials");
   }
 
   const isMatch = await admin.comparePassword(password);
   if (!isMatch) {
+    logger.warn(`Auth Failure: Admin login attempt with incorrect password`, { email, adminId: admin._id });
     throw new AuthError("Invalid credentials");
   }
 
@@ -317,6 +322,9 @@ export const adminLogin = async (email, password) => {
 
   const userObj = admin.toObject();
   delete userObj.password;
+  
+  logger.info(`Admin login success: ${admin._id}`, { role: admin.role });
+  
   return { accessToken, refreshToken, user: userObj };
 };
 
@@ -334,6 +342,7 @@ export const requestRestaurantOtp = async (phone) => {
 export const verifyRestaurantOtpAndLogin = async (phone, otp, fcmToken, platform) => {
   const result = await verifyOtp(phone, otp);
   if (!result.valid) {
+    logger.warn(`Auth Failure: OTP verification failed for restaurant (phone: ${phone})`, { reason: result.reason });
     throw new AuthError(result.reason || "OTP verification failed");
   }
 
@@ -407,6 +416,8 @@ export const verifyRestaurantOtpAndLogin = async (phone, otp, fcmToken, platform
     expiresAt,
   });
 
+  logger.info(`Restaurant login success: ${restaurantDoc._id}`);
+
   return {
     token: accessToken,
     accessToken,
@@ -435,6 +446,7 @@ const normalizePhoneForDelivery = (phone) => {
 export const verifyDeliveryOtpAndLogin = async (phone, otp, fcmToken, platform) => {
   const result = await verifyOtp(phone, otp);
   if (!result.valid) {
+    logger.warn(`Auth Failure: OTP verification failed for delivery partner (phone: ${phone})`, { reason: result.reason });
     throw new AuthError(result.reason || "OTP verification failed");
   }
 
@@ -505,6 +517,8 @@ export const verifyDeliveryOtpAndLogin = async (phone, otp, fcmToken, platform) 
     token: refreshToken,
     expiresAt,
   });
+
+  logger.info(`Delivery partner login success: ${deliveryPartner._id}`);
 
   return {
     token: accessToken,

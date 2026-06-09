@@ -34,6 +34,7 @@ let cachedAccessTokenExpiryMs = 0;
 let cachedServiceAccount = null;
 
 const sanitizeString = (value) => String(value ?? '').trim();
+const NOTIFICATION_TRACE_STACK_SKIP = ['firebase.service.js', 'node:internal', 'internal/'];
 
 const toBase64Url = (input) =>
     Buffer.from(JSON.stringify(input))
@@ -163,6 +164,58 @@ const normalizeDataMap = (data = {}) => {
     return result;
 };
 
+const maskTokenPreview = (token) => {
+    const normalized = sanitizeString(token);
+    if (!normalized) return '';
+    if (normalized.length <= 12) return `${normalized.slice(0, 4)}...`;
+    return `${normalized.slice(0, 8)}...${normalized.slice(-4)}`;
+};
+
+const getNotificationCallerTrace = () => {
+    try {
+        const stack = String(new Error().stack || '')
+            .split('\n')
+            .map((line) => line.trim())
+            .filter(Boolean);
+
+        const callerLine = stack.find((line) => {
+            if (!line.startsWith('at ')) return false;
+            return !NOTIFICATION_TRACE_STACK_SKIP.some((segment) => line.includes(segment));
+        });
+
+        return callerLine || stack[2] || 'unknown';
+    } catch {
+        return 'unknown';
+    }
+};
+
+const buildNotificationTraceSummary = (payload = {}) => {
+    const data = normalizeDataMap(payload?.data || {});
+    return {
+        source: sanitizeString(payload?.traceSource || data.source || data.event || data.type || 'unknown'),
+        title: sanitizeString(payload?.title || payload?.notification?.title || ''),
+        body: sanitizeString(payload?.body || payload?.notification?.body || ''),
+        dataOnly: Boolean(payload?.dataOnly),
+        sendToAllDevices: payload?.sendToAllDevices === true,
+        image: sanitizeString(
+            payload?.icon ||
+            payload?.notification?.image ||
+            payload?.notification?.icon ||
+            data.image ||
+            data.imageUrl
+        ),
+        targetUrl: sanitizeString(
+            data.targetUrl ||
+            data.link ||
+            data.click_action ||
+            payload?.fcmOptions?.link
+        ),
+        orderId: sanitizeString(data.orderId || data.orderMongoId || ''),
+        notificationType: sanitizeString(data.type || ''),
+        dataKeys: Object.keys(data).sort(),
+    };
+};
+
 const buildMessagePayload = (payload = {}, token) => {
     const notification = {
         title: sanitizeString(payload.title || payload.notification?.title || 'New notification'),
@@ -171,6 +224,12 @@ const buildMessagePayload = (payload = {}, token) => {
     const data = normalizeDataMap(payload.data || {});
     const image =
         sanitizeString(payload.icon || payload.notification?.image || payload.notification?.icon || data.image || data.imageUrl);
+    const targetLink = sanitizeString(
+        data.targetUrl ||
+        data.link ||
+        data.click_action ||
+        payload?.fcmOptions?.link
+    );
 
     // If payload.dataOnly is true, we omit the 'notification' block.
     // This prevents FCM from auto-displaying while allowing app code to show a 'Local Notification'.
@@ -200,13 +259,22 @@ const buildMessagePayload = (payload = {}, token) => {
     message.webpush = {
         headers: {
             Urgency: 'high'
-        },
-        notification: {
+        }
+    };
+
+    if (!payload.dataOnly) {
+        message.webpush.notification = {
             title: notification.title,
             body: notification.body,
             icon: image || payload.icon || '/favicon.ico'
-        }
-    };
+        };
+    }
+
+    if (targetLink) {
+        message.webpush.fcmOptions = {
+            link: targetLink
+        };
+    }
 
     return message;
 };
@@ -330,14 +398,31 @@ export const sendPushNotification = async (tokens, payload = {}) => {
     const projectId = getFirebaseProjectId();
     const accessToken = await getFirebaseAccessToken();
     const uniqueTokens = normalizeTokenList(tokens);
+    const payloadSummary = buildNotificationTraceSummary(payload);
 
     if (uniqueTokens.length === 0) {
+        logger.info('FCM push skipped: no active tokens available', {
+            projectId,
+            payloadSummary,
+        });
         return { successCount: 0, failureCount: 0, results: [] };
     }
 
     const results = await Promise.all(
         uniqueTokens.map(async (token) => {
             const message = buildMessagePayload(payload, token);
+            logger.info('FCM push request prepared', {
+                projectId,
+                tokenPreview: maskTokenPreview(token),
+                payloadSummary,
+                messageSummary: {
+                    hasNotification: Boolean(message.notification),
+                    hasData: Boolean(message.data && Object.keys(message.data).length > 0),
+                    dataKeys: Object.keys(message.data || {}).sort(),
+                    hasWebpushNotification: Boolean(message.webpush?.notification),
+                    webpushLink: sanitizeString(message.webpush?.fcmOptions?.link || ''),
+                },
+            });
             try {
                 const response = await fetch(FCM_SEND_URL(projectId), {
                     method: 'POST',
@@ -350,6 +435,13 @@ export const sendPushNotification = async (tokens, payload = {}) => {
 
                 if (!response.ok) {
                     const errorJson = await parseFirebaseError(response);
+                    logger.warn('FCM push provider rejected request', {
+                        projectId,
+                        tokenPreview: maskTokenPreview(token),
+                        payloadSummary,
+                        status: response.status,
+                        error: errorJson?.error?.message || `FCM send failed (${response.status})`,
+                    });
                     return {
                         token,
                         ok: false,
@@ -364,6 +456,12 @@ export const sendPushNotification = async (tokens, payload = {}) => {
                     response: await response.json()
                 };
             } catch (error) {
+                logger.warn('FCM push transport failed', {
+                    projectId,
+                    tokenPreview: maskTokenPreview(token),
+                    payloadSummary,
+                    error: error?.message || String(error),
+                });
                 return {
                     token,
                     ok: false,
@@ -382,6 +480,7 @@ export const sendPushNotification = async (tokens, payload = {}) => {
 export const sendNotificationToOwner = async ({ ownerType, ownerId, payload, platform } = {}) => {
     // 💡 Clone the payload to avoid side-effects (e.g. adding multiple prefixes to the same object during broadcasting)
     const enrichedPayload = { ...payload };
+    const callerTrace = getNotificationCallerTrace();
 
     // 🏷️ Add Highlighter Prefix to the Title
     if (enrichedPayload && !enrichedPayload.skipHighlighter) {
@@ -407,10 +506,27 @@ export const sendNotificationToOwner = async ({ ownerType, ownerId, payload, pla
     const shouldFanoutAllDevices = payload?.sendToAllDevices === true;
     const targetTokens = shouldFanoutAllDevices ? normalizeTokenList(tokens) : pickLatestTokenOnly(tokens);
     if (!targetTokens.length) {
+        logger.info('FCM notification skipped: recipient has no active tokens', {
+            ownerType,
+            ownerId: String(ownerId || ''),
+            platform: platform || 'all',
+            callerTrace,
+            payloadSummary: buildNotificationTraceSummary(enrichedPayload),
+        });
         return { successCount: 0, failureCount: 0, results: [] };
     }
     try {
         console.log(`[FCM] Sending to ${ownerType}:${ownerId}. Title: "${enrichedPayload.title || 'Data Only'}"`);
+        logger.info('FCM notification dispatch started', {
+            ownerType,
+            ownerId: String(ownerId || ''),
+            platform: platform || 'all',
+            callerTrace,
+            tokenCountResolved: tokens.length,
+            tokenCountTargeted: targetTokens.length,
+            tokenPreviews: targetTokens.map(maskTokenPreview),
+            payloadSummary: buildNotificationTraceSummary(enrichedPayload),
+        });
         const response = await sendPushNotification(targetTokens, enrichedPayload);
         const invalidTokens = (response.results || [])
 
@@ -431,11 +547,20 @@ export const sendNotificationToOwner = async ({ ownerType, ownerId, payload, pla
             }
         }
         logger.info(
-            `FCM push sent to ${ownerType}:${ownerId} (${platform || 'all'}). Success=${response.successCount}, Failure=${response.failureCount}`
+            `FCM push sent to ${ownerType}:${ownerId} (${platform || 'all'}). Success=${response.successCount}, Failure=${response.failureCount}`,
+            {
+                callerTrace,
+                payloadSummary: buildNotificationTraceSummary(enrichedPayload),
+                invalidTokenPreviews: invalidTokens.map(maskTokenPreview),
+            }
         );
         return response;
     } catch (error) {
-        logger.warn(`FCM push failed for ${ownerType}:${ownerId}: ${error.message}`);
+        logger.warn(`FCM push failed for ${ownerType}:${ownerId}: ${error.message}`, {
+            platform: platform || 'all',
+            callerTrace,
+            payloadSummary: buildNotificationTraceSummary(enrichedPayload),
+        });
         return { successCount: 0, failureCount: targetTokens.length, error: error.message };
     }
 };

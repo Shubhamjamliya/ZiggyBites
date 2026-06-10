@@ -1565,7 +1565,7 @@ export default function OrderTracking() {
           </motion.button>
         </div>
 
-        {/* Status section - hidden for success milestones as requested */}
+        {/* Keep the top status section visible across the full delivery flow. */}
         {isScheduledOrder && ['placed', 'confirmed'].includes(orderStatus) ? (
           <div className="px-4 pb-5 text-center">
             <motion.div
@@ -1610,7 +1610,7 @@ export default function OrderTracking() {
               The restaurant will start preparing your order closer to the scheduled time
             </motion.p>
           </div>
-        ) : !['at_pickup', 'ready', 'on_way', 'at_drop', 'delivered'].includes(orderStatus) && (
+        ) : (
           <div className="px-4 pb-4 text-center">
             <motion.h1
               className="text-2xl font-bold mb-3"

@@ -60,7 +60,7 @@ export default function LandingPageManagement() {
   const diningBannersFileInputRef = useRef(null)
 
   // Settings
-  const [settings, setSettings] = useState({ exploreMoreHeading: "Explore More", recommendedRestaurantIds: [], under250PriceLimit: 250, festBannerVideoUrl: "" })
+  const [settings, setSettings] = useState({ exploreMoreHeading: "Explore More", recommendedRestaurantIds: [], under250PriceLimit: 250, festBannerVideoUrl: "", showSplashScreen: true })
   const [settingsLoading, setSettingsLoading] = useState(true)
   const [settingsSaving, setSettingsSaving] = useState(false)
   const [recommendedSearchQuery, setRecommendedSearchQuery] = useState("")
@@ -1037,13 +1037,14 @@ export default function LandingPageManagement() {
           exploreMoreHeading: nextSettings.exploreMoreHeading || "Explore More",
           recommendedRestaurantIds: Array.isArray(nextSettings.recommendedRestaurantIds) ? nextSettings.recommendedRestaurantIds : [],
           under250PriceLimit: Number(nextSettings.under250PriceLimit) || 250,
-          festBannerVideoUrl: typeof nextSettings.festBannerVideoUrl === "string" ? nextSettings.festBannerVideoUrl : ""
+          festBannerVideoUrl: typeof nextSettings.festBannerVideoUrl === "string" ? nextSettings.festBannerVideoUrl : "",
+          showSplashScreen: nextSettings.showSplashScreen !== false
         })
       }
     } catch (err) {
       // Silently handle 401/404 errors - endpoints may not exist yet, use default settings
       if (err.response?.status === 401 || err.response?.status === 404) {
-        setSettings({ exploreMoreHeading: "Explore More", recommendedRestaurantIds: [], under250PriceLimit: 250, festBannerVideoUrl: "" }) // Use default settings
+        setSettings({ exploreMoreHeading: "Explore More", recommendedRestaurantIds: [], under250PriceLimit: 250, festBannerVideoUrl: "", showSplashScreen: true }) // Use default settings
         setError(null) // Clear any previous error
       } else {
         // Filter out token-related errors
@@ -1064,7 +1065,8 @@ export default function LandingPageManagement() {
         exploreMoreHeading: settings.exploreMoreHeading,
         recommendedRestaurantIds: Array.isArray(settings.recommendedRestaurantIds) ? settings.recommendedRestaurantIds : [],
         under250PriceLimit: Number(settings.under250PriceLimit) || 250,
-        festBannerVideoUrl: settings.festBannerVideoUrl || ""
+        festBannerVideoUrl: settings.festBannerVideoUrl || "",
+        showSplashScreen: settings.showSplashScreen !== false
       }, getAuthConfig())
       if (response.data.success) {
         const savedSettings = response.data.data?.settings || {}
@@ -1077,7 +1079,8 @@ export default function LandingPageManagement() {
           under250PriceLimit: Number(savedSettings.under250PriceLimit) || prev.under250PriceLimit,
           festBannerVideoUrl: typeof savedSettings.festBannerVideoUrl === "string"
             ? savedSettings.festBannerVideoUrl
-            : prev.festBannerVideoUrl
+            : prev.festBannerVideoUrl,
+          showSplashScreen: savedSettings.showSplashScreen !== false
         }))
         setSuccess('Settings saved successfully!')
         setTimeout(() => setSuccess(null), 3000)
@@ -1727,6 +1730,36 @@ export default function LandingPageManagement() {
                       className="mt-2"
                       placeholder="Explore More"
                     />
+                  </div>
+
+                  <div className="flex items-start justify-between gap-4 rounded-xl border border-slate-200 p-4">
+                    <div>
+                      <Label htmlFor="show-splash-screen">Splash Screen</Label>
+                      <p className="text-xs text-slate-500 mt-1">
+                        Turn the user app startup splash screen on or off.
+                      </p>
+                    </div>
+                    <button
+                      id="show-splash-screen"
+                      type="button"
+                      role="switch"
+                      aria-checked={settings.showSplashScreen !== false}
+                      onClick={() =>
+                        setSettings((prev) => ({
+                          ...prev,
+                          showSplashScreen: !(prev.showSplashScreen !== false),
+                        }))
+                      }
+                      className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors ${
+                        settings.showSplashScreen !== false ? "bg-emerald-500" : "bg-slate-300"
+                      }`}
+                    >
+                      <span
+                        className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${
+                          settings.showSplashScreen !== false ? "translate-x-6" : "translate-x-1"
+                        }`}
+                      />
+                    </button>
                   </div>
 
                   <div>

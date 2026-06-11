@@ -21,6 +21,10 @@ function validateAppCustomizationPayload(body = {}) {
     payload.diningFlowEnabled = Boolean(body.diningFlowEnabled);
   }
 
+  if (body.loggingEnabled !== undefined) {
+    payload.loggingEnabled = Boolean(body.loggingEnabled);
+  }
+
   if (body.theme !== undefined) {
     const primaryColor = String(body.theme?.primaryColor || '').trim();
     if (primaryColor && !/^#[0-9a-f]{6}$/i.test(primaryColor)) {

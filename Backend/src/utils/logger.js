@@ -43,6 +43,7 @@ const maskFormat = winston.format((info) => {
 // Configure Winston Logger
 export const logger = winston.createLogger({
   level: process.env.NODE_ENV === 'production' ? 'info' : 'debug',
+  silent: false,
   format: winston.format.combine(
     maskFormat(),
     winston.format.timestamp(),
@@ -96,4 +97,12 @@ if (process.env.NODE_ENV !== 'production') {
       })
     )
   }));
+}
+
+export function setLoggerEnabled(enabled) {
+  logger.silent = !enabled;
+}
+
+export function isLoggerEnabled() {
+  return !logger.silent;
 }

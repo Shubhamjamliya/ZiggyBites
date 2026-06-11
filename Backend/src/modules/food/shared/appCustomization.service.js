@@ -1,10 +1,12 @@
 import { ValidationError } from '../../../core/auth/errors.js';
 import { FoodSettings } from '../orders/models/order.model.js';
+import { setLoggerEnabled } from '../../../utils/logger.js';
 
 export const DEFAULT_APP_CUSTOMIZATION_SETTINGS = {
   normalOrderFlowEnabled: true,
   subscriptionFlowEnabled: true,
   diningFlowEnabled: true,
+  loggingEnabled: true,
   theme: {
     primaryColor: '#e92823',
   },
@@ -51,6 +53,7 @@ function normalizeAppCustomizationSettings(settings = {}) {
     normalOrderFlowEnabled: settings.normalOrderFlowEnabled !== false,
     subscriptionFlowEnabled: settings.subscriptionFlowEnabled !== false,
     diningFlowEnabled: settings.diningFlowEnabled !== false,
+    loggingEnabled: settings.loggingEnabled !== false,
     theme: {
       primaryColor: normalizedPrimaryColor,
     },
@@ -84,7 +87,9 @@ function localDateKey(date) {
 
 export async function getAppCustomizationSettings() {
   const doc = await FoodSettings.findOne({ key: "app-customization" }).lean();
-  return normalizeAppCustomizationSettings(doc || DEFAULT_APP_CUSTOMIZATION_SETTINGS);
+  const settings = normalizeAppCustomizationSettings(doc || DEFAULT_APP_CUSTOMIZATION_SETTINGS);
+  setLoggerEnabled(settings.loggingEnabled);
+  return settings;
 }
 
 export async function updateAppCustomizationSettings(payload = {}, adminId) {
@@ -125,6 +130,7 @@ export async function updateAppCustomizationSettings(payload = {}, adminId) {
         normalOrderFlowEnabled: next.normalOrderFlowEnabled,
         subscriptionFlowEnabled: next.subscriptionFlowEnabled,
         diningFlowEnabled: next.diningFlowEnabled,
+        loggingEnabled: next.loggingEnabled,
         subscriptionOrders: next.subscriptionOrders,
         scheduledOrders: next.scheduledOrders,
         theme: next.theme,
@@ -135,7 +141,9 @@ export async function updateAppCustomizationSettings(payload = {}, adminId) {
     { upsert: true, new: true },
   ).lean();
 
-  return normalizeAppCustomizationSettings(doc || next);
+  const settings = normalizeAppCustomizationSettings(doc || next);
+  setLoggerEnabled(settings.loggingEnabled);
+  return settings;
 }
 
 export function assertNormalOrderFlowAllowed(settings) {

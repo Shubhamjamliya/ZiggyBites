@@ -8,8 +8,9 @@ import { initSocket } from './src/config/socket.js';
 import { initializeQueues, closeBullMQConnection } from './src/queues/index.js';
 import { expireExpiredOffers } from './src/modules/food/admin/services/admin.service.js';
 import { syncExpiredFssaiNotifications } from './src/modules/food/restaurant/services/fssaiExpiry.service.js';
-import { logger } from './src/utils/logger.js';
+import { logger, setLoggerEnabled } from './src/utils/logger.js';
 import { initializeFirebaseRealtime } from './src/config/firebase.js';
+import { getAppCustomizationSettings } from './src/modules/food/shared/appCustomization.service.js';
 
 const SHUTDOWN_TIMEOUT_MS = 10000;
 let server = null;
@@ -51,6 +52,13 @@ const startServer = async () => {
 
         // 1. Connect to Database (MongoDB)
         await connectDB();
+
+        try {
+            const settings = await getAppCustomizationSettings();
+            setLoggerEnabled(settings.loggingEnabled !== false);
+        } catch (err) {
+            logger.error(`Logger settings bootstrap failed: ${err.message}`);
+        }
 
         // 2. Create HTTP server from Express app
         const httpServer = http.createServer(app);

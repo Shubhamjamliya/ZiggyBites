@@ -168,7 +168,7 @@ export const ProfileV2 = () => {
           <div>
             <h3 className="text-gray-400 text-[10px] font-black uppercase tracking-[0.2em] mb-3 px-1">Support</h3>
             <div 
-              onClick={() => navigate("/food/delivery/help/tickets")}
+              onClick={() => navigate("/food/delivery/support")}
               className="bg-white rounded-xl p-4 flex items-center justify-between cursor-pointer active:bg-gray-50 transition-colors"
             >
               <div className="flex items-center gap-3">

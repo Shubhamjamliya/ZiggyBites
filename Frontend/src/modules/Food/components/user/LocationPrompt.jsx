@@ -5,6 +5,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@food/components/ui/ca
 import { Button } from "@food/components/ui/button"
 import { Input } from "@food/components/ui/input"
 import { useLocation } from "@food/hooks/useLocation"
+import { publicGetOnce } from "@food/api"
 import { toast } from "sonner"
 
 export default function LocationPrompt() {
@@ -21,6 +22,8 @@ export default function LocationPrompt() {
     routerLocation.pathname.includes("/cancellation")
 
   const [showPrompt, setShowPrompt] = useState(false)
+  const [locationPromptEnabled, setLocationPromptEnabled] = useState(true)
+  const [settingsChecked, setSettingsChecked] = useState(false)
   const [view, setView] = useState("prompt") // "prompt" | "manual"
   const [searchValue, setSearchValue] = useState("")
   const [suggestions, setSuggestions] = useState([])
@@ -28,6 +31,30 @@ export default function LocationPrompt() {
   const [selectedLocation, setSelectedLocation] = useState(null)
 
   useEffect(() => {
+    let mounted = true
+
+    publicGetOnce('/food/landing/settings/public')
+      .then((response) => {
+        if (!mounted) return
+        const settings = response?.data?.data || {}
+        setLocationPromptEnabled(settings.showLocationPrompt !== false)
+      })
+      .catch(() => {
+        if (!mounted) return
+        setLocationPromptEnabled(true)
+      })
+      .finally(() => {
+        if (mounted) setSettingsChecked(true)
+      })
+
+    return () => {
+      mounted = false
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!settingsChecked || !locationPromptEnabled) return
+
     // Check if location permission was already granted
     const storedLocation = localStorage.getItem("userLocation")
     const promptDismissed = localStorage.getItem("locationPromptDismissed")
@@ -46,7 +73,7 @@ export default function LocationPrompt() {
         document.body.style.overflow = ""
       }
     }
-  }, [permissionGranted, isLegalPage])
+  }, [permissionGranted, isLegalPage, locationPromptEnabled, settingsChecked])
 
   // Search logic for manual entry
   useEffect(() => {
@@ -148,7 +175,7 @@ export default function LocationPrompt() {
     }
   }, [])
 
-  if (isLegalPage || !showPrompt) return null
+  if (isLegalPage || !locationPromptEnabled || !showPrompt) return null
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[100] flex items-center justify-center p-4">

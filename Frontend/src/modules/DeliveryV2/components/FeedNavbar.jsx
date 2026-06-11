@@ -243,7 +243,7 @@ export default function FeedNavbar({ className = "" }) {
       title: "Support tickets", 
       subtitle: "Check status of tickets raised", 
       icon: "ticket", 
-      path: "/delivery/help/tickets"
+      path: "/delivery/support"
     },
     { 
       id: "idCard", 

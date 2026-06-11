@@ -257,7 +257,32 @@ export default function SubscriptionCheckout() {
         order,
       });
 
-      if (!subscription || !razorpay?.orderId || !razorpay?.key) {
+      if (!subscription) {
+        throw new Error("Unable to initialize subscription payment.");
+      }
+
+      if (appCustomization.directPaymentTestMode === true) {
+        const verifyPayload = {
+          subscriptionId: subscription.subscriptionId || subscription._id || "",
+          razorpayOrderId: razorpay?.orderId || subscription.razorpayOrderId || `test_order_${Date.now()}`,
+          razorpayPaymentId: `test_payment_${Date.now()}`,
+          razorpaySignature: "test_signature_bypass",
+        };
+
+        const verifyResponse = await subscriptionAPI.verifyPayment(verifyPayload);
+        if (!verifyResponse?.data?.success) {
+          throw new Error(
+            verifyResponse?.data?.message || "Payment verification failed.",
+          );
+        }
+
+        toast.success("Subscription activated successfully.");
+        navigate("/food/user/profile", { replace: true });
+        setIsPlacingOrder(false);
+        return;
+      }
+
+      if (!razorpay?.orderId || !razorpay?.key) {
         throw new Error("Unable to initialize subscription payment.");
       }
 

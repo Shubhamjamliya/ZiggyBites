@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { CalendarClock, FileText, Loader2, Palette, Save, Settings2, ShoppingCart, Utensils, UtensilsCrossed } from "lucide-react"
+import { CalendarClock, CheckCircle2, FileText, Loader2, Palette, Save, Settings2, ShoppingCart, Utensils, UtensilsCrossed } from "lucide-react"
 import { Button } from "@food/components/ui/button"
 import { adminAPI } from "@food/api"
 import { toast } from "sonner"
@@ -10,6 +10,7 @@ const DEFAULT_SETTINGS = {
   subscriptionFlowEnabled: true,
   diningFlowEnabled: true,
   loggingEnabled: true,
+  directPaymentTestMode: false,
   theme: {
     primaryColor: "#e92823",
   },
@@ -161,6 +162,7 @@ export default function AppCustomization() {
         subscriptionFlowEnabled: Boolean(settings.subscriptionFlowEnabled),
         diningFlowEnabled: Boolean(settings.diningFlowEnabled),
         loggingEnabled: Boolean(settings.loggingEnabled),
+        directPaymentTestMode: Boolean(settings.directPaymentTestMode),
         theme: {
           primaryColor: normalizeThemeColor(settings.theme.primaryColor),
         },
@@ -267,6 +269,14 @@ export default function AppCustomization() {
                   description="Turn backend Winston logging on or off for runtime request and service logs."
                   checked={settings.loggingEnabled}
                   onChange={(value) => updateRoot("loggingEnabled", value)}
+                />
+
+                <ToggleRow
+                  icon={CheckCircle2}
+                  title="Test mode: direct payment"
+                  description="For testing only. When on, online checkout verifies directly and skips opening Razorpay."
+                  checked={settings.directPaymentTestMode}
+                  onChange={(value) => updateRoot("directPaymentTestMode", value)}
                 />
 
                 <div className="rounded-lg border border-slate-200 p-4">

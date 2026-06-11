@@ -502,11 +502,15 @@ export async function verifyPayment(userId, dto) {
   if (order.payment.status === "paid")
     return { order: normalizeOrderForClient(order), payment: order.payment };
 
-  const valid = verifyPaymentSignature(
-    dto.razorpayOrderId,
-    dto.razorpayPaymentId,
-    dto.razorpaySignature,
-  );
+  const appSettings = await getAppCustomizationSettings();
+  const isDirectPaymentTestMode = appSettings?.directPaymentTestMode === true;
+  const valid = isDirectPaymentTestMode
+    ? true
+    : verifyPaymentSignature(
+        dto.razorpayOrderId,
+        dto.razorpayPaymentId,
+        dto.razorpaySignature,
+      );
   if (!valid) {
     logger.warn(`Payment Failure: Verification failed for order ${order._id}`, { razorpayOrderId: dto.razorpayOrderId });
     throw new ValidationError("Payment verification failed");

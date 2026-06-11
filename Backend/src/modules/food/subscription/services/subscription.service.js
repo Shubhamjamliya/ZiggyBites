@@ -592,11 +592,14 @@ export async function verifySubscriptionPayment(userId, dto) {
     throw new ValidationError('Razorpay order mismatch');
   }
 
-  const valid = verifyPaymentSignature(
-    dto.razorpayOrderId,
-    dto.razorpayPaymentId,
-    dto.razorpaySignature,
-  );
+  const appSettings = await getAppCustomizationSettings();
+  const valid = appSettings?.directPaymentTestMode === true
+    ? true
+    : verifyPaymentSignature(
+        dto.razorpayOrderId,
+        dto.razorpayPaymentId,
+        dto.razorpaySignature,
+      );
   if (!valid) {
     subscription.paymentStatus = 'failed';
     subscription.status = 'payment_failed';
@@ -604,7 +607,6 @@ export async function verifySubscriptionPayment(userId, dto) {
     throw new ValidationError('Payment verification failed');
   }
 
-  const appSettings = await getAppCustomizationSettings();
   assertSubscriptionFlowAllowed(appSettings);
   const { startDate, endDate } = buildSubscriptionDates(
     subscription.planDays,

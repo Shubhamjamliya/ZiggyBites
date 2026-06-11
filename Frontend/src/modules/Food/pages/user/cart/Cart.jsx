@@ -2080,6 +2080,46 @@ export default function Cart() {
         return
       }
 
+      if (appCustomization.directPaymentTestMode === true) {
+        const verifyOrderId = order?._id || order?.id || order?.orderMongoId
+        if (!verifyOrderId) {
+          throw new Error("Unable to verify payment: missing order id from create-order response")
+        }
+
+        const verifyResponse = await orderAPI.verifyPayment({
+          orderId: verifyOrderId,
+          razorpayOrderId: razorpay?.orderId || order?.payment?.razorpay?.orderId || `test_order_${Date.now()}`,
+          razorpayPaymentId: `test_payment_${Date.now()}`,
+          razorpaySignature: "test_signature_bypass",
+        })
+
+        if (!verifyResponse?.data?.success) {
+          throw new Error(verifyResponse?.data?.message || "Payment verification failed")
+        }
+
+        setPlacedOrderId(order._id || order.orderId)
+        setOrderSuccessSavingsAmount(platformPricingSavings.totalSavings > 0 ? platformPricingSavings.totalSavings : 0)
+        if (platformPricingSavings.totalSavings > 0) {
+          setCongratssSavingsAmount(platformPricingSavings.totalSavings)
+          setCongratssSavingsPercentage(platformPricingSavings.savingsPercentage)
+          setCongratssSavingsItems(platformPricingSavings.items)
+          setShowSavingsCongrats(true)
+        } else {
+          setShowOrderSuccess(true)
+        }
+        window.dispatchEvent(new CustomEvent('order-placed', { detail: { order } }))
+        clearCart()
+        setRestaurantNote("")
+        setShowRestaurantNoteInput(false)
+        try {
+          window.localStorage.removeItem(CART_ORDER_NOTE_STORAGE_KEY)
+        } catch {
+          // ignore
+        }
+        setIsPlacingOrder(false)
+        return
+      }
+
       if (!razorpay || !razorpay.orderId || !razorpay.key) {
         debugError("? Razorpay initialization failed:", { razorpay, order })
         throw new Error(razorpay ? "Razorpay payment gateway is not configured. Please contact support." : "Failed to initialize payment")

@@ -7,6 +7,7 @@ export const DEFAULT_APP_CUSTOMIZATION_SETTINGS = {
   subscriptionFlowEnabled: true,
   diningFlowEnabled: true,
   loggingEnabled: true,
+  directPaymentTestMode: false,
   theme: {
     primaryColor: '#e92823',
   },
@@ -54,6 +55,7 @@ function normalizeAppCustomizationSettings(settings = {}) {
     subscriptionFlowEnabled: settings.subscriptionFlowEnabled !== false,
     diningFlowEnabled: settings.diningFlowEnabled !== false,
     loggingEnabled: settings.loggingEnabled !== false,
+    directPaymentTestMode: settings.directPaymentTestMode === true,
     theme: {
       primaryColor: normalizedPrimaryColor,
     },
@@ -131,6 +133,7 @@ export async function updateAppCustomizationSettings(payload = {}, adminId) {
         subscriptionFlowEnabled: next.subscriptionFlowEnabled,
         diningFlowEnabled: next.diningFlowEnabled,
         loggingEnabled: next.loggingEnabled,
+        directPaymentTestMode: next.directPaymentTestMode,
         subscriptionOrders: next.subscriptionOrders,
         scheduledOrders: next.scheduledOrders,
         theme: next.theme,

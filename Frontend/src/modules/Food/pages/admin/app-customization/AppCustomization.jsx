@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { CalendarClock, Loader2, Palette, Save, Settings2, ShoppingCart, Utensils, UtensilsCrossed } from "lucide-react"
+import { CalendarClock, FileText, Loader2, Palette, Save, Settings2, ShoppingCart, Utensils, UtensilsCrossed } from "lucide-react"
 import { Button } from "@food/components/ui/button"
 import { adminAPI } from "@food/api"
 import { toast } from "sonner"
@@ -9,6 +9,7 @@ const DEFAULT_SETTINGS = {
   normalOrderFlowEnabled: true,
   subscriptionFlowEnabled: true,
   diningFlowEnabled: true,
+  loggingEnabled: true,
   theme: {
     primaryColor: "#e92823",
   },
@@ -159,6 +160,7 @@ export default function AppCustomization() {
         normalOrderFlowEnabled: Boolean(settings.normalOrderFlowEnabled),
         subscriptionFlowEnabled: Boolean(settings.subscriptionFlowEnabled),
         diningFlowEnabled: Boolean(settings.diningFlowEnabled),
+        loggingEnabled: Boolean(settings.loggingEnabled),
         theme: {
           primaryColor: normalizeThemeColor(settings.theme.primaryColor),
         },
@@ -259,6 +261,14 @@ export default function AppCustomization() {
                   onChange={(value) => updateRoot("diningFlowEnabled", value)}
                 />
 
+                <ToggleRow
+                  icon={FileText}
+                  title="Application logging"
+                  description="Turn backend Winston logging on or off for runtime request and service logs."
+                  checked={settings.loggingEnabled}
+                  onChange={(value) => updateRoot("loggingEnabled", value)}
+                />
+
                 <div className="rounded-lg border border-slate-200 p-4">
                   <div className="mb-4 flex items-start gap-3">
                     <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-700">
@@ -302,6 +312,10 @@ export default function AppCustomization() {
                       ariaLabel="Dev mode: place subscription meals now"
                     />
                   </div>
+
+                  <p className="mt-4 rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                    Logging toggle affects the backend logger only. Click Save Settings after changing it.
+                  </p>
                 </div>
               </>
             ) : (

@@ -8,6 +8,25 @@ const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
 
+const sharedNotificationState = {
+  newOrder: null,
+  newReservation: null,
+  isConnected: false,
+};
+
+const sharedNotificationSubscribers = new Set();
+
+const syncSharedNotificationState = (patch = {}) => {
+  Object.assign(sharedNotificationState, patch);
+  sharedNotificationSubscribers.forEach((listener) => {
+    try {
+      listener(sharedNotificationState);
+    } catch {
+      // Ignore subscriber failures so notification flow continues.
+    }
+  });
+};
+
 const resolveAudioSource = (source) => {
   return source;
 }
@@ -78,9 +97,9 @@ const triggerWebViewNativeNotification = async (orderData = {}) => {
  */
 export const useRestaurantNotifications = () => {
   const socketRef = useRef(null);
-  const [newOrder, setNewOrder] = useState(null);
-  const [newReservation, setNewReservation] = useState(null);
-  const [isConnected, setIsConnected] = useState(false);
+  const [newOrder, setNewOrderState] = useState(sharedNotificationState.newOrder);
+  const [newReservation, setNewReservationState] = useState(sharedNotificationState.newReservation);
+  const [isConnected, setIsConnectedState] = useState(sharedNotificationState.isConnected);
   const audioRef = useRef(null);
   const activeOrderRef = useRef(null);
   const alertLoopTimerRef = useRef(null);
@@ -97,6 +116,43 @@ export const useRestaurantNotifications = () => {
   const ALERT_DEDUPE_MS = 15000;
   const BROWSER_NOTIFICATION_DEDUPE_MS = 20000;
   const NOTIFICATION_PERMISSION_ASKED_KEY = 'restaurant_notification_permission_asked';
+
+  const setNewOrder = (value) => {
+    const resolved =
+      typeof value === 'function' ? value(sharedNotificationState.newOrder) : value;
+    syncSharedNotificationState({ newOrder: resolved });
+  };
+
+  const setNewReservation = (value) => {
+    const resolved =
+      typeof value === 'function'
+        ? value(sharedNotificationState.newReservation)
+        : value;
+    syncSharedNotificationState({ newReservation: resolved });
+  };
+
+  const setIsConnected = (value) => {
+    const resolved =
+      typeof value === 'function'
+        ? value(sharedNotificationState.isConnected)
+        : value;
+    syncSharedNotificationState({ isConnected: resolved });
+  };
+
+  useEffect(() => {
+    const handleSharedStateChange = (state) => {
+      setNewOrderState(state.newOrder);
+      setNewReservationState(state.newReservation);
+      setIsConnectedState(state.isConnected);
+    };
+
+    sharedNotificationSubscribers.add(handleSharedStateChange);
+    handleSharedStateChange(sharedNotificationState);
+
+    return () => {
+      sharedNotificationSubscribers.delete(handleSharedStateChange);
+    };
+  }, []);
 
   const getOrderAlertKey = (orderData = {}) => (
     String(

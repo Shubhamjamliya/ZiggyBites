@@ -362,6 +362,8 @@ const settingsSchema = new mongoose.Schema(
         normalOrderFlowEnabled: { type: Boolean, default: true },
         subscriptionFlowEnabled: { type: Boolean, default: true },
         diningFlowEnabled: { type: Boolean, default: true },
+        loggingEnabled: { type: Boolean, default: true },
+        directPaymentTestMode: { type: Boolean, default: false },
         theme: {
             primaryColor: { type: String, default: '#e92823', trim: true }
         },

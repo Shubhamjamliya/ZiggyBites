@@ -139,6 +139,19 @@ export async function sendSubscriptionMealToDeliveryController(req, res, next) {
   }
 }
 
+export async function resendSubscriptionMealToDeliveryController(req, res, next) {
+  try {
+    const restaurantId = req.user?.userId;
+    const result = await subscriptionService.resendSubscriptionMealToDelivery(
+      req.params.subscriptionId,
+      restaurantId,
+    );
+    return sendResponse(res, 200, 'Subscription meal sent to delivery', result);
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function cancelSubscriptionForRestaurantController(req, res, next) {
   try {
     const restaurantId = req.user?.userId;

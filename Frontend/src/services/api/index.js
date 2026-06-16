@@ -1181,6 +1181,12 @@ export const restaurantAPI = {
       { reason },
       { contextModule: "restaurant" },
     ),
+  resendSubscriptionToDelivery: (subscriptionId) =>
+    apiClient.post(
+      `/food/restaurant/subscriptions/${String(subscriptionId)}/resend-to-delivery`,
+      {},
+      { contextModule: "restaurant" },
+    ),
   updateMenu: (body) =>
     apiClient.patch("/food/restaurant/menu", body ?? {}, {
       contextModule: "restaurant",

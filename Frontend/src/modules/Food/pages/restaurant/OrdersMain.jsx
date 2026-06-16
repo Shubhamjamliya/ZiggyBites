@@ -1078,7 +1078,37 @@ const formatSubscriptionDate = (value) => {
   });
 };
 
+const getSubscriptionGroupKey = (meal) =>
+  meal?.subscription?.subscriptionId?._id ||
+  meal?.subscription?.subscriptionId ||
+  meal?.subscriptionId?._id ||
+  meal?.subscriptionId ||
+  meal?.subscription?._id ||
+  meal?.subscription?.id ||
+  meal?.subscriptionId?.id ||
+  meal?.subscriptionKey ||
+  meal?.userId?._id ||
+  meal?.user?._id ||
+  meal?.customerId ||
+  meal?.customerPhone ||
+  meal?.customerName ||
+  meal?.deliveryAddressId ||
+  meal?.groupId ||
+  meal?._id;
+
+const getSubscriptionGroupLabel = (meal) =>
+  meal?.subscription?.subscriptionCode ||
+  meal?.subscription?.shortId ||
+  meal?.subscription?.subscriptionId?.shortId ||
+  meal?.subscription?.subscriptionId?.subscriptionCode ||
+  meal?.subscription?.planTitle ||
+  meal?.subscription?.planName ||
+  meal?.planTitle ||
+  meal?.planName ||
+  `Subscription ${String(getSubscriptionGroupKey(meal)).slice(-6)}`;
+
 function SubscriptionMealsPanel({ view }) {
+  const navigate = useNavigate();
   const [meals, setMeals] = useState([]);
   const [loading, setLoading] = useState(true);
   const [sendingScheduleIds, setSendingScheduleIds] = useState({});
@@ -1088,7 +1118,17 @@ function SubscriptionMealsPanel({ view }) {
       setLoading(true);
       const response = await restaurantAPI.getTodaySubscriptionMeals({ view });
       const rows = response?.data?.data?.schedules || [];
-      setMeals(rows);
+      const normalizedView = String(view || "current").toLowerCase();
+      const visibleRows =
+        normalizedView === "cancelled"
+          ? rows
+          : rows.filter(
+              (meal) =>
+                !["cancelled", "skipped"].includes(
+                  String(meal.status || "").toLowerCase(),
+                ),
+            );
+      setMeals(visibleRows);
     } catch (error) {
       debugError("Error fetching subscription meals:", error);
       setMeals([]);
@@ -1124,6 +1164,32 @@ function SubscriptionMealsPanel({ view }) {
   };
 
   const now = Date.now();
+  const groupedMeals = useMemo(() => {
+    const groups = new Map();
+
+    for (const meal of meals) {
+      const key = String(getSubscriptionGroupKey(meal));
+      if (!groups.has(key)) {
+        groups.set(key, {
+          key,
+          label: getSubscriptionGroupLabel(meal),
+          meal,
+          items: [],
+        });
+      }
+
+      groups.get(key).items.push(meal);
+    }
+
+    return Array.from(groups.values()).map((group) => ({
+      ...group,
+      items: group.items.sort((a, b) => {
+        const timeA = new Date(a.serviceDate || a.createdAt || 0).getTime();
+        const timeB = new Date(b.serviceDate || b.createdAt || 0).getTime();
+        return timeA - timeB;
+      }),
+    }));
+  }, [meals]);
 
   if (loading) {
     return (
@@ -1152,62 +1218,118 @@ function SubscriptionMealsPanel({ view }) {
         </div>
       ) : (
         <div className="space-y-3">
-          {meals.map((meal) => {
-            const scheduleId = meal.scheduleId || meal._id;
-            const sent = meal.status === "sent_to_delivery";
-            const cancelled = ["cancelled", "skipped"].includes(String(meal.status || "").toLowerCase());
-            const serviceTime = meal.serviceDate ? new Date(meal.serviceDate).getTime() : 0;
-            const canSend = !sent && !cancelled && serviceTime <= now;
-            const address = meal.subscription?.deliveryAddress;
-            const customerName = meal.subscription?.customerName || meal.user?.name || "Customer";
-            const customerPhone = meal.subscription?.customerPhone || meal.user?.phone || "";
-            const addressText = [
-              address?.street,
-              address?.additionalDetails,
-              address?.city,
-            ].filter(Boolean).join(", ");
+          {groupedMeals.map((group) => {
+            const customerName =
+              group.meal?.subscription?.customerName ||
+              group.meal?.user?.name ||
+              "Customer";
+            const customerPhone =
+              group.meal?.subscription?.customerPhone ||
+              group.meal?.user?.phone ||
+              "";
+            const address = group.meal?.subscription?.deliveryAddress;
+            const addressText = [address?.street, address?.additionalDetails, address?.city]
+              .filter(Boolean)
+              .join(", ");
+            const sentCount = group.items.filter(
+              (meal) => meal.status === "sent_to_delivery",
+            ).length;
+            const activeCount = group.items.length - sentCount;
 
             return (
-              <div key={scheduleId} className="rounded-2xl bg-white p-4 shadow-sm">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="text-sm font-bold text-gray-900">{meal.dishName || "Subscription meal"}</p>
-                      <span className="rounded-full bg-orange-50 px-2 py-0.5 text-[10px] font-black uppercase text-primary-orange">
-                        {meal.mealName || "Meal"}
-                      </span>
-                    </div>
+              <div
+                key={group.key}
+                className="rounded-3xl border border-gray-200 bg-gradient-to-b from-white to-slate-50 p-4 shadow-[0_10px_30px_rgba(15,23,42,0.06)] ring-1 ring-white/70">
+                <button
+                  type="button"
+                  onClick={() =>
+                    navigate(`/food/restaurant/subscriptions/${encodeURIComponent(group.key)}`, {
+                      state: { subscriptionLabel: group.label },
+                    })
+                  }
+                  className="flex w-full items-start justify-between gap-3 border-b border-dashed border-gray-200 pb-3 text-left">
+                  <div className="min-w-0 border-l-4 border-primary-orange/80 pl-3">
+                    <p className="text-sm font-black text-gray-900">{group.label}</p>
                     <p className="mt-1 text-xs font-semibold text-gray-600">{customerName}</p>
                     {customerPhone && <p className="mt-0.5 text-xs text-gray-400">{customerPhone}</p>}
                     {addressText && <p className="mt-1 line-clamp-1 text-xs text-gray-400">{addressText}</p>}
                   </div>
                   <div className="shrink-0 text-right">
-                    <p className="text-xs font-bold text-gray-700">{formatSubscriptionDate(meal.serviceDate)}</p>
-                    <span className={`mt-1 inline-flex rounded-full px-2 py-1 text-[10px] font-black uppercase ${
-                      sent
-                        ? "bg-emerald-50 text-emerald-600"
-                        : cancelled
-                          ? "bg-red-50 text-red-600"
-                          : "bg-amber-50 text-amber-700"
-                    }`}>
-                      {sent ? "Sent" : meal.status || "Scheduled"}
-                    </span>
+                    <p className="text-xs font-extrabold tracking-wide text-gray-700">{group.items.length} meals</p>
+                    <div className="mt-2 flex flex-col items-end gap-1">
+                      <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-black uppercase text-emerald-600">
+                        {sentCount} sent
+                      </span>
+                      <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-black uppercase text-amber-700">
+                        {activeCount} active
+                      </span>
+                    </div>
                   </div>
-                </div>
-
-                <button
-                  type="button"
-                  disabled={!canSend || sendingScheduleIds[scheduleId]}
-                  onClick={() => handleSendMeal(meal)}
-                  className="mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-primary-orange text-sm font-bold text-white disabled:bg-gray-200 disabled:text-gray-500"
-                >
-                  {sendingScheduleIds[scheduleId] ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Send className="h-4 w-4" />
-                  )}
-                  {sent ? "Already sent" : canSend ? "Send to delivery boy" : "Scheduled for later"}
                 </button>
+
+                <div className="mt-3 space-y-2">
+                  {group.items.map((meal) => {
+                    const scheduleId = meal.scheduleId || meal._id;
+                    const sent = meal.status === "sent_to_delivery";
+                    const cancelled = ["cancelled", "skipped"].includes(
+                      String(meal.status || "").toLowerCase(),
+                    );
+                    const serviceTime = meal.serviceDate
+                      ? new Date(meal.serviceDate).getTime()
+                      : 0;
+                    const canSend = !sent && !cancelled && serviceTime <= now;
+
+                    return (
+                      <div
+                        key={scheduleId}
+                        className="rounded-2xl border border-gray-200 bg-white p-3 shadow-sm">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="text-sm font-bold text-gray-900">
+                                {meal.dishName || "Subscription meal"}
+                              </p>
+                              <span className="rounded-full bg-primary-orange/10 px-2 py-0.5 text-[10px] font-black uppercase text-primary-orange">
+                                {meal.mealName || "Meal"}
+                              </span>
+                            </div>
+                            <p className="mt-1 text-xs text-gray-500">
+                              {meal.serviceDate ? formatSubscriptionDate(meal.serviceDate) : "No date"}
+                            </p>
+                          </div>
+                          <span
+                            className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-black uppercase ${
+                              sent
+                                ? "border border-emerald-200 bg-emerald-50 text-emerald-600"
+                                : cancelled
+                                  ? "border border-red-200 bg-red-50 text-red-600"
+                                  : "border border-amber-200 bg-amber-50 text-amber-700"
+                            }`}>
+                            {sent ? "Sent" : meal.status || "Scheduled"}
+                          </span>
+                        </div>
+
+                        <button
+                          type="button"
+                          disabled={!canSend || sendingScheduleIds[scheduleId]}
+                          onClick={() => handleSendMeal(meal)}
+                          className="mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-primary-orange text-sm font-bold text-white disabled:bg-gray-200 disabled:text-gray-500"
+                        >
+                          {sendingScheduleIds[scheduleId] ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Send className="h-4 w-4" />
+                          )}
+                          {sent
+                            ? "Already sent"
+                            : canSend
+                              ? "Send to delivery boy"
+                              : "Scheduled for later"}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             );
           })}
@@ -1244,6 +1366,7 @@ export default function OrdersMain() {
   const [prepTime, setPrepTime] = useState(11);
   const [countdown, setCountdown] = useState(180); // 3 minutes in seconds
   const [isDetailsExpanded, setIsDetailsExpanded] = useState(true);
+  const [subscriptionAccepted, setSubscriptionAccepted] = useState(false);
   const [showRejectPopup, setShowRejectPopup] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
   const [showCancelPopup, setShowCancelPopup] = useState(false);
@@ -1668,6 +1791,7 @@ export default function OrdersMain() {
       markOrderAsShown(newOrder);
       setPopupOrder(newOrder);
       setShowNewOrderPopup(true);
+      setSubscriptionAccepted(false);
       setCountdown(180);
     }
   }, [clearNewOrder, newOrder]);
@@ -2223,15 +2347,15 @@ export default function OrdersMain() {
 
   const handleSubscriptionAccept = () => {
     const activePopupOrder = popupOrder || newOrder;
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+    }
     toast.success(
       `${activePopupOrder?.planTitle || activePopupOrder?.dishName || "Subscription"} accepted`,
     );
-    setShowNewOrderPopup(false);
-    setPopupOrder(null);
-    clearNewOrder();
+    setSubscriptionAccepted(true);
     setRejectReason("");
-    setCountdown(180);
-    setPrepTime(11);
     setIsDetailsExpanded(false);
   };
 
@@ -2249,6 +2373,11 @@ export default function OrdersMain() {
       return;
     }
 
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+    }
+
     restaurantAPI
       .cancelSubscription(subscriptionId, "Rejected from restaurant alert")
       .then(() => {
@@ -2262,13 +2391,62 @@ export default function OrdersMain() {
         setCountdown(180);
         setPrepTime(11);
         setIsDetailsExpanded(false);
+        setSubscriptionAccepted(false);
       })
       .catch((error) => {
         toast.error(error?.response?.data?.message || "Failed to cancel subscription");
       });
   };
 
+  const handleSubscriptionResend = () => {
+    const activePopupOrder = popupOrder || newOrder;
+    const subscriptionId =
+      activePopupOrder?.subscriptionId ||
+      activePopupOrder?.subscription?.subscriptionId ||
+      activePopupOrder?.subscription?._id ||
+      activePopupOrder?.orderMongoId ||
+      activePopupOrder?._id;
+
+    if (!subscriptionId) {
+      toast.error("Subscription id is missing");
+      return;
+    }
+
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+    }
+
+    restaurantAPI
+      .resendSubscriptionToDelivery(subscriptionId)
+      .then(() => {
+        toast.success("Delivery request sent");
+      })
+      .catch((error) => {
+        toast.error(error?.response?.data?.message || "Failed to send delivery request");
+      });
+  };
+
+  const handleSubscriptionPopupClose = () => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+    }
+    setShowNewOrderPopup(false);
+    setPopupOrder(null);
+    clearNewOrder();
+    setRejectReason("");
+    setCountdown(180);
+    setPrepTime(11);
+    setIsDetailsExpanded(false);
+    setSubscriptionAccepted(false);
+  };
+
   const handleRejectCancel = () => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+    }
     setShowRejectPopup(false);
     setShowNewOrderPopup(false);
     setPopupOrder(null);
@@ -3421,6 +3599,23 @@ export default function OrdersMain() {
                     }
 
                     if (subscriptionAlert) {
+                      if (subscriptionAccepted) {
+                        return (
+                          <div className="grid grid-cols-2 gap-2">
+                            <button
+                              onClick={handleSubscriptionResend}
+                              className="rounded-lg border border-blue-500 bg-white py-2.5 text-xs font-semibold text-blue-600 transition-colors hover:bg-blue-50">
+                              Resend
+                            </button>
+                            <button
+                              onClick={handleSubscriptionPopupClose}
+                              className="rounded-lg bg-slate-900 py-2.5 text-xs font-semibold text-white transition-colors hover:bg-slate-800">
+                              Close
+                            </button>
+                          </div>
+                        );
+                      }
+
                       return (
                         <div className="grid grid-cols-2 gap-2">
                           <button

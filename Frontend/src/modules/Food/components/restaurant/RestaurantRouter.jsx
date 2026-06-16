@@ -9,6 +9,7 @@ const RestaurantNotifications = lazy(() => import("@food/pages/restaurant/Notifi
 const AllOrdersPage = lazy(() => import("@food/pages/restaurant/AllOrdersPage"))
 const OrderDetails = lazy(() => import("@food/pages/restaurant/OrderDetails"))
 const OrdersMain = lazy(() => import("@food/pages/restaurant/OrdersMain"))
+const SubscriptionOrdersPage = lazy(() => import("@food/pages/restaurant/SubscriptionOrdersPage"))
 const RestaurantOnboarding = lazy(() => import("@food/pages/restaurant/Onboarding"))
 const PrivacyPolicyPage = lazy(() => import("@food/pages/restaurant/PrivacyPolicyPage"))
 const TermsAndConditionsPage = lazy(() => import("@food/pages/restaurant/TermsAndConditionsPage"))
@@ -65,6 +66,7 @@ export default function RestaurantRouter() {
 
         {/* Protected Routes */}
         <Route element={<ProtectedRoute requiredRole="restaurant" loginPath="/food/restaurant/login"><OrdersMain /></ProtectedRoute>} path="" />
+        <Route element={<ProtectedRoute requiredRole="restaurant" loginPath="/food/restaurant/login"><SubscriptionOrdersPage /></ProtectedRoute>} path="subscriptions/:subscriptionId" />
         <Route element={<ProtectedRoute requiredRole="restaurant" loginPath="/food/restaurant/login"><AllOrdersPage /></ProtectedRoute>} path="orders/all" />
         <Route element={<ProtectedRoute requiredRole="restaurant" loginPath="/food/restaurant/login"><OrderDetails /></ProtectedRoute>} path="orders/:id" />
         <Route path="onboarding" element={<RestaurantOnboarding />} />

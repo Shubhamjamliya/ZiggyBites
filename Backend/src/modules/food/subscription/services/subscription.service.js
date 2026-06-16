@@ -885,6 +885,27 @@ export async function sendSubscriptionMealToDelivery(scheduleId, restaurantId) {
   };
 }
 
+export async function resendSubscriptionMealToDelivery(subscriptionId, restaurantId) {
+  if (!mongoose.isValidObjectId(subscriptionId)) {
+    throw new ValidationError('Subscription id is invalid');
+  }
+  if (!mongoose.isValidObjectId(restaurantId)) {
+    throw new ValidationError('Restaurant id is invalid');
+  }
+
+  const schedule = await FoodSubscriptionSchedule.findOne({
+    subscriptionId: new mongoose.Types.ObjectId(subscriptionId),
+    restaurantId: new mongoose.Types.ObjectId(restaurantId),
+    status: { $in: ['scheduled', 'sent_to_delivery'] },
+  }).sort({ serviceDate: 1, createdAt: 1 });
+
+  if (!schedule) {
+    throw new NotFoundError('No subscription meal found to send');
+  }
+
+  return sendSubscriptionMealToDelivery(schedule._id, restaurantId);
+}
+
 export async function cancelSubscriptionForRestaurant(subscriptionId, restaurantId, reason = '') {
   if (!mongoose.isValidObjectId(subscriptionId)) {
     throw new ValidationError('Subscription id is invalid');
@@ -917,6 +938,20 @@ export async function cancelSubscriptionForRestaurant(subscriptionId, restaurant
       $set: {
         status: 'cancelled',
         cancelledAt: new Date(),
+      },
+    },
+  );
+
+  await notifyOwnersSafely(
+    [{ ownerType: 'USER', ownerId: subscription.userId }],
+    {
+      title: 'Subscription cancelled',
+      body: `${subscription.planTitle || subscription.dishName || 'Your subscription'} was cancelled by the restaurant.`,
+      data: {
+        type: 'subscription_cancelled',
+        subscriptionId: String(subscription._id),
+        restaurantId: String(restaurantId),
+        reason: String(reason || '').trim(),
       },
     },
   );

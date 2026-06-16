@@ -138,3 +138,17 @@ export async function sendSubscriptionMealToDeliveryController(req, res, next) {
     next(err);
   }
 }
+
+export async function cancelSubscriptionForRestaurantController(req, res, next) {
+  try {
+    const restaurantId = req.user?.userId;
+    const result = await subscriptionService.cancelSubscriptionForRestaurant(
+      req.params.subscriptionId,
+      restaurantId,
+      req.body?.reason || '',
+    );
+    return sendResponse(res, 200, 'Subscription cancelled', result);
+  } catch (err) {
+    next(err);
+  }
+}

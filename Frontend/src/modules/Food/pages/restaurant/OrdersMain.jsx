@@ -27,7 +27,9 @@ import {
 import { toast } from "sonner";
 import BottomNavOrders from "@food/components/restaurant/BottomNavOrders";
 import RestaurantNavbar from "@food/components/restaurant/RestaurantNavbar";
-const notificationSound = "/zomato_sms.mp3";
+const notificationSound = import.meta.env.DEV
+  ? "/alert.mp3?devcache=restaurant-popup"
+  : "/alert.mp3";
 import { restaurantAPI, diningAPI } from "@food/api";
 import { useRestaurantNotifications } from "@food/hooks/useRestaurantNotifications";
 import { jsPDF } from "jspdf";
@@ -1270,13 +1272,11 @@ export default function OrdersMain() {
   const [pendingBookingsCount, setPendingBookingsCount] = useState(0);
   const [pendingOrdersCount, setPendingOrdersCount] = useState(0);
   const [pendingDiningRequest, setPendingDiningRequest] = useState(null);
-  const normalOrderFlowEnabled =
-    appCustomization.normalOrderFlowEnabled !== false;
+  const normalOrderFlowEnabled = false;
   const subscriptionFlowEnabled =
     appCustomization.subscriptionFlowEnabled !== false;
   const diningFlowEnabled = appCustomization.diningFlowEnabled !== false;
-  const showSubscriptionDashboard =
-    !normalOrderFlowEnabled && subscriptionFlowEnabled;
+  const showSubscriptionDashboard = subscriptionFlowEnabled;
   const visibleFilterTabs = useMemo(
     () =>
       filterTabs.filter((tab) => {
@@ -1307,11 +1307,9 @@ export default function OrdersMain() {
   }, [activeFilter, showSubscriptionDashboard, visibleFilterTabs]);
 
   useEffect(() => {
-    if (!normalOrderFlowEnabled) {
-      setShowNewOrderPopup(false);
-      setPopupOrder(null);
-    }
-  }, [normalOrderFlowEnabled]);
+    setShowNewOrderPopup(false);
+    setPopupOrder(null);
+  }, []);
 
   // Fetch pending counts and settings
   useEffect(() => {
@@ -1448,6 +1446,33 @@ export default function OrdersMain() {
     );
   };
 
+  const isSubscriptionPopupAlert = (orderLike) =>
+    Boolean(
+      orderLike?.isSubscriptionAlert ||
+        orderLike?.subscriptionId ||
+        orderLike?.type === "subscription_started" ||
+        String(orderLike?.orderId || orderLike?.order_id || "").startsWith("SUB-"),
+    );
+
+  const isSubscriptionMealOrder = (orderLike) => {
+    if (isSubscriptionPopupAlert(orderLike)) return false;
+
+    const paymentMethod = String(
+      orderLike?.paymentMethod || orderLike?.payment?.method || "",
+    )
+      .toLowerCase()
+      .trim();
+
+    return Boolean(
+      orderLike?.subscriptionUsage?.subscriptionId ||
+        orderLike?.type === "subscription_meal_sent" ||
+        paymentMethod === "subscription" ||
+        String(orderLike?.restaurantNote || "")
+          .toLowerCase()
+          .includes("subscription schedule"),
+    );
+  };
+
   const getPopupOrderTotal = (orderLike) => {
     if (!orderLike) return 0;
 
@@ -1471,7 +1496,7 @@ export default function OrdersMain() {
   };
 
   // Restaurant notifications hook for real-time orders
-  const { newOrder, clearNewOrder, isConnected } = useRestaurantNotifications();
+  const { newOrder, clearNewOrder, isConnected, playNotificationSound } = useRestaurantNotifications();
 
   const rejectReasons = [
     "Restaurant is too busy",
@@ -1626,42 +1651,31 @@ export default function OrdersMain() {
 
   // Show new order popup when real order notification arrives from Socket.IO
   useEffect(() => {
-    if (!normalOrderFlowEnabled) {
-      if (newOrder) clearNewOrder();
+    if (!newOrder) return;
+    if (!isSubscriptionPopupAlert(newOrder)) {
+      clearNewOrder();
       return;
     }
 
-    if (newOrder) {
-      debugLog("?? New order received via Socket.IO:", newOrder);
+    debugLog("?? Subscription alert received:", newOrder);
 
-      if (isAnyCancelledStatus(newOrder?.status || newOrder?.orderStatus)) {
-        clearNewOrder();
-        return;
-      }
-
-      const scheduledAt = newOrder.scheduledAt
-        ? new Date(newOrder.scheduledAt).getTime()
-        : null;
-      const isFutureScheduled =
-        scheduledAt && scheduledAt > Date.now() + 30 * 60000;
-
-      if (isFutureScheduled) {
-        toast.info(
-          `New scheduled order received for ${new Date(scheduledAt).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}`,
-        );
-        requestOrdersRefresh();
-        return; // Do not show the immediate popup
-      }
-
-      if (!hasOrderBeenShown(newOrder)) {
-        markOrderAsShown(newOrder);
-        setPopupOrder(newOrder);
-        setShowNewOrderPopup(true);
-        setCountdown(getInitialCountdown(newOrder)); // Calculate relative to createdAt
-        requestOrdersRefresh();
-      }
+    if (isSubscriptionMealOrder(newOrder)) {
+      clearNewOrder();
+      return;
     }
-  }, [clearNewOrder, newOrder, normalOrderFlowEnabled]);
+
+    if (!hasOrderBeenShown(newOrder)) {
+      markOrderAsShown(newOrder);
+      setPopupOrder(newOrder);
+      setShowNewOrderPopup(true);
+      setCountdown(180);
+    }
+  }, [clearNewOrder, newOrder]);
+
+  useEffect(() => {
+    if (!newOrder || !isSubscriptionPopupAlert(newOrder)) return;
+    playNotificationSound?.(newOrder);
+  }, [newOrder, playNotificationSound]);
 
   useEffect(() => {
     const onRestaurantOrderStatusUpdate = (event) => {
@@ -1814,6 +1828,7 @@ export default function OrdersMain() {
           // Find orders that should trigger the popup
           const targetOrders = response.data.data.orders.filter((order) => {
             if (hasOrderBeenShown(order)) return false;
+            if (isSubscriptionMealOrder(order)) return false;
 
             const isConfirmed = order.status === "confirmed";
             const isCreatedScheduled =
@@ -1895,7 +1910,19 @@ export default function OrdersMain() {
         audioRef.current.currentTime = 0;
         audioRef.current
           .play()
-          .catch((err) => debugLog("Audio play failed:", err));
+          .catch((err) => {
+            debugLog("Audio play failed:", err);
+            try {
+              const fallbackAudio = new Audio(
+                import.meta.env.DEV
+                  ? `/alert.mp3?devcache=restaurant-popup-${Date.now()}`
+                  : "/alert.mp3",
+              );
+              fallbackAudio.preload = "auto";
+              fallbackAudio.volume = 1;
+              fallbackAudio.play().catch(() => {});
+            } catch (_) {}
+          });
       }
     } else if (audioRef.current) {
       audioRef.current.pause();
@@ -1904,6 +1931,8 @@ export default function OrdersMain() {
   }, [showNewOrderPopup, isMuted]);
 
   useEffect(() => {
+    if (isSubscriptionPopupAlert(popupOrder || newOrder)) return;
+
     if (showNewOrderPopup && countdown > 0) {
       const timer = setInterval(() => {
         setCountdown((prev) => prev - 1);
@@ -2064,6 +2093,16 @@ export default function OrdersMain() {
 
     // Use popupOrder (from Socket.IO or API fallback) or newOrder (from hook)
     const orderToAccept = popupOrder || newOrder;
+    if (isSubscriptionPopupAlert(orderToAccept)) {
+      setShowNewOrderPopup(false);
+      setPopupOrder(null);
+      clearNewOrder();
+      setCountdown(180);
+      setPrepTime(11);
+      setAcceptSwipeProgress(0);
+      setIsAcceptingOrder(false);
+      return;
+    }
 
     // Ensure this order can't re-trigger fallback popup by using a different id key.
     markOrderAsShown(orderToAccept);
@@ -2140,6 +2179,20 @@ export default function OrdersMain() {
 
     // Use popupOrder (from Socket.IO or API fallback) or newOrder (from hook)
     const orderToReject = popupOrder || newOrder;
+    if (isSubscriptionPopupAlert(orderToReject)) {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+      }
+      setShowRejectPopup(false);
+      setShowNewOrderPopup(false);
+      setPopupOrder(null);
+      clearNewOrder();
+      setRejectReason("");
+      setCountdown(180);
+      setPrepTime(11);
+      return;
+    }
 
     // Reject order via API if we have a real order
     if (orderToReject?.orderMongoId || orderToReject?.orderId) {
@@ -2166,6 +2219,53 @@ export default function OrdersMain() {
     setRejectReason("");
     setCountdown(180);
     setPrepTime(11);
+  };
+
+  const handleSubscriptionAccept = () => {
+    const activePopupOrder = popupOrder || newOrder;
+    toast.success(
+      `${activePopupOrder?.planTitle || activePopupOrder?.dishName || "Subscription"} accepted`,
+    );
+    setShowNewOrderPopup(false);
+    setPopupOrder(null);
+    clearNewOrder();
+    setRejectReason("");
+    setCountdown(180);
+    setPrepTime(11);
+    setIsDetailsExpanded(false);
+  };
+
+  const handleSubscriptionReject = () => {
+    const activePopupOrder = popupOrder || newOrder;
+    const subscriptionId =
+      activePopupOrder?.subscriptionId ||
+      activePopupOrder?.subscription?.subscriptionId ||
+      activePopupOrder?.subscription?._id ||
+      activePopupOrder?.orderMongoId ||
+      activePopupOrder?._id;
+
+    if (!subscriptionId) {
+      toast.error("Subscription id is missing");
+      return;
+    }
+
+    restaurantAPI
+      .cancelSubscription(subscriptionId, "Rejected from restaurant alert")
+      .then(() => {
+        toast.success(
+          `${activePopupOrder?.planTitle || activePopupOrder?.dishName || "Subscription"} cancelled`,
+        );
+        setShowNewOrderPopup(false);
+        setPopupOrder(null);
+        clearNewOrder();
+        setRejectReason("");
+        setCountdown(180);
+        setPrepTime(11);
+        setIsDetailsExpanded(false);
+      })
+      .catch((error) => {
+        toast.error(error?.response?.data?.message || "Failed to cancel subscription");
+      });
   };
 
   const handleRejectCancel = () => {
@@ -2989,23 +3089,37 @@ export default function OrdersMain() {
                 exit={{ scale: 0.9, opacity: 0 }}
                 transition={{ type: "spring", damping: 25, stiffness: 300 }}
                 onClick={(e) => e.stopPropagation()}>
+                {(() => {
+                  const activePopupOrder = popupOrder || newOrder;
+                  const subscriptionAlert = isSubscriptionPopupAlert(activePopupOrder);
+                  const popupTitle = subscriptionAlert
+                    ? "New Subscription Order"
+                    : activePopupOrder?.orderId || "#Order";
+                  const popupSubtitle = subscriptionAlert
+                    ? activePopupOrder?.planTitle || activePopupOrder?.restaurantName || "Subscription"
+                    : activePopupOrder?.restaurantName || "Restaurant";
+
+                  return (
+                    <>
                 {/* Header */}
                 <div className="px-4 py-3 bg-white border-b border-gray-200 flex items-center justify-between">
                   <div className="flex-1">
                     <h3 className="text-base font-bold text-gray-900">
-                      {(popupOrder || newOrder)?.orderId || "#Order"}
+                      {popupTitle}
                     </h3>
                     <p className="text-xs text-gray-500 mt-0.5">
-                      {(popupOrder || newOrder)?.restaurantName || "Restaurant"}
+                      {popupSubtitle}
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <button
-                      onClick={handlePrint}
-                      className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                      aria-label="Print">
-                      <Printer className="w-5 h-5 text-gray-700" />
-                    </button>
+                    {!subscriptionAlert && (
+                      <button
+                        onClick={handlePrint}
+                        className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                        aria-label="Print">
+                        <Printer className="w-5 h-5 text-gray-700" />
+                      </button>
+                    )}
                     <button
                       onClick={toggleMute}
                       className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
@@ -3051,7 +3165,7 @@ export default function OrdersMain() {
                   <div className="mb-4">
                     <h4 className="text-sm font-semibold text-gray-900">
                       {(popupOrder || newOrder)?.items?.[0]?.name ||
-                        "New Order"}
+                        (subscriptionAlert ? "Subscription meal" : "New Order")}
                     </h4>
                     <p className="text-xs text-gray-500 mt-1">
                       {(popupOrder || newOrder)?.createdAt
@@ -3066,6 +3180,17 @@ export default function OrdersMain() {
                         : "Just now"}
                     </p>
                   </div>
+
+                  {subscriptionAlert && (
+                    <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-800">
+                        Subscription Alert
+                      </p>
+                      <p className="mt-1 text-sm font-medium text-emerald-900">
+                        A new subscription has been received for your restaurant.
+                      </p>
+                    </div>
+                  )}
 
                   {/* Restaurant Note */}
                   {(popupOrder || newOrder)?.restaurantNote && (
@@ -3155,11 +3280,12 @@ export default function OrdersMain() {
                   </div>
 
                   {/* Cutlery preference */}
-                  <div
-                    className={`mb-4 flex items-center gap-2 rounded-lg p-3 ${(popupOrder || newOrder)?.sendCutlery === false
-                        ? "bg-orange-50"
-                        : "bg-gray-50"
-                      }`}>
+                  {!subscriptionAlert && (
+                    <div
+                      className={`mb-4 flex items-center gap-2 rounded-lg p-3 ${(popupOrder || newOrder)?.sendCutlery === false
+                          ? "bg-orange-50"
+                          : "bg-gray-50"
+                        }`}>
                     <svg
                       className={`h-5 w-5 ${(popupOrder || newOrder)?.sendCutlery === false
                           ? "text-orange-600"
@@ -3184,7 +3310,8 @@ export default function OrdersMain() {
                         ? "Don't send cutlery"
                         : "Send cutlery"}
                     </span>
-                  </div>
+                    </div>
+                  )}
 
                   {/* Total bill */}
                   <div className="mb-4 flex items-center justify-between py-3 border-y border-gray-200">
@@ -3224,15 +3351,26 @@ export default function OrdersMain() {
                           Payment
                         </span>
                         <span
-                          className={`text-sm font-semibold ${isCod ? "text-amber-600" : "text-green-600"}`}>
-                          {isCod ? "Cash on Delivery" : "Online"}
+                          className={`text-sm font-semibold ${
+                            subscriptionAlert
+                              ? "text-sky-600"
+                              : isCod
+                                ? "text-amber-600"
+                                : "text-green-600"
+                          }`}>
+                          {subscriptionAlert
+                            ? "Subscription"
+                            : isCod
+                              ? "Cash on Delivery"
+                              : "Online"}
                         </span>
                       </div>
                     );
                   })()}
 
                   {/* Preparation time */}
-                  <div className="mb-4">
+                  {!subscriptionAlert && (
+                    <div className="mb-4">
                     <div className="flex items-center justify-between mb-3">
                       <span className="text-sm font-medium text-gray-700">
                         Preparation time
@@ -3253,7 +3391,8 @@ export default function OrdersMain() {
                         </button>
                       </div>
                     </div>
-                  </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="px-4 pb-4 pt-3 border-t border-gray-200 bg-white">
@@ -3263,6 +3402,8 @@ export default function OrdersMain() {
                       activePopupOrder?.orderStatus || activePopupOrder?.status;
                     const userCancelled = isUserCancelledStatus(popupStatus);
                     const anyCancelled = isAnyCancelledStatus(popupStatus);
+                    const subscriptionAlert =
+                      isSubscriptionPopupAlert(activePopupOrder);
 
                     if (anyCancelled) {
                       return (
@@ -3275,6 +3416,23 @@ export default function OrdersMain() {
                           <p className="mt-1 text-xs text-red-600">
                             This order is no longer available for acceptance.
                           </p>
+                        </div>
+                      );
+                    }
+
+                    if (subscriptionAlert) {
+                      return (
+                        <div className="grid grid-cols-2 gap-2">
+                          <button
+                            onClick={handleSubscriptionReject}
+                            className="rounded-lg border border-red-500 bg-white py-2.5 text-xs font-semibold text-red-600 transition-colors hover:bg-red-50">
+                            Reject
+                          </button>
+                          <button
+                            onClick={handleSubscriptionAccept}
+                            className="rounded-lg bg-emerald-600 py-2.5 text-xs font-semibold text-white transition-colors hover:bg-emerald-700">
+                            Accept
+                          </button>
                         </div>
                       );
                     }
@@ -3342,6 +3500,9 @@ export default function OrdersMain() {
                     );
                   })()}
                 </div>
+                    </>
+                  );
+                })()}
               </motion.div>
             </motion.div>
           </>

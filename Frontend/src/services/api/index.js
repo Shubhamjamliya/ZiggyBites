@@ -1175,6 +1175,12 @@ export const restaurantAPI = {
       {},
       { contextModule: "restaurant" },
     ),
+  cancelSubscription: (subscriptionId, reason = "") =>
+    apiClient.post(
+      `/food/restaurant/subscriptions/${String(subscriptionId)}/cancel`,
+      { reason },
+      { contextModule: "restaurant" },
+    ),
   updateMenu: (body) =>
     apiClient.patch("/food/restaurant/menu", body ?? {}, {
       contextModule: "restaurant",

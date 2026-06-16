@@ -885,6 +885,45 @@ export async function sendSubscriptionMealToDelivery(scheduleId, restaurantId) {
   };
 }
 
+export async function cancelSubscriptionForRestaurant(subscriptionId, restaurantId, reason = '') {
+  if (!mongoose.isValidObjectId(subscriptionId)) {
+    throw new ValidationError('Subscription id is invalid');
+  }
+  if (!mongoose.isValidObjectId(restaurantId)) {
+    throw new ValidationError('Restaurant id is invalid');
+  }
+
+  const subscription = await FoodSubscription.findOne({
+    _id: new mongoose.Types.ObjectId(subscriptionId),
+    restaurantId: new mongoose.Types.ObjectId(restaurantId),
+  });
+  if (!subscription) throw new NotFoundError('Subscription not found');
+  if (String(subscription.status || '').toLowerCase() === 'cancelled') {
+    return { subscription: normalizeSubscriptionForClient(subscription), alreadyCancelled: true };
+  }
+
+  subscription.status = 'cancelled';
+  subscription.cancelledAt = new Date();
+  subscription.cancelReason = String(reason || '').trim();
+  await subscription.save();
+
+  await FoodSubscriptionSchedule.updateMany(
+    {
+      subscriptionId: subscription._id,
+      restaurantId: new mongoose.Types.ObjectId(restaurantId),
+      status: { $in: ['scheduled', 'sent_to_delivery'] },
+    },
+    {
+      $set: {
+        status: 'cancelled',
+        cancelledAt: new Date(),
+      },
+    },
+  );
+
+  return { subscription: normalizeSubscriptionForClient(subscription), alreadyCancelled: false };
+}
+
 export async function listUpcomingSchedulesForUser(userId) {
   if (!mongoose.isValidObjectId(userId)) {
     throw new ValidationError('User not found');

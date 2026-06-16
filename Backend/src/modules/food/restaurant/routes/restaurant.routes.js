@@ -53,7 +53,8 @@ import {
 import * as orderController from '../../orders/controllers/order.controller.js';
 import {
     listTodaySubscriptionMealsRestaurantController,
-    sendSubscriptionMealToDeliveryController
+    sendSubscriptionMealToDeliveryController,
+    cancelSubscriptionForRestaurantController
 } from '../../subscription/controllers/subscription.controller.js';
 import { downloadRestaurantMenuPdf } from '../../admin/controllers/admin.controller.js';
 import { authMiddleware } from '../../../../core/auth/auth.middleware.js';
@@ -205,6 +206,7 @@ router.patch('/orders/:orderId/status', authMiddleware, requireRestaurant, order
 router.post('/orders/:orderId/resend-notification', authMiddleware, requireRestaurant, orderController.resendDeliveryNotificationRestaurantController);
 router.get('/subscription-meals/today', authMiddleware, requireRestaurant, listTodaySubscriptionMealsRestaurantController);
 router.post('/subscription-meals/:scheduleId/send-to-delivery', authMiddleware, requireRestaurant, sendSubscriptionMealToDeliveryController);
+router.post('/subscriptions/:subscriptionId/cancel', authMiddleware, requireRestaurant, cancelSubscriptionForRestaurantController);
 
 // Complaints (restaurant dashboard)
 router.get('/complaints', authMiddleware, requireRestaurant, getRestaurantComplaintsController);

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import io from 'socket.io-client';
 import { API_BASE_URL } from '@food/api/config';
 import { restaurantAPI } from '@food/api';
-const alertSound = '/zomato_sms.mp3';
+const alertSound = '/alert.mp3';
 import { dispatchNotificationInboxRefresh } from '@food/hooks/useNotificationInbox';
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
@@ -27,8 +27,11 @@ const syncSharedNotificationState = (patch = {}) => {
   });
 };
 
-const resolveAudioSource = (source) => {
-  return source;
+const resolveAudioSource = (source, cacheKey = 'restaurant-alert') => {
+  if (!source) return source;
+  if (!import.meta.env.DEV) return source;
+  const separator = source.includes('?') ? '&' : '?';
+  return `${source}${separator}devcache=${cacheKey}`;
 }
 
 const supportsBrowserNotifications = () =>
@@ -51,6 +54,82 @@ const buildRestaurantOrderNotification = (orderData = {}) => {
     },
   };
 }
+
+const isSubscriptionStartedAlert = (payload = {}) =>
+  payload?.type === 'subscription_started' ||
+  (String(payload?.orderId || payload?.order_id || '').startsWith('SUB-') &&
+    !payload?.subscriptionUsage);
+
+const isSubscriptionMealOrder = (payload = {}) => {
+  if (isSubscriptionStartedAlert(payload)) return false;
+
+  const paymentMethod = String(
+    payload?.paymentMethod || payload?.payment?.method || '',
+  )
+    .toLowerCase()
+    .trim();
+
+  return Boolean(
+    payload?.subscriptionUsage?.subscriptionId ||
+      payload?.type === 'subscription_meal_sent' ||
+      paymentMethod === 'subscription' ||
+      String(payload?.restaurantNote || '')
+        .toLowerCase()
+        .includes('subscription schedule'),
+  );
+};
+
+const normalizeRestaurantAlertPayload = (payload = {}) => {
+  const normalized = {
+    ...payload,
+    orderMongoId:
+      payload?.orderMongoId || payload?._id || payload?.order_mongo_id || '',
+    orderId:
+      payload?.orderId || payload?.order_id || payload?._id || payload?.id || 'New',
+  };
+
+  const isSubscriptionAlert = isSubscriptionStartedAlert(normalized);
+
+  if (!isSubscriptionAlert) {
+    return normalized;
+  }
+
+  const mealName =
+    normalized?.dishName ||
+    normalized?.items?.[0]?.name ||
+    normalized?.planTitle ||
+    'Subscription meal';
+
+  return {
+    ...normalized,
+    isSubscriptionAlert: true,
+    restaurantNote:
+      normalized?.restaurantNote ||
+      `New subscription received${normalized?.startDate ? ` starting ${new Date(normalized.startDate).toLocaleDateString('en-IN')}` : ''}`,
+    items:
+      Array.isArray(normalized?.items) && normalized.items.length > 0
+        ? normalized.items
+        : [
+            {
+              name: mealName,
+              quantity: 1,
+              price: Number(normalized?.creditPerOrder || 0),
+              isVeg: true,
+            },
+          ],
+    total: Number(
+      normalized?.total ||
+        normalized?.pricing?.total ||
+        normalized?.creditPerOrder ||
+        0,
+    ),
+    paymentMethod:
+      normalized?.paymentMethod || normalized?.payment?.method || 'subscription',
+    createdAt: normalized?.createdAt || new Date().toISOString(),
+    sendCutlery:
+      normalized?.sendCutlery === false ? false : true,
+  };
+};
 
 const triggerWebViewNativeNotification = async (orderData = {}) => {
   if (typeof window === 'undefined') return false;
@@ -345,6 +424,8 @@ export const useRestaurantNotifications = () => {
         // We alert only for "confirmed/new order waiting for review".
         const confirmed = (rows || [])
           .filter((o) => {
+            if (isSubscriptionMealOrder(o)) return false;
+
             const status = String(o?.status || "").toLowerCase();
             if (status !== "confirmed") return false;
 
@@ -698,11 +779,12 @@ export const useRestaurantNotifications = () => {
 
     // Listen for new order notifications
     socketRef.current.on('new_order', (orderData) => {
-      const normalizedOrder = {
-        ...orderData,
-        orderMongoId: orderData?.orderMongoId || orderData?._id || orderData?.order_mongo_id,
-        orderId: orderData?.orderId || orderData?.order_id || orderData?._id,
-      };
+      const normalizedOrder = normalizeRestaurantAlertPayload(orderData);
+
+      if (isSubscriptionMealOrder(normalizedOrder)) {
+        debugLog('Ignoring subscription meal order alert:', normalizedOrder.orderId);
+        return;
+      }
 
       // Filter scheduled orders here as well to prevent "red dot" from showing up too early
       if (normalizedOrder.scheduledAt) {
@@ -730,13 +812,21 @@ export const useRestaurantNotifications = () => {
     // Listen for sound notification event
     socketRef.current.on('play_notification_sound', (data) => {
       debugLog('?? Sound notification:', data);
-      const normalizedData = {
-        orderId: data?.orderId || data?.order_id,
-        orderMongoId: data?.orderMongoId || data?.order_mongo_id,
-        ...data
-      };
+      const normalizedData = normalizeRestaurantAlertPayload(data);
+
+      if (isSubscriptionMealOrder(normalizedData)) {
+        debugLog('Ignoring subscription meal sound event:', normalizedData.orderId);
+        return;
+      }
+
+      setNewOrder(normalizedData);
       // handleIncomingOrderAlert manages sound (socket source always rings) and background notifications
       handleIncomingOrderAlert(normalizedData, 'socket');
+    });
+
+    socketRef.current.on('subscription_started', (data) => {
+      const normalizedData = normalizeRestaurantAlertPayload(data);
+      setNewOrder(normalizedData);
     });
 
     // Listen for order status updates
@@ -836,22 +926,32 @@ export const useRestaurantNotifications = () => {
         return;
       }
 
+      const soundFile = resolveAudioSource(alertSound, `restaurant-alert-${Date.now()}`);
+      if (!audioRef.current) {
+        audioRef.current = new Audio(soundFile);
+        audioRef.current.preload = 'auto';
+      } else if (!audioRef.current.src.includes('alert.mp3')) {
+        audioRef.current.pause();
+        audioRef.current.src = soundFile;
+        audioRef.current.load();
+      }
+
       if (audioRef.current) {
         audioRef.current.muted = false;
         audioRef.current.volume = 1;
         audioRef.current.currentTime = 0;
         audioRef.current.play().catch(error => {
-          // Don't log autoplay policy errors as they're expected
+          try {
+            const fallbackAudio = new Audio(soundFile);
+            fallbackAudio.preload = 'auto';
+            fallbackAudio.volume = 1;
+            fallbackAudio.play().catch(() => {});
+          } catch (fallbackError) {
+            debugWarn('Fallback audio playback failed:', fallbackError);
+          }
+
           if (!error.message?.includes('user didn\'t interact') && !error.name?.includes('NotAllowedError')) {
             debugWarn('Error playing notification sound:', error);
-            // Fallback: try one-shot audio instance (more reliable in background tabs on some browsers)
-            try {
-              const fallbackAudio = new Audio(resolveAudioSource(alertSound, `restaurant-alert-${Date.now()}`));
-              fallbackAudio.volume = 1;
-              fallbackAudio.play().catch(() => {});
-            } catch (fallbackError) {
-              debugWarn('Fallback audio playback failed:', fallbackError);
-            }
           }
         });
       }

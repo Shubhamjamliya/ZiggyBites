@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import {
   checkOnboardingStatus,
   isRestaurantOnboardingComplete,
@@ -735,11 +735,11 @@ function TableBookings() {
   );
 }
 
-function AllOrders({ onOpenOrder }) {
-  const navigate = useNavigate();
+function AllOrders({ onSelectOrder, onCancel }) {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [markingReadyOrderIds, setMarkingReadyOrderIds] = useState({});
 
   useEffect(() => {
     let isMounted = true;
@@ -763,18 +763,8 @@ function AllOrders({ onOpenOrder }) {
               return b.sortTimestamp - a.sortTimestamp;
             });
 
-          console.log("[OrdersMain][AllOrders] fetched orders", {
-            count: transformedOrders.length,
-            sample: transformedOrders.slice(0, 5).map((order) => ({
-              orderId: order.orderId,
-              mongoId: order.mongoId,
-              status: order.status,
-              customerName: order.customerName,
-            })),
-          });
           setOrders(transformedOrders);
         } else {
-          console.log("[OrdersMain][AllOrders] fetch succeeded but no orders found");
           setOrders([]);
         }
       } catch (error) {
@@ -788,10 +778,6 @@ function AllOrders({ onOpenOrder }) {
           debugError("Error fetching all orders:", error);
         }
 
-        console.log("[OrdersMain][AllOrders] fetch failed", {
-          message: error?.message,
-          status: error?.response?.status,
-        });
         setOrders([]);
       } finally {
         if (isMounted) {
@@ -815,6 +801,36 @@ function AllOrders({ onOpenOrder }) {
     };
   }, []);
 
+  const handleMarkReady = async ({ orderId, mongoId }) => {
+    const orderKey = mongoId || orderId;
+    if (!orderKey || markingReadyOrderIds[orderKey]) return;
+
+    try {
+      setMarkingReadyOrderIds((prev) => ({ ...prev, [orderKey]: true }));
+      await restaurantAPI.markOrderReady(orderKey);
+      setOrders((prev) =>
+        prev.map((order) =>
+          (order.mongoId || order.orderId) === orderKey
+            ? {
+                ...order,
+                status: "ready",
+                eta: null,
+                sortTimestamp: Date.now(),
+              }
+            : order,
+        ),
+      );
+      toast.success("Order marked as ready");
+    } catch (error) {
+      debugError("Error marking order as ready from All orders:", error);
+      toast.error(
+        error.response?.data?.message || "Failed to mark order as ready",
+      );
+    } finally {
+      setMarkingReadyOrderIds((prev) => ({ ...prev, [orderKey]: false }));
+    }
+  };
+
   if (loading) {
     return (
       <div className="pt-4 pb-6">
@@ -829,10 +845,6 @@ function AllOrders({ onOpenOrder }) {
 
   return (
     <div className="pt-4 pb-6">
-      {console.log("[OrdersMain][AllOrders] rendering tab", {
-        loading,
-        count: orders.length,
-      })}
       <div className="flex items-baseline justify-between mb-3">
         <div className="flex items-center gap-2">
           <h2 className="text-base font-semibold text-black">All orders</h2>
@@ -879,164 +891,26 @@ function AllOrders({ onOpenOrder }) {
             }
 
             return (
-              <SimpleAllOrderRow
+              <OrderCard
                 key={order.orderId || order.mongoId}
                 {...order}
                 eta={etaDisplay}
-                onSelect={
-                  onOpenOrder ||
-                  ((selectedOrder) => {
-                    console.log("[OrdersMain][AllOrders] opening order details", {
-                      selectedOrder,
-                      fallbackOrder: {
-                        orderId: order.orderId,
-                        mongoId: order.mongoId,
-                        status: order.status,
-                      },
-                    });
-                    const routeId =
-                      selectedOrder?.mongoId || selectedOrder?.orderId;
-                    if (!routeId) return;
-                    navigate(`/food/restaurant/orders/${routeId}`, {
-                      state: {
-                        mongoId:
-                          selectedOrder?.mongoId || order.mongoId || null,
-                      },
-                    });
-                  })
+                onSelect={onSelectOrder}
+                onCancel={
+                  normalizedStatus === "preparing" ? onCancel : undefined
                 }
+                onMarkReady={
+                  normalizedStatus === "preparing" ? handleMarkReady : undefined
+                }
+                isMarkingReady={Boolean(
+                  markingReadyOrderIds[order.mongoId || order.orderId],
+                )}
               />
             );
           })}
         </div>
       )}
     </div>
-  );
-}
-
-function SimpleAllOrderRow({
-  orderId,
-  mongoId,
-  status,
-  customerName,
-  type,
-  timePlaced,
-  eta,
-  itemsSummary,
-  photoUrl,
-  photoAlt,
-  scheduledAt = null,
-  restaurantNote = null,
-  onSelect,
-}) {
-  const normalizedStatus = String(status || "").toLowerCase();
-  const statusLabel = String(status || "")
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (c) => c.toUpperCase());
-
-  console.log("[OrdersMain][SimpleAllOrderRow] row render", {
-    orderId,
-    mongoId,
-    status,
-    normalizedStatus,
-    customerName,
-    eta,
-  });
-
-  return (
-    <button
-      type="button"
-      onClick={() =>
-        (() => {
-          const payload = {
-            orderId,
-            mongoId,
-            status,
-            customerName,
-            type,
-            timePlaced,
-            eta,
-            itemsSummary,
-            scheduledAt,
-            restaurantNote,
-          };
-          console.log("[OrdersMain][SimpleAllOrderRow] row clicked", payload);
-          onSelect?.(payload);
-        })()
-      }
-      className="mb-3 flex w-full items-start gap-3 rounded-xl border border-slate-100 bg-white p-3 text-left shadow-sm transition-colors hover:bg-slate-50"
-    >
-      <div className="h-14 w-14 overflow-hidden rounded-lg border border-slate-100 bg-slate-50 flex-shrink-0">
-        {photoUrl ? (
-          <img src={photoUrl} alt={photoAlt} className="h-full w-full object-cover" />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center p-1 bg-slate-50">
-            <span className="text-center text-[8px] font-bold uppercase leading-none text-slate-300">
-              {photoAlt}
-            </span>
-          </div>
-        )}
-      </div>
-
-      <div className="min-w-0 flex-1">
-        <div className="mb-1 flex items-center justify-between gap-2">
-          <h3 className="truncate text-[13px] font-black text-slate-900">
-            #{orderId}
-          </h3>
-          <span
-            className={`inline-flex items-center rounded-full px-2 py-0.5 text-[8px] font-black uppercase tracking-wider border ${
-              normalizedStatus === "delivered"
-                ? "bg-emerald-50 text-emerald-600 border-emerald-100"
-                : normalizedStatus === "cancelled"
-                  ? "bg-rose-50 text-rose-600 border-rose-100"
-                  : normalizedStatus === "ready"
-                    ? "bg-blue-50 text-blue-600 border-blue-100"
-                    : normalizedStatus === "preparing"
-                      ? "bg-amber-50 text-amber-600 border-amber-100"
-                      : "bg-slate-50 text-slate-500 border-slate-100"
-            }`}
-          >
-            {statusLabel}
-          </span>
-        </div>
-
-        <div className="mb-1 flex items-center justify-between text-[9px] font-bold uppercase tracking-tight text-slate-400">
-          <span className="truncate max-w-[60%]">{customerName}</span>
-          <span className="whitespace-nowrap">{type}</span>
-        </div>
-
-        <p className="mb-1 truncate text-[10px] font-bold italic text-slate-600">
-          {itemsSummary}
-        </p>
-
-        {restaurantNote ? (
-          <p className="mb-2 line-clamp-1 rounded-md border border-blue-100 bg-blue-50 px-2 py-1 text-[9px] font-bold italic text-blue-700">
-            Note: {restaurantNote}
-          </p>
-        ) : null}
-
-        <div className="flex items-center justify-between gap-2 border-t border-slate-50 pt-2">
-          <div className="min-w-0">
-            {scheduledAt ? (
-              <span className="text-[10px] font-black text-green-700">
-                {new Date(scheduledAt).toLocaleString("en-US", {
-                  day: "numeric",
-                  month: "short",
-                  hour: "2-digit",
-                  minute: "2-digit",
-                  hour12: true,
-                })}
-              </span>
-            ) : (
-              <span className="text-[10px] font-black text-slate-700">
-                {eta ? `${eta} • ${timePlaced}` : timePlaced}
-              </span>
-            )}
-          </div>
-          <span className="text-xs font-bold text-blue-600">View</span>
-        </div>
-      </div>
-    </button>
   );
 }
 
@@ -1343,7 +1217,6 @@ function SubscriptionMealsPanel({ view }) {
 
 export default function OrdersMain() {
   const navigate = useNavigate();
-  const location = useLocation();
   const [activeFilter, setActiveFilter] = useState("all");
   const [activeSubscriptionFilter, setActiveSubscriptionFilter] = useState("current");
   const [appCustomization, setAppCustomization] = useState(
@@ -1397,28 +1270,20 @@ export default function OrdersMain() {
   const [pendingBookingsCount, setPendingBookingsCount] = useState(0);
   const [pendingOrdersCount, setPendingOrdersCount] = useState(0);
   const [pendingDiningRequest, setPendingDiningRequest] = useState(null);
-  const isRootRestaurantDashboard = location.pathname === "/food/restaurant";
   const normalOrderFlowEnabled =
-    isRootRestaurantDashboard || appCustomization.normalOrderFlowEnabled !== false;
+    appCustomization.normalOrderFlowEnabled !== false;
   const subscriptionFlowEnabled =
     appCustomization.subscriptionFlowEnabled !== false;
   const diningFlowEnabled = appCustomization.diningFlowEnabled !== false;
   const showSubscriptionDashboard =
-    !isRootRestaurantDashboard &&
-    !normalOrderFlowEnabled &&
-    subscriptionFlowEnabled;
+    !normalOrderFlowEnabled && subscriptionFlowEnabled;
   const visibleFilterTabs = useMemo(
-    () => {
-      if (isRootRestaurantDashboard) {
-        return filterTabs.filter((tab) => tab.id === "all");
-      }
-
-      return filterTabs.filter((tab) => {
+    () =>
+      filterTabs.filter((tab) => {
         if (showSubscriptionDashboard) return false;
         if (tab.id === "table-booking") return diningFlowEnabled;
         return normalOrderFlowEnabled;
-      });
-    },
+      }),
     [diningFlowEnabled, normalOrderFlowEnabled, showSubscriptionDashboard],
   );
 
@@ -2647,25 +2512,7 @@ export default function OrdersMain() {
     setIsSheetOpen(true);
   };
 
-  const handleOpenOrderDetails = (order) => {
-    console.log("[OrdersMain] handleOpenOrderDetails", order);
-    const routeId = order?.mongoId || order?.orderId;
-    if (!routeId) return;
-
-    navigate(`/food/restaurant/orders/${routeId}`, {
-      state: {
-        mongoId: order?.mongoId || null,
-      },
-    });
-  };
-
   const renderContent = () => {
-    console.log("[OrdersMain] renderContent", {
-      activeFilter,
-      showSubscriptionDashboard,
-      visibleTabs: visibleFilterTabs.map((tab) => tab.id),
-      searchQuery,
-    });
     if (showSubscriptionDashboard) {
       return <SubscriptionMealsPanel view={activeSubscriptionFilter} />;
     }
@@ -2696,7 +2543,8 @@ export default function OrdersMain() {
       case "all":
         return (
           <AllOrders
-            onOpenOrder={handleOpenOrderDetails}
+            onSelectOrder={handleSelectOrder}
+            onCancel={handleCancelClick}
           />
         );
       case "preparing":
@@ -3860,7 +3708,6 @@ function OrderCard({
   isMarkingReady = false,
   scheduledAt = null,
   restaurantNote = null,
-  showActions = true,
 }) {
   const normalizedStatus = String(status || "").toLowerCase();
   const isReady = normalizedStatus === "ready";
@@ -3879,7 +3726,7 @@ function OrderCard({
       />
       
       <div
-        onClick={() => onSelect?.({ orderId, mongoId, status, customerName, type, tableOrToken, timePlaced, eta, itemsSummary, paymentMethod, scheduledAt, restaurantNote })}
+        onClick={() => onSelect?.({ orderId, status, customerName, type, tableOrToken, timePlaced, eta, itemsSummary, paymentMethod, scheduledAt, restaurantNote })}
         className="flex gap-3 items-start cursor-pointer pl-1">
         
         {/* Photo Container - Smaller for mobile */}
@@ -3918,7 +3765,7 @@ function OrderCard({
                 {statusLabel}
               </span>
               
-              {showActions && isPreparing && onCancel && (
+              {isPreparing && onCancel && (
                 <button
                   type="button"
                   onClick={(e) => {
@@ -3980,8 +3827,7 @@ function OrderCard({
               )}
 
             <div className="flex items-center gap-1.5 flex-shrink-0">
-              {showActions &&
-                ((isPreparing || isReady || normalizedStatus === "confirmed") && (
+              {(isPreparing || isReady || normalizedStatus === "confirmed") && (
                 <>
                   {deliveryPartnerId && (
                     <div className="h-5 w-5 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600" title="Driver Assigned">
@@ -4005,9 +3851,9 @@ function OrderCard({
                     />
                   )}
                 </>
-              ))}
+              )}
 
-              {showActions && isPreparing && onMarkReady && (
+              {isPreparing && onMarkReady && (
                 <button
                   type="button"
                   onClick={(e) => {

@@ -1247,7 +1247,7 @@ function SubscriptionMealsPanel({ view }) {
                       state: { subscriptionLabel: group.label },
                     })
                   }
-                  className="flex w-full items-start justify-between gap-3 border-b border-dashed border-gray-200 pb-3 text-left">
+                  className="flex w-full items-start justify-between gap-3 text-left">
                   <div className="min-w-0 border-l-4 border-primary-orange/80 pl-3">
                     <p className="text-sm font-black text-gray-900">{group.label}</p>
                     <p className="mt-1 text-xs font-semibold text-gray-600">{customerName}</p>
@@ -1266,70 +1266,6 @@ function SubscriptionMealsPanel({ view }) {
                     </div>
                   </div>
                 </button>
-
-                <div className="mt-3 space-y-2">
-                  {group.items.map((meal) => {
-                    const scheduleId = meal.scheduleId || meal._id;
-                    const sent = meal.status === "sent_to_delivery";
-                    const cancelled = ["cancelled", "skipped"].includes(
-                      String(meal.status || "").toLowerCase(),
-                    );
-                    const serviceTime = meal.serviceDate
-                      ? new Date(meal.serviceDate).getTime()
-                      : 0;
-                    const canSend = !sent && !cancelled && serviceTime <= now;
-
-                    return (
-                      <div
-                        key={scheduleId}
-                        className="rounded-2xl border border-gray-200 bg-white p-3 shadow-sm">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <p className="text-sm font-bold text-gray-900">
-                                {meal.dishName || "Subscription meal"}
-                              </p>
-                              <span className="rounded-full bg-primary-orange/10 px-2 py-0.5 text-[10px] font-black uppercase text-primary-orange">
-                                {meal.mealName || "Meal"}
-                              </span>
-                            </div>
-                            <p className="mt-1 text-xs text-gray-500">
-                              {meal.serviceDate ? formatSubscriptionDate(meal.serviceDate) : "No date"}
-                            </p>
-                          </div>
-                          <span
-                            className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-black uppercase ${
-                              sent
-                                ? "border border-emerald-200 bg-emerald-50 text-emerald-600"
-                                : cancelled
-                                  ? "border border-red-200 bg-red-50 text-red-600"
-                                  : "border border-amber-200 bg-amber-50 text-amber-700"
-                            }`}>
-                            {sent ? "Sent" : meal.status || "Scheduled"}
-                          </span>
-                        </div>
-
-                        <button
-                          type="button"
-                          disabled={!canSend || sendingScheduleIds[scheduleId]}
-                          onClick={() => handleSendMeal(meal)}
-                          className="mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-primary-orange text-sm font-bold text-white disabled:bg-gray-200 disabled:text-gray-500"
-                        >
-                          {sendingScheduleIds[scheduleId] ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <Send className="h-4 w-4" />
-                          )}
-                          {sent
-                            ? "Already sent"
-                            : canSend
-                              ? "Send to delivery boy"
-                              : "Scheduled for later"}
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
               </div>
             );
           })}
@@ -2295,11 +2231,12 @@ export default function OrdersMain() {
 
   // Handle reject order
   const handleRejectClick = () => {
-    setShowRejectPopup(true);
+    void handleRejectConfirm("Rejected from restaurant alert");
   };
 
-  const handleRejectConfirm = async () => {
-    if (!rejectReason) return;
+  const handleRejectConfirm = async (reasonOverride = null) => {
+    const reason = String(reasonOverride ?? rejectReason ?? "").trim();
+    if (!reason) return;
 
     // Use popupOrder (from Socket.IO or API fallback) or newOrder (from hook)
     const orderToReject = popupOrder || newOrder;
@@ -2322,7 +2259,7 @@ export default function OrdersMain() {
     if (orderToReject?.orderMongoId || orderToReject?.orderId) {
       try {
         const orderId = orderToReject.orderMongoId || orderToReject.orderId;
-        await restaurantAPI.rejectOrder(orderId, rejectReason);
+        await restaurantAPI.rejectOrder(orderId, reason);
         debugLog("? Order rejected:", orderId);
         requestOrdersRefresh();
       } catch (error) {
@@ -2792,7 +2729,7 @@ export default function OrdersMain() {
 
   const renderContent = () => {
     if (showSubscriptionDashboard) {
-      return <SubscriptionMealsPanel view={activeSubscriptionFilter} />;
+      return <SubscriptionMealsPanel view="all" />;
     }
 
     if (visibleFilterTabs.length === 0) {
@@ -2909,60 +2846,6 @@ export default function OrdersMain() {
           )
         }
       </AnimatePresence>
-
-      {showSubscriptionDashboard && (
-      <div className="sticky top-[50px] z-40 pb-2 bg-gray-100">
-        <div
-          className="flex gap-2 overflow-x-auto scrollbar-hide bg-transparent rounded-full px-3 py-2 mt-2"
-          style={{
-            scrollbarWidth: "none",
-            msOverflowStyle: "none",
-            WebkitOverflowScrolling: "touch",
-          }}>
-          <style>{`
-            .scrollbar-hide::-webkit-scrollbar {
-              display: none;
-            }
-          `}</style>
-          {subscriptionFilterTabs.map((tab) => {
-            const isActive = activeSubscriptionFilter === tab.id;
-
-            return (
-              <motion.button
-                key={tab.id}
-                type="button"
-                onClick={() => setActiveSubscriptionFilter(tab.id)}
-                className={`shrink-0 px-6 py-3.5 rounded-full font-medium text-sm whitespace-nowrap relative overflow-hidden ${
-                  isActive ? "text-white" : "bg-white text-black"
-                }`}
-                animate={{
-                  scale: isActive ? 1.05 : 1,
-                  opacity: isActive ? 1 : 0.7,
-                }}
-                transition={{
-                  duration: 0.3,
-                  ease: [0.25, 0.1, 0.25, 1],
-                }}
-                whileTap={{ scale: 0.95 }}>
-                {isActive && (
-                  <motion.div
-                    layoutId="activeSubscriptionFilterBackground"
-                    className="absolute inset-0 bg-primary-orange rounded-full -z-10"
-                    initial={false}
-                    transition={{
-                      type: "spring",
-                      stiffness: 500,
-                      damping: 30,
-                    }}
-                  />
-                )}
-                <span className="relative z-10">{tab.label}</span>
-              </motion.button>
-            );
-          })}
-        </div>
-      </div>
-      )}
 
       {/* Top Filter Bar - Sticky below navbar */}
       {!showSubscriptionDashboard && visibleFilterTabs.length > 0 && (

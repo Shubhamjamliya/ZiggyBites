@@ -372,3 +372,15 @@
 {"duration":"141ms","ip":"127.0.0.1","level":"info","message":"[2c83e3c5-f6a6-4ae0-9991-82cfc943f265] PATCH /api/v1/food/delivery/availability 200 - 141ms","method":"PATCH","requestId":"2c83e3c5-f6a6-4ae0-9991-82cfc943f265","service":"ziggybites-backend","status":200,"timestamp":"2026-06-11T13:17:42.710Z","url":"/api/v1/food/delivery/availability"}
 {"duration":"60ms","ip":"127.0.0.1","level":"info","message":"[9aa34b0b-77be-4cf3-887b-11c732dc94fb] GET /api/v1/food/restaurant/dining-settings/pending 304 - 60ms","method":"GET","requestId":"9aa34b0b-77be-4cf3-887b-11c732dc94fb","service":"ziggybites-backend","status":304,"timestamp":"2026-06-11T13:17:42.756Z","url":"/api/v1/food/restaurant/dining-settings/pending"}
 {"duration":"109ms","ip":"127.0.0.1","level":"info","message":"[77884d20-f3bc-4c16-b65b-e2fc164652dc] GET /api/v1/food/restaurant/orders?limit=100&page=1 304 - 109ms","method":"GET","requestId":"77884d20-f3bc-4c16-b65b-e2fc164652dc","service":"ziggybites-backend","status":304,"timestamp":"2026-06-11T13:17:42.874Z","url":"/api/v1/food/restaurant/orders?limit=100&page=1"}
+{"level":"warn","message":"⚠️ Firebase service account not configured. Firebase features may not work.","service":"ziggybites-backend","timestamp":"2026-06-16T12:13:39.861Z"}
+{"level":"info","message":"MongoDB connected: ac-lmtustw-shard-00-00.dy9i3bv.mongodb.net","service":"ziggybites-backend","timestamp":"2026-06-16T12:13:41.317Z"}
+{"level":"warn","message":"⚠️ Firebase service account not configured. Firebase features may not work.","service":"ziggybites-backend","timestamp":"2026-06-16T12:25:04.250Z"}
+{"level":"info","message":"MongoDB connected: ac-lmtustw-shard-00-00.dy9i3bv.mongodb.net","service":"ziggybites-backend","timestamp":"2026-06-16T12:25:05.262Z"}
+{"level":"warn","message":"⚠️ Firebase service account not configured. Firebase features may not work.","service":"ziggybites-backend","timestamp":"2026-06-16T12:29:52.986Z"}
+{"level":"info","message":"MongoDB connected: ac-lmtustw-shard-00-00.dy9i3bv.mongodb.net","service":"ziggybites-backend","timestamp":"2026-06-16T12:29:55.417Z"}
+{"level":"warn","message":"⚠️ Firebase service account not configured. Firebase features may not work.","service":"ziggybites-backend","timestamp":"2026-06-17T06:20:22.309Z"}
+{"level":"info","message":"MongoDB connected: ac-lmtustw-shard-00-00.dy9i3bv.mongodb.net","service":"ziggybites-backend","timestamp":"2026-06-17T06:20:23.218Z"}
+{"level":"warn","message":"⚠️ Firebase service account not configured. Firebase features may not work.","service":"ziggybites-backend","timestamp":"2026-06-17T06:29:44.396Z"}
+{"level":"info","message":"MongoDB connected: ac-lmtustw-shard-00-00.dy9i3bv.mongodb.net","service":"ziggybites-backend","timestamp":"2026-06-17T06:29:45.306Z"}
+{"level":"warn","message":"⚠️ Firebase service account not configured. Firebase features may not work.","service":"ziggybites-backend","timestamp":"2026-06-17T07:06:03.347Z"}
+{"level":"info","message":"MongoDB connected: ac-lmtustw-shard-00-00.dy9i3bv.mongodb.net","service":"ziggybites-backend","timestamp":"2026-06-17T07:06:04.513Z"}

@@ -902,6 +902,34 @@ export const useDeliveryNotifications = () => {
 
     socketRef.current.on('order_status_update', (statusData) => {
       debugLog('?? Delivery order status update received via socket:', statusData);
+      const payloadKey = getOrderAlertKey(statusData);
+      const activeKey = getOrderAlertKey(activeOrderRef.current || {});
+      const payloadStatus = String(
+        statusData?.orderStatus ||
+        statusData?.status ||
+        statusData?.dispatchStatus ||
+        statusData?.dispatch?.status ||
+        '',
+      ).toLowerCase().trim();
+      const isPendingStatus = ['confirmed', 'preparing', 'ready_for_pickup'].includes(payloadStatus);
+      const shouldClearAlert =
+        payloadKey &&
+        activeKey &&
+        payloadKey === activeKey &&
+        (
+          !isPendingStatus ||
+          payloadStatus === 'accepted' ||
+          payloadStatus === 'picked_up' ||
+          payloadStatus === 'reached_drop' ||
+          payloadStatus === 'delivered'
+        );
+
+      if (shouldClearAlert) {
+        stopAlertLoop();
+        activeOrderRef.current = null;
+        setNewOrder(null);
+      }
+
       setOrderStatusUpdate(statusData || null);
     });
 

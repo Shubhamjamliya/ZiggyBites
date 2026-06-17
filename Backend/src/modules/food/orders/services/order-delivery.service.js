@@ -229,6 +229,25 @@ function emitOrderUpdate(order, deliveryPartnerId, options = {}) {
   }
 }
 
+async function notifyUserDeliveryDropOtp(order, plainOtp) {
+  const otp = String(plainOtp || '').trim();
+  if (!otp || !order?.userId) return;
+
+  await notifyOwnerSafely(
+    { ownerType: 'USER', ownerId: order.userId },
+    {
+      title: 'Delivery OTP',
+      body: `Your OTP for order #${order._id.toString()} is ${otp}. Share it with the delivery partner to complete handover.`,
+      data: {
+        type: 'delivery_drop_otp',
+        orderId: String(order._id.toString()),
+        orderMongoId: String(order._id),
+        otp,
+      },
+    },
+  );
+}
+
 async function syncRazorpayQrPayment(orderDoc) {
   // Phase 2: FoodTransaction is source of truth; avoid relying on FoodOrder.payment.
   const tx = await FoodTransaction.findOne({ orderId: orderDoc?._id }).lean();
@@ -830,6 +849,7 @@ export async function confirmReachedDropDelivery(orderId, deliveryPartnerId) {
     }
     // Rider explicitly requested OTP again at drop, re-emit same OTP without regenerating.
     emitDeliveryDropOtpToUser(order, existingOtp);
+    void notifyUserDeliveryDropOtp(order, existingOtp);
     return sanitizeOrderForExternal(order);
   }
 
@@ -866,6 +886,7 @@ export async function confirmReachedDropDelivery(orderId, deliveryPartnerId) {
   await order.save();
 
   emitDeliveryDropOtpToUser(order, String(order.deliveryOtp || '').trim());
+  void notifyUserDeliveryDropOtp(order, String(order.deliveryOtp || '').trim());
   emitOrderUpdate(order, deliveryPartnerId);
   enqueueOrderEvent('reached_drop', {
     orderMongoId: order._id?.toString?.(),

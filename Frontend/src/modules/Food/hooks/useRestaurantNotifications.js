@@ -832,6 +832,23 @@ export const useRestaurantNotifications = () => {
     // Listen for order status updates
     socketRef.current.on('order_status_update', (data) => {
       debugLog('?? Order status update:', data);
+      const payloadKey = getOrderAlertKey(data);
+      const activeKey = getOrderAlertKey(activeOrderRef.current || {});
+      const payloadStatus = String(
+        data?.orderStatus ||
+        data?.status ||
+        data?.dispatchStatus ||
+        data?.dispatch?.status ||
+        '',
+      ).toLowerCase().trim();
+      const isPendingStatus = ['created', 'confirmed', 'preparing', 'ready_for_pickup'].includes(payloadStatus);
+
+      if (payloadKey && activeKey && payloadKey === activeKey && !isPendingStatus) {
+        stopAlertLoop();
+        activeOrderRef.current = null;
+        setNewOrder(null);
+      }
+
       if (typeof window !== 'undefined') {
         window.dispatchEvent(
           new CustomEvent('restaurantOrderStatusUpdate', {

@@ -1711,12 +1711,12 @@ export default function OrdersMain() {
   // Show new order popup when real order notification arrives from Socket.IO
   useEffect(() => {
     if (!newOrder) return;
-    if (!isSubscriptionPopupAlert(newOrder)) {
+    if (isSubscriptionPopupAlert(newOrder)) {
       clearNewOrder();
       return;
     }
 
-    debugLog("?? Subscription alert received:", newOrder);
+    debugLog("?? Regular order alert received:", newOrder);
 
     if (isSubscriptionMealOrder(newOrder)) {
       clearNewOrder();
@@ -1727,13 +1727,12 @@ export default function OrdersMain() {
       markOrderAsShown(newOrder);
       setPopupOrder(newOrder);
       setShowNewOrderPopup(true);
-      setSubscriptionAccepted(false);
       setCountdown(180);
     }
   }, [clearNewOrder, newOrder]);
 
   useEffect(() => {
-    if (!newOrder || !isSubscriptionPopupAlert(newOrder)) return;
+    if (!newOrder || isSubscriptionPopupAlert(newOrder)) return;
     playNotificationSound?.(newOrder);
   }, [newOrder, playNotificationSound]);
 
@@ -1848,7 +1847,6 @@ export default function OrdersMain() {
       passive: true,
     });
     window.addEventListener("keydown", unlockAudio, { once: true });
-
     return () => {
       window.removeEventListener("pointerdown", unlockAudio);
       window.removeEventListener("keydown", unlockAudio);
@@ -1889,13 +1887,9 @@ export default function OrdersMain() {
           const targetOrders = response.data.data.orders.filter((order) => {
             if (hasOrderBeenShown(order)) return false;
             if (isSubscriptionMealOrder(order)) return false;
+            if (isSubscriptionPopupAlert(order)) return false;
 
             const isConfirmed = order.status === "confirmed";
-            const isCreatedScheduled =
-              order.status === "created" && order.scheduledAt;
-
-            if (isConfirmed && !order.scheduledAt) return true; // ordinary confirmed fallback
-
             if (
               order.scheduledAt &&
               (order.status === "created" || order.status === "confirmed")
@@ -3249,21 +3243,6 @@ export default function OrdersMain() {
                       </p>
                       <p className="mt-1 text-sm font-medium text-emerald-900">
                         A new subscription has been received for your restaurant.
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Restaurant Note */}
-                  {(popupOrder || newOrder)?.restaurantNote && (
-                    <div className="mb-4 bg-blue-50 border border-blue-200 rounded-lg p-3">
-                      <div className="flex items-center gap-2 mb-1">
-                        <FileText className="w-4 h-4 text-blue-600" />
-                        <p className="text-[10px] font-bold text-blue-800 uppercase tracking-wider">
-                          Note for Restaurant
-                        </p>
-                      </div>
-                      <p className="text-sm font-medium text-blue-900">
-                        {(popupOrder || newOrder).restaurantNote}
                       </p>
                     </div>
                   )}

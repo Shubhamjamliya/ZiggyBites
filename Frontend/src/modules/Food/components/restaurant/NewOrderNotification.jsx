@@ -119,13 +119,7 @@ export default function NewOrderNotification({ order, onClose, onViewOrder }) {
                 </div>
               )}
 
-              {/* Note */}
-              {order.note && (
-                <div className="p-3 bg-yellow-50 rounded-lg border border-yellow-200">
-                  <p className="text-xs text-yellow-800 font-medium mb-1">Note:</p>
-                  <p className="text-sm text-yellow-900">{order.note}</p>
-                </div>
-              )}
+
             </div>
 
             {/* Action Buttons */}

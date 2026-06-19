@@ -3,7 +3,21 @@
  * Handles Razorpay payment initialization and verification
  */
 
+import { APP_CONFIG } from "@/config/constants";
+import { getCachedSettings } from "@food/utils/businessSettings";
+
 let razorpayLoaded = false;
+
+const getRazorpayBranding = () => {
+  const cachedSettings = getCachedSettings();
+  const storedUserLogo = typeof window !== 'undefined' ? window.localStorage.getItem('user_app_logo') : '';
+  const storedLogo = typeof window !== 'undefined' ? window.localStorage.getItem('app_logo') : '';
+
+  return {
+    name: cachedSettings?.companyName || APP_CONFIG.NAME || 'ZiggyBites',
+    image: cachedSettings?.logo?.url || storedUserLogo || storedLogo || '/logo.png'
+  };
+};
 
 /**
  * Load Razorpay checkout script
@@ -61,14 +75,16 @@ export const initRazorpayPayment = async (options) => {
       throw new Error('Razorpay SDK not available');
     }
 
+    const brand = getRazorpayBranding();
+
     const razorpayOptions = {
       key: options.key,
       amount: options.amount,
       currency: options.currency || 'INR',
       order_id: options.order_id,
-      name: options.name || 'Appzeto Food',
+      name: options.name || brand.name,
       description: options.description || 'Order Payment',
-      image: options.image || '/logo.png',
+      image: options.image || brand.image,
       prefill: {
         name: options.prefill?.name || '',
         email: options.prefill?.email || '',

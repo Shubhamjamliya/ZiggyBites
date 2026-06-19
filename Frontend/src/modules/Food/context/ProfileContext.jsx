@@ -6,7 +6,7 @@ const debugError = (...args) => {}
 
 
 const ProfileContext = createContext(null)
-const USER_SESSION_PREFERENCE_KEYS = ["userVegMode", "userHomeFoodPreference", "food-under-250-filters"]
+const USER_SESSION_PREFERENCE_KEYS = ["userVegMode", "userVegModeOption", "food-under-250-filters"]
 
 export function ProfileProvider({ children }) {
   const getAddressId = (address) => address?.id || address?._id || null
@@ -83,6 +83,11 @@ export function ProfileProvider({ children }) {
     return saved !== null ? saved === "true" : false
   })
 
+  const [vegModeOption, setVegModeOption] = useState(() => {
+    const saved = localStorage.getItem("userVegModeOption")
+    return saved !== null ? saved : "all"
+  })
+
   // Helper to check if authenticated
   const isAuthenticated = useMemo(() => {
     return localStorage.getItem("user_authenticated") === "true" || !!localStorage.getItem("user_accessToken")
@@ -122,8 +127,9 @@ export function ProfileProvider({ children }) {
   useEffect(() => {
     if (isAuthenticated) {
       localStorage.setItem("userVegMode", vegMode.toString())
+      localStorage.setItem("userVegModeOption", vegModeOption)
     }
-  }, [vegMode, isAuthenticated])
+  }, [vegMode, vegModeOption, isAuthenticated])
 
   // Fetch user profile and addresses from API on mount and when authentication changes
   useEffect(() => {
@@ -139,6 +145,7 @@ export function ProfileProvider({ children }) {
         setFavorites([])
         setDishFavorites([])
         setVegMode(false)
+        setVegModeOption("all")
         USER_SESSION_PREFERENCE_KEYS.forEach((key) => {
           localStorage.removeItem(key)
         })
@@ -484,6 +491,8 @@ export function ProfileProvider({ children }) {
       favorites,
       vegMode,
       setVegMode,
+      vegModeOption,
+      setVegModeOption,
       addAddress,
       updateAddress,
       deleteAddress,
@@ -517,6 +526,8 @@ export function ProfileProvider({ children }) {
       dishFavorites,
       vegMode,
       setVegMode,
+      vegModeOption,
+      setVegModeOption,
       addAddress,
       updateAddress,
       deleteAddress,
@@ -580,6 +591,8 @@ export function useProfile() {
       getDishFavorites: () => [],
       vegMode: false,
       setVegMode: () => debugWarn("ProfileProvider not available"),
+      vegModeOption: "all",
+      setVegModeOption: () => debugWarn("ProfileProvider not available"),
       isAuthenticated: false
     }
   }

@@ -1,6 +1,19 @@
 import { X } from "lucide-react"
 
-export default function FilterPanel({ isOpen, onClose, filters, setFilters, onApply, onReset, restaurants = [] }) {
+export default function FilterPanel({ 
+  isOpen, 
+  onClose, 
+  filters, 
+  setFilters, 
+  onApply, 
+  onReset, 
+  restaurants = [], 
+  orderStatuses = [],
+  showPaymentStatus = true,
+  showDeliveryType = true,
+  showAmountRange = true,
+  showDateRange = true
+}) {
   if (!isOpen) return null
 
   return (
@@ -20,103 +33,134 @@ export default function FilterPanel({ isOpen, onClose, filters, setFilters, onAp
         </div>
         
         <div className="p-6 space-y-6">
-          {/* Payment Status Filter */}
-          <div>
-            <label className="block text-sm font-semibold text-slate-700 mb-2">
-              Payment Status
-            </label>
-            <div className="flex flex-wrap gap-2">
-              {["All", "paid", "pending", "failed", "refunded"].map((status) => (
-                <button
-                  key={status}
-                  onClick={() => setFilters(prev => ({ ...prev, paymentStatus: status === "All" ? "" : status }))}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                    filters.paymentStatus === status || (status === "All" && !filters.paymentStatus)
-                      ? "bg-emerald-500 text-white shadow-md"
-                      : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-                  }`}
-                >
-                  {status.charAt(0).toUpperCase() + status.slice(1)}
-                </button>
-              ))}
+          {/* Order Status Filter - Conditional */}
+          {orderStatuses.length > 0 && (
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-2">
+                Order Status
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {["All", ...orderStatuses].map((status) => (
+                  <button
+                    key={status}
+                    onClick={() => setFilters(prev => ({ ...prev, status: status === "All" ? "" : status }))}
+                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                      filters.status === status || (status === "All" && !filters.status)
+                        ? "bg-emerald-500 text-white shadow-md"
+                        : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                    }`}
+                  >
+                    {status}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
+          {/* Payment Status Filter */}
+          {showPaymentStatus && (
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-2">
+                Payment Status
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {["All", "paid", "pending", "failed", "refunded"].map((status) => (
+                  <button
+                    key={status}
+                    onClick={() => setFilters(prev => ({ ...prev, paymentStatus: status === "All" ? "" : status }))}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                      filters.paymentStatus === status || (status === "All" && !filters.paymentStatus)
+                        ? "bg-emerald-500 text-white shadow-md"
+                        : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                    }`}
+                  >
+                    {status.charAt(0).toUpperCase() + status.slice(1)}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Delivery Type Filter */}
-          <div>
-            <label className="block text-sm font-semibold text-slate-700 mb-2">
-              Delivery Type
-            </label>
-            <div className="flex flex-wrap gap-2">
-              {["All", "home_delivery", "take_away", "dine_in"].map((type) => (
-                <button
-                  key={type}
-                  onClick={() => setFilters(prev => ({ ...prev, deliveryType: type === "All" ? "" : type }))}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                    filters.deliveryType === type || (type === "All" && !filters.deliveryType)
-                      ? "bg-emerald-500 text-white shadow-md"
-                      : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-                  }`}
-                >
-                  {type.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
-                </button>
-              ))}
+          {showDeliveryType && (
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-2">
+                Delivery Type
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {["All", "home_delivery", "take_away", "dine_in"].map((type) => (
+                  <button
+                    key={type}
+                    onClick={() => setFilters(prev => ({ ...prev, deliveryType: type === "All" ? "" : type }))}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                      filters.deliveryType === type || (type === "All" && !filters.deliveryType)
+                        ? "bg-emerald-500 text-white shadow-md"
+                        : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                    }`}
+                  >
+                    {type.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Amount Range */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-2">
-                Min Amount ($)
-              </label>
-              <input
-                type="number"
-                value={filters.minAmount || ""}
-                onChange={(e) => setFilters(prev => ({ ...prev, minAmount: e.target.value }))}
-                placeholder="0"
-                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              />
+          {showAmountRange && (
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                  Min Amount ($)
+                </label>
+                <input
+                  type="number"
+                  value={filters.minAmount || ""}
+                  onChange={(e) => setFilters(prev => ({ ...prev, minAmount: e.target.value }))}
+                  placeholder="0"
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                  Max Amount ($)
+                </label>
+                <input
+                  type="number"
+                  value={filters.maxAmount || ""}
+                  onChange={(e) => setFilters(prev => ({ ...prev, maxAmount: e.target.value }))}
+                  placeholder="10000"
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
             </div>
-            <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-2">
-                Max Amount ($)
-              </label>
-              <input
-                type="number"
-                value={filters.maxAmount || ""}
-                onChange={(e) => setFilters(prev => ({ ...prev, maxAmount: e.target.value }))}
-                placeholder="10000"
-                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              />
-            </div>
-          </div>
+          )}
 
           {/* Date Range */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-2">
-                From Date
-              </label>
-              <input
-                type="date"
-                value={filters.fromDate || ""}
-                onChange={(e) => setFilters(prev => ({ ...prev, fromDate: e.target.value }))}
-                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              />
+          {showDateRange && (
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                  From Date
+                </label>
+                <input
+                  type="date"
+                  value={filters.fromDate || ""}
+                  onChange={(e) => setFilters(prev => ({ ...prev, fromDate: e.target.value }))}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                  To Date
+                </label>
+                <input
+                  type="date"
+                  value={filters.toDate || ""}
+                  onChange={(e) => setFilters(prev => ({ ...prev, toDate: e.target.value }))}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
             </div>
-            <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-2">
-                To Date
-              </label>
-              <input
-                type="date"
-                value={filters.toDate || ""}
-                onChange={(e) => setFilters(prev => ({ ...prev, toDate: e.target.value }))}
-                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              />
-            </div>
-          </div>
+          )}
 
           {/* Restaurant Filter */}
           {restaurants.length > 0 && (

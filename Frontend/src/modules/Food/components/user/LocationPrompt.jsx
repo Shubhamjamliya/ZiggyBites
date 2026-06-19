@@ -5,7 +5,6 @@ import { Card, CardHeader, CardTitle, CardContent } from "@food/components/ui/ca
 import { Button } from "@food/components/ui/button"
 import { Input } from "@food/components/ui/input"
 import { useLocation } from "@food/hooks/useLocation"
-import { publicGetOnce } from "@food/api"
 import { toast } from "sonner"
 
 export default function LocationPrompt() {
@@ -22,8 +21,6 @@ export default function LocationPrompt() {
     routerLocation.pathname.includes("/cancellation")
 
   const [showPrompt, setShowPrompt] = useState(false)
-  const [locationPromptEnabled, setLocationPromptEnabled] = useState(true)
-  const [settingsChecked, setSettingsChecked] = useState(false)
   const [view, setView] = useState("prompt") // "prompt" | "manual"
   const [searchValue, setSearchValue] = useState("")
   const [suggestions, setSuggestions] = useState([])
@@ -31,49 +28,37 @@ export default function LocationPrompt() {
   const [selectedLocation, setSelectedLocation] = useState(null)
 
   useEffect(() => {
-    let mounted = true
-
-    publicGetOnce('/food/landing/settings/public')
-      .then((response) => {
-        if (!mounted) return
-        const settings = response?.data?.data || {}
-        setLocationPromptEnabled(settings.showLocationPrompt !== false)
-      })
-      .catch(() => {
-        if (!mounted) return
-        setLocationPromptEnabled(true)
-      })
-      .finally(() => {
-        if (mounted) setSettingsChecked(true)
-      })
-
-    return () => {
-      mounted = false
-    }
-  }, [])
-
-  useEffect(() => {
-    if (!settingsChecked || !locationPromptEnabled) return
-
     // Check if location permission was already granted
     const storedLocation = localStorage.getItem("userLocation")
     const promptDismissed = localStorage.getItem("locationPromptDismissed")
 
     if (!storedLocation && !promptDismissed && !isLegalPage) {
+      const attemptAutoLocation = async () => {
+        try {
+          const loc = await requestLocation(true, true)
+          if (loc?.latitude) {
+            localStorage.setItem("locationPromptDismissed", "true")
+          } else {
+            if (!permissionGranted) setShowPrompt(true)
+          }
+        } catch (e) {
+          if (!permissionGranted) setShowPrompt(true)
+        }
+      }
+
       const timer = setTimeout(() => {
         const currentLocation = localStorage.getItem("userLocation")
         if (!currentLocation && !permissionGranted) {
-          setShowPrompt(true)
-          document.body.style.overflow = "hidden"
+          attemptAutoLocation()
         }
-      }, 2000)
+      }, 500)
 
       return () => {
         clearTimeout(timer)
         document.body.style.overflow = ""
       }
     }
-  }, [permissionGranted, isLegalPage, locationPromptEnabled, settingsChecked])
+  }, [permissionGranted, isLegalPage, requestLocation])
 
   // Search logic for manual entry
   useEffect(() => {
@@ -162,6 +147,7 @@ export default function LocationPrompt() {
     }
 
     localStorage.setItem("userLocation", JSON.stringify(locData))
+    try { localStorage.setItem("deliveryAddressMode", "saved") } catch {}
     localStorage.setItem("locationPromptDismissed", "true")
     setShowPrompt(false)
     document.body.style.overflow = ""
@@ -175,7 +161,7 @@ export default function LocationPrompt() {
     }
   }, [])
 
-  if (isLegalPage || !locationPromptEnabled || !showPrompt) return null
+  if (isLegalPage || !showPrompt) return null
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[100] flex items-center justify-center p-4">

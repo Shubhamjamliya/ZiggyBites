@@ -1,80 +1,27 @@
 /**
  * Central API client for backend (auth and future APIs).
  * - baseURL from VITE_API_BASE_URL (e.g. http://localhost:5000/api/v1)
- * - When baseURL ends with /api/v1, request paths must NOT include /v1 (use /food/..., /auth/...)
- * - Attaches Bearer token (user or admin based on request URL)
- * - On 401: attempts refresh, retries once; on refresh failure logs out
+ * - Implements industry-standard specialized clients for User, Restaurant, Delivery, and Admin.
  */
 
 import axios from "axios";
 
 // Prefer explicit env. If not set, default to /api/v1 so the Vite proxy can forward to backend.
-// This avoids hardcoding ports like 5000 that may conflict with local setups.
 const baseURL =
   typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE_URL
     ? String(import.meta.env.VITE_API_BASE_URL).replace(/\/$/, "")
     : "/api/v1";
 
-const apiClient = axios.create({
-  baseURL: baseURL || undefined,
-  timeout: 30000,
-  headers: { "Content-Type": "application/json" },
-});
+/** 
+ * Common Helpers 
+ */
 
-function getModuleFromUrl(url = "") {
-  const u = typeof url === "string" ? url : (url?.url || "");
-  if (!u) return "user";
-  
-  const normalized = u.toLowerCase();
-  
-  // Admin detection
-  if (
-    normalized.includes("/admin/") || 
-    normalized.includes("/food/admin/") || 
-    normalized.includes("/food/auth/admin") || 
-    normalized.includes("/auth/admin") || 
-    normalized.includes("admin/login")
-  ) return "admin";
-  
-  // Delivery detection - Catch all delivery-specific functional and auth routes
-  if (
-    normalized.includes("/food/delivery") || 
-    normalized.includes("/auth/delivery") || 
-    normalized.includes("/delivery/")
-  ) return "delivery";
-  
-  // Restaurant detection - Catch all restaurant-specific functional and auth routes
-  if (
-    normalized.includes("/food/restaurant/") || 
-    normalized.includes("/auth/restaurant") || 
-    normalized.includes("/restaurant/")
-  ) {
-    // Exception: /food/restaurants (plural) is usually a public user app route
-    if (normalized.includes("/food/restaurants") && !normalized.includes("/food/restaurant/")) {
-       return "user";
-    }
-    return "restaurant";
-  }
-  
-  return "user";
-}
-
-function getModuleFromConfig(config) {
-  if (config?.contextModule) return config.contextModule;
-  return getModuleFromUrl(config?.url);
-}
-
-function getAccessToken(config) {
-  const module = getModuleFromConfig(config);
-  const key = `${module}_accessToken`;
+function getAccessToken(module) {
   try {
-    // 1. Try module-specific token first
+    const key = `${module}_accessToken`;
     const moduleToken = localStorage.getItem(key);
     if (moduleToken) return moduleToken;
 
-    // 2. Fallback to legacy generic token only for user module.
-    // Using generic token for delivery/restaurant can send wrong role token
-    // and trigger 403 on protected role-based endpoints.
     if (module === "user") {
       return localStorage.getItem("accessToken") || null;
     }
@@ -86,11 +33,9 @@ function getAccessToken(config) {
 
 function getRefreshToken(module) {
   try {
-    // 1. Try module-specific refresh token
     const moduleRefreshToken = localStorage.getItem(`${module}_refreshToken`);
     if (moduleRefreshToken) return moduleRefreshToken;
 
-    // 2. Fallback to legacy generic refresh token only for user module.
     if (module === "user") {
       return localStorage.getItem("refreshToken") || null;
     }
@@ -109,110 +54,204 @@ function clearModuleAuth(module) {
   } catch (_) {}
 }
 
-let isRefreshing = false;
-let refreshSubscribers = [];
+/**
+ * Factory to create role-specific API clients.
+ * Benefit: Isolation of tokens, refresh logic, and error handling.
+ */
+function createModuleClient(moduleName) {
+  const client = axios.create({
+    baseURL: baseURL || undefined,
+    timeout: 30000,
+    headers: { "Content-Type": "application/json" },
+  });
 
-function subscribeToRefresh(cb) {
-  refreshSubscribers.push(cb);
+  let isRefreshing = false;
+  let subscribers = [];
+
+  const subscribeToRefresh = (cb) => subscribers.push(cb);
+  const onRefreshed = (newToken) => {
+    subscribers.forEach((cb) => cb(newToken));
+    subscribers = [];
+  };
+
+  const onRefreshFailed = () => {
+    clearModuleAuth(moduleName);
+    subscribers.forEach((cb) => cb(null));
+    subscribers = [];
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("authRefreshFailed", { detail: { module: moduleName } }));
+    }
+  };
+
+  // Request Interceptor
+  client.interceptors.request.use(
+    (config) => {
+      config.contextModule = moduleName;
+      
+      // FormData handling
+      if (config.data instanceof FormData) {
+        if (config.headers && config.headers["Content-Type"]) {
+          delete config.headers["Content-Type"];
+        }
+      }
+
+      const token = getAccessToken(moduleName);
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+
+      // Automatically inject Zone ID and Coordinates for user/public endpoints
+      if (moduleName === "user" || moduleName === "public") {
+        const zoneId = localStorage.getItem("userZoneId");
+        const lat = localStorage.getItem("userLat");
+        const lng = localStorage.getItem("userLng");
+        if (zoneId) {
+          config.headers["X-Zone-Id"] = zoneId;
+        }
+        if (lat && lng) {
+          config.headers["X-User-Lat"] = lat;
+          config.headers["X-User-Lng"] = lng;
+        }
+      }
+
+      return config;
+    },
+    (err) => Promise.reject(err)
+  );
+
+  // Response Interceptor
+  client.interceptors.response.use(
+    (response) => response,
+    async (err) => {
+      const original = err?.config;
+      
+      if (err?.response?.status === 429) return Promise.reject(err);
+      
+      // 403 handling (Forbidden vs Unauthorized)
+      if (err?.response?.status === 403) {
+        // Token is valid but wrong role. Don't logout, just deny access.
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("accessDenied", { detail: { module: moduleName } }));
+        }
+        return Promise.reject(err);
+      }
+
+      // 401 handling (Unauthorized / Expired)
+      if (err?.response?.status !== 401 || !original || original._retry) {
+        return Promise.reject(err);
+      }
+
+      const refreshToken = getRefreshToken(moduleName);
+      if (!refreshToken) {
+        onRefreshFailed();
+        return Promise.reject(err);
+      }
+
+      if (isRefreshing) {
+        return new Promise((resolve, reject) => {
+          subscribeToRefresh((newToken) => {
+            if (newToken) {
+              original.headers.Authorization = `Bearer ${newToken}`;
+              resolve(client(original));
+            } else {
+              reject(err);
+            }
+          });
+        });
+      }
+
+      original._retry = true;
+      isRefreshing = true;
+
+      try {
+        const refreshUrl = baseURL ? `${baseURL}/food/auth/refresh-token` : "/api/v1/food/auth/refresh-token";
+        const { data } = await axios.post(refreshUrl, { refreshToken }, { timeout: 10000 });
+        const newAccessToken = data?.data?.accessToken || data?.accessToken;
+
+        if (newAccessToken) {
+          localStorage.setItem(`${moduleName}_accessToken`, newAccessToken);
+          window.dispatchEvent(new CustomEvent("authRefreshed", { 
+            detail: { module: moduleName, token: newAccessToken } 
+          }));
+          onRefreshed(newAccessToken);
+          original.headers.Authorization = `Bearer ${newAccessToken}`;
+          return client(original);
+        }
+      } catch (_) {
+        onRefreshFailed();
+        return Promise.reject(err);
+      } finally {
+        isRefreshing = false;
+      }
+
+      onRefreshFailed();
+      return Promise.reject(err);
+    }
+  );
+
+  return client;
 }
 
-function onRefreshed(newToken, module) {
-  refreshSubscribers.forEach((cb) => cb(newToken, module));
-  refreshSubscribers = [];
-}
+/**
+ * Specialized Clients
+ * Export these for use in index.js to ensure strict role isolation.
+ */
+export const userClient = createModuleClient("user");
+export const restaurantClient = createModuleClient("restaurant");
+export const deliveryClient = createModuleClient("delivery");
+export const adminClient = createModuleClient("admin");
 
-function onRefreshFailed(module) {
-  clearModuleAuth(module);
-  // Fail any queued requests that were waiting for this refresh
-  refreshSubscribers.forEach((cb) => cb(null, module));
-  refreshSubscribers = [];
-  
-  if (typeof window !== "undefined") {
-    window.dispatchEvent(new CustomEvent("authRefreshFailed", { detail: { module } }));
-  }
+/**
+ * Legacy Smart Client
+ * Maintained for backward compatibility and shared services.
+ */
+const apiClient = axios.create({
+  baseURL: baseURL || undefined,
+  timeout: 30000,
+  headers: { "Content-Type": "application/json" },
+});
+
+// Reuse the existing smart detection for the legacy client
+function getModuleFromUrl(url = "") {
+  const u = typeof url === "string" ? url : (url?.url || "");
+  if (!u) return "user";
+  const normalized = u.toLowerCase();
+  if (normalized.includes("/admin/") || normalized.includes("/food/admin/")) return "admin";
+  if (normalized.includes("/food/delivery") || normalized.includes("/delivery/")) return "delivery";
+  if (normalized.includes("/food/restaurant/") || normalized.includes("/restaurant/")) return "restaurant";
+  return "user";
 }
 
 apiClient.interceptors.request.use(
   (config) => {
-    config.contextModule = getModuleFromConfig(config);
-
-    // If sending FormData, let the browser set proper multipart boundary.
+    // FormData handling
     if (config.data instanceof FormData) {
       if (config.headers && config.headers["Content-Type"]) {
         delete config.headers["Content-Type"];
       }
     }
 
-    const token = getAccessToken(config);
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+    const module = config.contextModule || getModuleFromUrl(config.url);
+    const token = getAccessToken(module);
+    if (token) config.headers.Authorization = `Bearer ${token}`;
+
+    // Automatically inject Zone ID and Coordinates for user/public endpoints
+    if (module === "user" || module === "public" || module === "delivery") {
+      const zoneId = localStorage.getItem("userZoneId");
+      const lat = localStorage.getItem("userLat");
+      const lng = localStorage.getItem("userLng");
+      if (zoneId) {
+        config.headers["X-Zone-Id"] = zoneId;
+      }
+      if (lat && lng) {
+        config.headers["X-User-Lat"] = lat;
+        config.headers["X-User-Lng"] = lng;
+      }
     }
+
     return config;
   },
   (err) => Promise.reject(err)
-);
-
-apiClient.interceptors.response.use(
-  (response) => response,
-  async (err) => {
-    const original = err?.config;
-    if (err?.response?.status === 429) {
-      return Promise.reject(err);
-    }
-    if (err?.response?.status !== 401 || !original || original._retry) {
-      return Promise.reject(err);
-    }
-    const module = original.contextModule || getModuleFromUrl(original.url);
-    const refreshToken = getRefreshToken(module);
-    if (!refreshToken) {
-      clearModuleAuth(module);
-      return Promise.reject(err);
-    }
-
-    if (isRefreshing) {
-      return new Promise((resolve, reject) => {
-        subscribeToRefresh((newToken) => {
-          if (newToken) {
-            original.headers.Authorization = `Bearer ${newToken}`;
-            resolve(apiClient(original));
-          } else {
-            reject(err);
-          }
-        });
-      });
-    }
-
-    original._retry = true;
-    isRefreshing = true;
-
-    try {
-      // Use relative URL so this works both with an explicit baseURL and with a dev proxy.
-      // Use plain axios to avoid interceptor recursion.
-      const refreshUrl = baseURL ? `${baseURL}/food/auth/refresh-token` : "/api/v1/food/auth/refresh-token";
-      const { data } = await axios.post(refreshUrl, { refreshToken }, { timeout: 10000 });
-      const newAccessToken = data?.data?.accessToken || data?.accessToken;
-      if (newAccessToken) {
-        try {
-          localStorage.setItem(`${module}_accessToken`, newAccessToken);
-          // Dispatch a custom event specifically for the module that refreshed
-          window.dispatchEvent(new CustomEvent("authRefreshed", { 
-            detail: { module, token: newAccessToken } 
-          }));
-        } catch (_) {}
-        onRefreshed(newAccessToken, module);
-        original.headers.Authorization = `Bearer ${newAccessToken}`;
-        return apiClient(original);
-      }
-    } catch (_) {
-      onRefreshFailed(module);
-      return Promise.reject(err);
-    } finally {
-      isRefreshing = false;
-    }
-
-    onRefreshFailed(module);
-    return Promise.reject(err);
-  }
 );
 
 export default apiClient;

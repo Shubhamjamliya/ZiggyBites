@@ -3,7 +3,7 @@
  * Food-prefixed: POST /food/auth/...
  */
 
-import apiClient from "./axios.js";
+import apiClient, { userClient, restaurantClient, deliveryClient, adminClient } from "./axios.js";
 import { EMAIL_REGEX } from "@/shared/utils/emailValidation";
 
 const AUTH = {
@@ -53,7 +53,7 @@ export function requestUserOtp(phone) {
   if (normalized.length !== USER_PHONE_LENGTH) {
     return Promise.reject(new Error("Phone number must be exactly 10 digits"));
   }
-  return apiClient.post(AUTH.USER_REQUEST_OTP, { phone: normalized });
+  return userClient.post(AUTH.USER_REQUEST_OTP, { phone: normalized });
 }
 
 /**
@@ -121,7 +121,7 @@ export function adminLogin(email, password) {
   if (passwordStr.length < 6) {
     return Promise.reject(new Error("Password must be at least 6 characters"));
   }
-  return apiClient.post(AUTH.ADMIN_LOGIN, {
+  return adminClient.post(AUTH.ADMIN_LOGIN, {
     email: trimmedEmail,
     password: passwordStr,
   });
@@ -217,8 +217,16 @@ function getMeOnce(module) {
   const existing = meInFlight.get(module);
   if (existing) return existing;
 
-  const p = apiClient
-    .get(AUTH.ME, { contextModule: module })
+  const clients = {
+    user: userClient,
+    restaurant: restaurantClient,
+    delivery: deliveryClient,
+    admin: adminClient,
+  };
+  const client = clients[module] || apiClient;
+
+  const p = client
+    .get(AUTH.ME)
     .then((res) => {
       meCache.set(module, { at: Date.now(), res });
       return res;
@@ -245,16 +253,16 @@ export function requestRestaurantOtp(phone) {
   if (normalized.length < 8) {
     return Promise.reject(new Error("Phone must be at least 8 digits"));
   }
-  return apiClient.post(AUTH.RESTAURANT_REQUEST_OTP, { phone: normalized });
+  return restaurantClient.post(AUTH.RESTAURANT_REQUEST_OTP, { phone: normalized });
 }
 
 export function verifyRestaurantOtp(phone, otp, fcmToken = null, platform = "web") {
   const normalized = normalizePhone(phone);
-  const otpStr = String(otp).replace(/\D/g, "").slice(0, 6);
-  if (!normalized || otpStr.length < 4) {
+  const otpStr = String(otp).replace(/\D/g, "").slice(0, 4);
+  if (!normalized || otpStr.length !== 4) {
     return Promise.reject(new Error("Phone and 4-digit OTP are required"));
   }
-  return apiClient.post(AUTH.RESTAURANT_VERIFY_OTP, {
+  return restaurantClient.post(AUTH.RESTAURANT_VERIFY_OTP, {
     phone: normalized,
     otp: otpStr,
     ...(fcmToken ? { fcmToken, platform } : {}),
@@ -269,16 +277,16 @@ export function requestDeliveryOtp(phone) {
   if (normalized.length < 8) {
     return Promise.reject(new Error("Phone must be at least 8 digits"));
   }
-  return apiClient.post(AUTH.DELIVERY_REQUEST_OTP, { phone: normalized });
+  return deliveryClient.post(AUTH.DELIVERY_REQUEST_OTP, { phone: normalized });
 }
 
 export function verifyDeliveryOtp(phone, otp, fcmToken = null, platform = "web") {
   const normalized = normalizePhone(phone);
-  const otpStr = String(otp).replace(/\D/g, "").slice(0, 6);
-  if (!normalized || otpStr.length < 4) {
+  const otpStr = String(otp).replace(/\D/g, "").slice(0, 4);
+  if (!normalized || otpStr.length !== 4) {
     return Promise.reject(new Error("Phone and 4-digit OTP are required"));
   }
-  return apiClient.post(AUTH.DELIVERY_VERIFY_OTP, {
+  return deliveryClient.post(AUTH.DELIVERY_VERIFY_OTP, {
     phone: normalized,
     otp: otpStr,
     ...(fcmToken ? { fcmToken, platform } : {}),

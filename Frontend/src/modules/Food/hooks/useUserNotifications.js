@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useContext } from 'react';
 import io from 'socket.io-client';
 import { toast } from 'sonner';
 import { API_BASE_URL } from '@food/api/config';
 import { userAPI } from '@food/api';
 import { dispatchNotificationInboxRefresh } from '@food/hooks/useNotificationInbox';
+import { UserNotificationContext } from '../context/UserNotificationContext';
 
 const debugLog = (...args) => {
   if (import.meta.env.DEV) {
@@ -16,6 +17,8 @@ const debugLog = (...args) => {
  * Dispatches 'orderStatusNotification' custom event for OrderTrackingCard.
  */
 export const useUserNotifications = () => {
+  const context = useContext(UserNotificationContext);
+  if (context) return context;
   const socketRef = useRef(null);
   const [isConnected, setIsConnected] = useState(false);
   const [userId, setUserId] = useState(null);

@@ -155,19 +155,11 @@ export default function MySubscriptions() {
                       <div className="mt-4 space-y-2 text-sm text-gray-600 dark:text-gray-300">
                         <p className="flex items-center gap-2">
                           <CheckCircle2 className="h-4 w-4 text-green-500" />
-                          Meals:{" "}
-                          <span className="font-medium">
-                            {Array.isArray(subscription.meals) && subscription.meals.length > 0
-                              ? subscription.meals.join(", ")
-                              : "-"}
-                          </span>
+                          Meals: <span className="font-medium">{Array.isArray(subscription.meals) && subscription.meals.length > 0 ? subscription.meals.join(", ") : "-"}</span>
                         </p>
                         <p className="flex items-center gap-2">
                           <Clock3 className="h-4 w-4 text-[#55254b]" />
-                          Active:{" "}
-                          <span className="font-medium">
-                            {formatDate(subscription.startDate)} to {formatDate(subscription.endDate)}
-                          </span>
+                          Active: <span className="font-medium">{formatDate(subscription.startDate)} to {formatDate(subscription.endDate)}</span>
                         </p>
                       </div>
 

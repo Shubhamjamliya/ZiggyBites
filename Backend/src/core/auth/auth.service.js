@@ -68,6 +68,7 @@ const sanitizeRestaurantForAuthResponse = (restaurantDoc = {}) => {
     email: restaurantDoc?.ownerEmail || "",
     status: restaurantDoc?.status || "",
     profileImage: toSafeImageUrl(restaurantDoc?.profileImage),
+    createdAt: restaurantDoc?.createdAt,
   };
 };
 
@@ -89,6 +90,7 @@ const sanitizeDeliveryForAuthResponse = (deliveryDoc = {}) => {
     profileImage: toSafeImageUrl(deliveryDoc?.profilePhoto),
     walletAmount: Number(deliveryDoc?.walletAmount || 0),
     refCode: deliveryDoc?.referralCode || "",
+    createdAt: deliveryDoc?.createdAt,
   };
 };
 
@@ -123,7 +125,6 @@ export const verifyUserOtpAndLogin = async (
   const result = await verifyOtp(phone, otp);
 
   if (!result.valid) {
-    logger.warn(`Auth Failure: OTP verification failed for user (phone: ${phone})`, { reason: result.reason });
     throw new AuthError(result.reason || "OTP verification failed");
   }
 
@@ -238,6 +239,12 @@ export const verifyUserOtpAndLogin = async (
                   refereeId: String(userDoc._id),
                   referralLogId: String(log._id),
                 }),
+                creditReferralReward(userDoc._id, reward, {
+                  role: "USER",
+                  referrerId: String(referrerId),
+                  referralLogId: String(log._id),
+                  note: "Signup via referral bonus",
+                }),
               ]);
             } else {
               await FoodReferralLog.create({
@@ -278,8 +285,6 @@ export const verifyUserOtpAndLogin = async (
     expiresAt,
   });
 
-  logger.info(`User login success: ${user._id}`, { role: payload.role, isNewUser });
-
   return {
     token: accessToken,
     accessToken,
@@ -296,13 +301,11 @@ export const adminLogin = async (email, password) => {
 
   const admin = await FoodAdmin.findOne({ email });
   if (!admin) {
-    logger.warn(`Auth Failure: Admin login attempt with non-existent email`, { email });
     throw new AuthError("Invalid credentials");
   }
 
   const isMatch = await admin.comparePassword(password);
   if (!isMatch) {
-    logger.warn(`Auth Failure: Admin login attempt with incorrect password`, { email, adminId: admin._id });
     throw new AuthError("Invalid credentials");
   }
 
@@ -322,9 +325,6 @@ export const adminLogin = async (email, password) => {
 
   const userObj = admin.toObject();
   delete userObj.password;
-  
-  logger.info(`Admin login success: ${admin._id}`, { role: admin.role });
-  
   return { accessToken, refreshToken, user: userObj };
 };
 
@@ -342,7 +342,6 @@ export const requestRestaurantOtp = async (phone) => {
 export const verifyRestaurantOtpAndLogin = async (phone, otp, fcmToken, platform) => {
   const result = await verifyOtp(phone, otp);
   if (!result.valid) {
-    logger.warn(`Auth Failure: OTP verification failed for restaurant (phone: ${phone})`, { reason: result.reason });
     throw new AuthError(result.reason || "OTP verification failed");
   }
 
@@ -394,7 +393,9 @@ export const verifyRestaurantOtpAndLogin = async (phone, otp, fcmToken, platform
   }
 
   // If restaurant approval status is used, handle pending/rejected states by returning info instead of throwing errors.
-    if (restaurantDoc.status && restaurantDoc.status !== "approved") {
+  // Legacy restaurants created before this feature was rolled out (May 26, 2026) bypass this block.
+  const isLegacyRestaurant = restaurantDoc.createdAt && new Date(restaurantDoc.createdAt) < new Date("2026-05-26T00:00:00Z");
+  if (restaurantDoc.status && restaurantDoc.status !== "approved" && !isLegacyRestaurant) {
     return {
       pendingApproval: true,
       status: restaurantDoc.status,
@@ -415,8 +416,6 @@ export const verifyRestaurantOtpAndLogin = async (phone, otp, fcmToken, platform
     token: refreshToken,
     expiresAt,
   });
-
-  logger.info(`Restaurant login success: ${restaurantDoc._id}`);
 
   return {
     token: accessToken,
@@ -446,7 +445,6 @@ const normalizePhoneForDelivery = (phone) => {
 export const verifyDeliveryOtpAndLogin = async (phone, otp, fcmToken, platform) => {
   const result = await verifyOtp(phone, otp);
   if (!result.valid) {
-    logger.warn(`Auth Failure: OTP verification failed for delivery partner (phone: ${phone})`, { reason: result.reason });
     throw new AuthError(result.reason || "OTP verification failed");
   }
 
@@ -488,7 +486,9 @@ export const verifyDeliveryOtpAndLogin = async (phone, otp, fcmToken, platform) 
     }
   }
 
-  if (deliveryPartner.status && deliveryPartner.status !== "approved") {
+  // Bypass for legacy delivery partners created before this feature was rolled out.
+  const isLegacyDelivery = deliveryPartner.createdAt && new Date(deliveryPartner.createdAt) < new Date("2026-05-26T00:00:00Z");
+  if (deliveryPartner.status && deliveryPartner.status !== "approved" && !isLegacyDelivery) {
     const isRejected = deliveryPartner.status === "rejected";
     return {
       pendingApproval: true,
@@ -518,8 +518,6 @@ export const verifyDeliveryOtpAndLogin = async (phone, otp, fcmToken, platform) 
     expiresAt,
   });
 
-  logger.info(`Delivery partner login success: ${deliveryPartner._id}`);
-
   return {
     token: accessToken,
     accessToken,
@@ -542,15 +540,14 @@ export const logout = async (refreshToken, fcmToken, platform) => {
     
     // We try to remove the token from all 4 possible models regardless of the user ID, 
     // ensuring no stale connections are left across any role or app the user was logged into.
-    const field = platform === "mobile" ? "fcmTokenMobile" : "fcmTokens";
     const models = [FoodUser, FoodRestaurant, FoodDeliveryPartner, FoodAdmin];
     
     try {
       await Promise.all(
         models.map((model) =>
           model.updateMany(
-            { [field]: fcmToken },
-            { $pull: { [field]: fcmToken } },
+            { $or: [{ fcmTokens: fcmToken }, { fcmTokenMobile: fcmToken }] },
+            { $pull: { fcmTokens: fcmToken, fcmTokenMobile: fcmToken } },
           ),
         ),
       );

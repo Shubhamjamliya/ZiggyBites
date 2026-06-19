@@ -1,15 +1,13 @@
 import { useState, useEffect, useRef } from "react"
 import { useNavigate, Link, useSearchParams } from "react-router-dom"
-import { AlertCircle, Loader2, ShieldQuestion } from "lucide-react"
+import { AlertCircle, Loader2, ChefHat, Smartphone, MapPin, Gauge, Pizza, Leaf, Info } from "lucide-react"
 import AnimatedPage from "@food/components/user/AnimatedPage"
-import { Button } from "@food/components/ui/button"
-import { Input } from "@food/components/ui/input"
 import { authAPI } from "@food/api"
-import loginBanner from "@food/assets/loginbanner.png"
+import { motion } from "framer-motion"
+
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
-
 
 export default function SignIn() {
   const navigate = useNavigate()
@@ -17,7 +15,7 @@ export default function SignIn() {
 
   const [formData, setFormData] = useState({
     phone: "",
-    countryCode: "+91", // required; default +91 for India
+    countryCode: "+91",
   })
 
   const [error, setError] = useState("")
@@ -25,6 +23,11 @@ export default function SignIn() {
   const submittingRef = useRef(false)
 
   useEffect(() => {
+    const draft = sessionStorage.getItem("user_draft_phone")
+    if (draft) {
+      setFormData(prev => ({ ...prev, phone: draft }))
+    }
+
     const stored = sessionStorage.getItem("userAuthData")
     if (!stored) return
 
@@ -45,20 +48,16 @@ export default function SignIn() {
   const validatePhone = (phone) => {
     if (!phone.trim()) return "Phone number is required"
     const cleanPhone = phone.replace(/\D/g, "")
-    if (!/^\d{10}$/.test(cleanPhone)) return "Phone number must be exactly 10 digits"
+    if (!/^\d{10}$/.test(cleanPhone)) return "Please enter a valid 10-digit number"
     return ""
   }
 
   const handleChange = (e) => {
-    const { name } = e.target
     let { value } = e.target
-
-    if (name === "phone") {
-      value = value.replace(/\D/g, "").slice(0, 10)
-      setError(validatePhone(value))
-    }
-
-    setFormData((prev) => ({ ...prev, [name]: value }))
+    value = value.replace(/\D/g, "").slice(0, 10)
+    setError(validatePhone(value))
+    setFormData((prev) => ({ ...prev, phone: value }))
+    sessionStorage.setItem("user_draft_phone", value)
   }
 
   const handleSubmit = async (e) => {
@@ -75,7 +74,7 @@ export default function SignIn() {
       const countryCode = formData.countryCode?.trim() || "+91"
       const phoneDigits = String(formData.phone ?? "").replace(/\D/g, "").slice(0, 10)
       if (phoneDigits.length !== 10) {
-        setError("Phone number must be exactly 10 digits")
+        setError("Please enter a valid 10-digit number")
         setIsLoading(false)
         submittingRef.current = false
         return
@@ -108,103 +107,138 @@ export default function SignIn() {
     }
   }
 
+  // Floating animation variants
+  const floatingAnimation = (delay, duration = 4, yOffset = 15) => ({
+    y: [-yOffset, yOffset],
+    transition: {
+      duration,
+      repeat: Infinity,
+      repeatType: "reverse",
+      ease: "easeInOut",
+      delay,
+    },
+  })
+
   return (
-    <AnimatedPage className="min-h-screen bg-gray-50 dark:bg-[#0a0a0a] flex items-center justify-center p-4">
-      {/* Background decoration (desktop only) */}
-      <div className="fixed inset-0 z-0 hidden md:block opacity-40">
-        <img src={loginBanner} alt="" className="w-full h-full object-cover blur-sm" />
-        <div className="absolute inset-0 bg-white/60 dark:bg-black/80" />
-      </div>
+    <AnimatedPage className="min-h-screen bg-[#FFFBF5] dark:bg-[#121212] flex items-center justify-center relative overflow-hidden">
+      {/* Decorative Background Elements */}
+      <motion.div animate={floatingAnimation(0, 5, 20)} className="absolute top-16 right-8 md:right-32 text-orange-400 opacity-60 drop-shadow-md">
+        <Gauge className="w-12 h-12" />
+      </motion.div>
+      <motion.div animate={floatingAnimation(1, 4.5, 15)} className="absolute top-32 left-8 md:left-24 text-green-500 opacity-50 drop-shadow-md">
+        <Leaf className="w-10 h-10" />
+      </motion.div>
+      <motion.div animate={floatingAnimation(2, 6, 25)} className="absolute bottom-40 right-10 md:right-40 text-red-400 opacity-70 drop-shadow-md">
+        <MapPin className="w-14 h-14" />
+      </motion.div>
+      <motion.div animate={floatingAnimation(1.5, 5.5, 20)} className="absolute top-1/2 left-4 md:left-20 text-yellow-500 opacity-60 drop-shadow-md">
+        <Pizza className="w-12 h-12" />
+      </motion.div>
 
-      <div className="w-full max-w-[450px] bg-white dark:bg-[#1a1a1a] rounded-xl shadow-2xl relative z-10 overflow-hidden border border-gray-100 dark:border-gray-800">
-        <div className="absolute top-4 right-4 z-20">
-          <Link to="/user/auth/support">
-            <Button variant="ghost" size="sm" className="text-gray-500 hover:text-primary font-semibold flex items-center gap-2">
-              <ShieldQuestion className="w-4 h-4" />
-              Support
-            </Button>
-          </Link>
-        </div>
+      {/* Support Icon */}
+      <Link to="/user/auth/support" className="absolute top-4 right-4 z-20 bg-white/80 dark:bg-[#1a1a1a]/80 backdrop-blur-md px-3.5 py-1.5 rounded-full shadow-sm text-gray-700 dark:text-gray-300 hover:text-[#E53935] border border-gray-200/60 dark:border-gray-700/60 transition-all flex items-center gap-1.5 font-bold text-[11px] uppercase tracking-wider">
+        <Info className="w-4 h-4 text-[#E53935]" />
+        <span>Support</span>
+      </Link>
 
-        {/* Banner (Mobile Only) */}
-        <div className="md:hidden w-full h-[180px] relative">
-          <img src={loginBanner} alt="Food Banner" className="w-full h-full object-cover" />
-          <div className="absolute inset-0 bg-gradient-to-t from-white dark:from-[#1a1a1a] to-transparent" />
-        </div>
+      <div className="w-full max-w-md px-6 py-8 relative z-10 flex flex-col items-center">
+        {/* Central Logo */}
+        <motion.div 
+          initial={{ scale: 0.8, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ duration: 0.5, type: "spring", bounce: 0.4 }}
+          className="w-32 h-32 rounded-full bg-gradient-to-br from-[#E53935] to-[#D32F2F] flex flex-col items-center justify-center shadow-[0_15px_35px_rgba(229,57,53,0.35)] border-4 border-white dark:border-gray-800 mb-8"
+        >
+          <ChefHat className="w-12 h-12 text-white mb-1" />
+          <span className="text-white font-black tracking-wider text-sm">INDIAN BITE</span>
+        </motion.div>
 
-        <div className="p-6 sm:p-8 md:p-10 space-y-6 md:space-y-8">
-          <div className="text-center space-y-2 md:space-y-3">
-            <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white leading-tight">
-              Login or Signup
-            </h2>
-            <p className="text-sm sm:text-base text-gray-500 dark:text-gray-400">
-              Enter your phone number to continue
-            </p>
-          </div>
+        {/* Headings */}
+        <motion.div 
+          initial={{ y: 20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ duration: 0.5, delay: 0.2 }}
+          className="text-center w-full mb-10"
+        >
+          <h1 className="text-[2rem] sm:text-4xl font-bold text-[#4E342E] dark:text-white leading-[1.2] mb-3 drop-shadow-sm">
+            Delicious food<br />delivered fast <span className="inline-block hover:scale-110 transition-transform cursor-pointer">🍕</span>
+          </h1>
+          <p className="text-[#8D6E63] dark:text-gray-400 font-medium text-[15px]">
+            Login with your mobile number
+          </p>
+        </motion.div>
 
-          <form id="user-signin-form" onSubmit={handleSubmit} className="space-y-5">
-            <div className="space-y-2">
-              <div className="relative flex items-center">
-                <div className="flex items-center px-4 h-12 md:h-14 border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#2a2a2a] text-gray-900 dark:text-white rounded-lg border-r-0 rounded-r-none font-medium">
-                  <span>+91</span>
-                </div>
-                <Input
+        {/* Form */}
+        <motion.form 
+          initial={{ y: 20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ duration: 0.5, delay: 0.3 }}
+          id="user-signin-form" 
+          onSubmit={handleSubmit} 
+          className="w-full space-y-6"
+        >
+          <div className="space-y-2 relative">
+            <div className={`relative flex items-center bg-white/80 dark:bg-[#1a1a1a]/80 backdrop-blur-md rounded-full p-2 pl-4 pr-2 shadow-[0_8px_30px_rgba(0,0,0,0.04)] border ${error ? 'border-red-400' : 'border-white/60 dark:border-gray-700'} transition-all hover:shadow-[0_8px_30px_rgba(0,0,0,0.08)]`}>
+              {/* Country Code & Icon */}
+              <div className="flex items-center gap-2 pr-3 border-r border-gray-200 dark:border-gray-700">
+                <span className="text-xl leading-none">🇮🇳</span>
+                <span className="font-semibold text-gray-800 dark:text-gray-200">+91</span>
+              </div>
+              
+              {/* Phone Input */}
+              <div className="flex-1 flex items-center pl-3">
+                <Smartphone className="w-5 h-5 text-gray-400 mr-2 shrink-0" />
+                <input
                   id="phone"
                   name="phone"
                   type="tel"
                   inputMode="numeric"
                   pattern="[0-9]*"
                   maxLength={10}
-                  placeholder="Phone number"
+                  placeholder="Enter your 10-digit number"
                   value={formData.phone}
                   onChange={handleChange}
-                  className={`flex-1 h-12 md:h-14 text-lg bg-white dark:bg-[#1a1a1a] text-gray-900 dark:text-white border-gray-300 dark:border-gray-700 rounded-lg rounded-l-none focus-visible:ring-1 focus-visible:ring-primary focus-visible:border-primary ${error ? "border-red-500" : ""} transition-all`}
-                  aria-invalid={error ? "true" : "false"}
+                  className="w-full bg-transparent border-0 outline-none focus:border-transparent focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 text-gray-800 dark:text-white font-semibold text-base placeholder:text-gray-400 placeholder:font-medium"
+                  style={{ boxShadow: "none", border: "none", outline: "none" }}
+                  autoComplete="tel-national"
                 />
               </div>
-
-              {error && (
-                <div className="flex items-center gap-1.5 text-xs text-red-500 pl-1">
-                  <AlertCircle className="h-3.5 w-3.5" />
-                  <span>{error}</span>
-                </div>
-              )}
             </div>
 
-            <Button
-              type="submit"
-              form="user-signin-form"
-              className="w-full h-12 md:h-14 bg-primary hover:bg-[#55254b] text-white font-bold text-base md:text-lg rounded-lg transition-all hover:shadow-lg active:scale-[0.98]"
-              disabled={isLoading}
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 className="h-5 w-5 mr-2 animate-spin" />
-                  Sending OTP...
-                </>
-              ) : (
-                "Continue"
-              )}
-            </Button>
-          </form>
-
-          <div className="text-center text-xs md:text-sm text-gray-500 dark:text-gray-400 pt-2">
-            <p className="mb-2">By continuing, you agree to our</p>
-            <div className="flex justify-center gap-2 flex-wrap">
-              <Link to="/profile/terms" className="underline hover:text-gray-900 dark:hover:text-gray-100 transition-colors">
-                Terms of Service
-              </Link>
-              <span className="text-gray-300 dark:text-gray-700">•</span>
-              <Link to="/profile/privacy" className="underline hover:text-gray-900 dark:hover:text-gray-100 transition-colors">
-                Privacy Policy
-              </Link>
-              <span className="text-gray-300 dark:text-gray-700">•</span>
-              <Link to="/profile/refund" className="underline hover:text-gray-900 dark:hover:text-gray-100 transition-colors">
-                Content Policy
-              </Link>
-            </div>
+            {error && (
+              <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} className="flex items-center justify-center gap-1.5 text-sm text-red-500 font-medium absolute -bottom-6 w-full text-center">
+                <AlertCircle className="h-4 w-4" />
+                <span>{error}</span>
+              </motion.div>
+            )}
           </div>
-        </div>
+
+          <button
+            type="submit"
+            disabled={isLoading}
+            className="w-full h-[56px] mt-4 rounded-full bg-gradient-to-r from-[#FF5252] to-[#E53935] text-white font-bold text-lg shadow-[0_10px_25px_rgba(229,57,53,0.4)] hover:shadow-[0_15px_35px_rgba(229,57,53,0.5)] hover:-translate-y-0.5 transition-all active:scale-[0.98] flex items-center justify-center disabled:opacity-70 disabled:hover:translate-y-0 disabled:hover:shadow-[0_10px_25px_rgba(229,57,53,0.4)]"
+          >
+            {isLoading ? (
+              <Loader2 className="w-6 h-6 animate-spin" />
+            ) : (
+              "Send OTP"
+            )}
+          </button>
+        </motion.form>
+
+
+
+        {/* Footer */}
+        <motion.div 
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.5, delay: 0.5 }}
+          className="mt-8 text-center"
+        >
+          <p className="text-[13px] text-[#A1887F] dark:text-gray-500 font-medium">
+            By continuing, you agree to our <Link to="/profile/terms" className="text-[#6D4C41] dark:text-gray-400 underline decoration-gray-300 underline-offset-2 hover:text-[#3E2723] dark:hover:text-white transition-colors">Terms</Link> & <Link to="/profile/privacy" className="text-[#6D4C41] dark:text-gray-400 underline decoration-gray-300 underline-offset-2 hover:text-[#3E2723] dark:hover:text-white transition-colors">Privacy Policy</Link>
+          </p>
+        </motion.div>
       </div>
     </AnimatedPage>
   )

@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from "react"
 import { useSearchParams } from "react-router-dom"
-import { Search, Download, ChevronDown, Eye, FileDown, FileSpreadsheet, FileText, X, Mail, Phone, MapPin, Package, IndianRupee, Calendar as CalendarIcon, User, CheckCircle, XCircle } from "lucide-react"
+import { Search, Download, ChevronDown, Eye, FileDown, FileSpreadsheet, FileText, X, Mail, Phone, MapPin, Package, IndianRupee, Calendar as CalendarIcon, User, CheckCircle, XCircle, Wallet } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@food/components/ui/dropdown-menu"
 import { exportCustomersToCSV, exportCustomersToExcel, exportCustomersToPDF } from "@food/components/admin/customers/customersExportUtils"
 import { adminAPI } from "@food/api"
@@ -20,6 +20,13 @@ export default function Customers() {
   const [userDetails, setUserDetails] = useState(null)
   const [loadingDetails, setLoadingDetails] = useState(false)
   const [showUserDetails, setShowUserDetails] = useState(false)
+  
+  const [showTopupDialog, setShowTopupDialog] = useState(false)
+  const [topupAmount, setTopupAmount] = useState("")
+  const [topupDescription, setTopupDescription] = useState("")
+  const [isToppingUp, setIsToppingUp] = useState(false)
+  const [customerToTopup, setCustomerToTopup] = useState(null)
+
   const [filters, setFilters] = useState({
     orderDate: "",
     joiningDate: "",
@@ -27,6 +34,13 @@ export default function Customers() {
     sortBy: "",
     chooseFirst: "",
   })
+
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 50
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [searchQuery, filters])
 
   const filteredCustomers = useMemo(() => {
     let result = [...customers]
@@ -36,7 +50,7 @@ export default function Customers() {
       const query = searchQuery.toLowerCase().trim()
       result = result.filter(customer =>
         customer.name?.toLowerCase().includes(query) ||
-        (customer.email || "NA").toLowerCase().includes(query) ||
+        (customer.email || "email not given by client").toLowerCase().includes(query) ||
         customer.phone?.includes(query)
       )
     }
@@ -82,6 +96,13 @@ export default function Customers() {
 
     return result
   }, [customers, searchQuery, filters])
+
+  const totalPages = Math.ceil(filteredCustomers.length / itemsPerPage)
+  
+  const paginatedCustomers = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage
+    return filteredCustomers.slice(startIndex, startIndex + itemsPerPage)
+  }, [filteredCustomers, currentPage])
 
   const handleFilterChange = (field, value) => {
     setFilters(prev => ({ ...prev, [field]: value }))
@@ -213,6 +234,31 @@ export default function Customers() {
       setShowUserDetails(false)
     } finally {
       setLoadingDetails(false)
+    }
+  }
+
+  const submitTopup = async () => {
+    if (!topupAmount || isNaN(topupAmount) || Number(topupAmount) <= 0) {
+      toast.error("Please enter a valid amount");
+      return;
+    }
+    try {
+      setIsToppingUp(true);
+      await adminAPI.topupCustomerWallet(customerToTopup, topupAmount, topupDescription);
+      toast.success("Wallet topped up successfully");
+      setShowTopupDialog(false);
+      setTopupAmount("");
+      setTopupDescription("");
+      
+      // refresh user details if they are currently viewing the same user
+      if (showUserDetails && selectedCustomer === customerToTopup) {
+        handleViewDetails(customerToTopup);
+      }
+    } catch (error) {
+      debugError('Error topping up wallet:', error);
+      toast.error('Failed to top up wallet');
+    } finally {
+      setIsToppingUp(false);
     }
   }
 
@@ -427,6 +473,7 @@ export default function Customers() {
                   <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">Sl</th>
                   <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">Name</th>
                   <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">Contact Information</th>
+                  <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">Address</th>
                   <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">Total Order</th>
                   <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">Total Order Amount</th>
                   <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">Joining Date</th>
@@ -437,21 +484,21 @@ export default function Customers() {
               <tbody className="bg-white divide-y divide-slate-100">
                 {loading ? (
                   <tr>
-                    <td colSpan={8} className="px-6 py-8 text-center">
+                    <td colSpan={9} className="px-6 py-8 text-center">
                       <div className="text-sm text-slate-500">Loading customers...</div>
                     </td>
                   </tr>
-                ) : filteredCustomers.length === 0 ? (
+                ) : paginatedCustomers.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-6 py-8 text-center">
+                    <td colSpan={9} className="px-6 py-8 text-center">
                       <div className="text-sm text-slate-500">No customers found</div>
                     </td>
                   </tr>
                 ) : (
-                  filteredCustomers.map((customer, index) => (
+                  paginatedCustomers.map((customer, index) => (
                     <tr key={customer.id || customer.sl} className="hover:bg-slate-50 transition-colors">
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className="text-sm font-medium text-slate-700">{index + 1}</span>
+                        <span className="text-sm font-medium text-slate-700">{(currentPage - 1) * itemsPerPage + index + 1}</span>
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
@@ -482,8 +529,20 @@ export default function Customers() {
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex flex-col">
-                          <span className="text-sm text-slate-700">{customer.email || "NA"}</span>
+                          <span className="text-sm text-slate-700">{customer.email || "email not given by client"}</span>
                           <span className="text-xs text-slate-500">{customer.phone}</span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex flex-col max-w-[200px]">
+                          {customer.addresses && customer.addresses.length > 0 ? (
+                            <span className="text-sm text-slate-700 truncate" title={`${customer.addresses[0].street}${customer.addresses[0].city ? `, ${customer.addresses[0].city}` : ''}`}>
+                              {customer.addresses[0].street}
+                              {customer.addresses[0].city && `, ${customer.addresses[0].city}`}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-slate-500">Address not provided</span>
+                          )}
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
@@ -508,12 +567,25 @@ export default function Customers() {
                         </button>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-center">
-                        <button
-                          onClick={() => handleViewDetails(customer._id || customer.id || customer.sl)}
-                          className="p-1.5 rounded text-blue-600 hover:bg-blue-50 transition-colors"
-                        >
-                          <Eye className="w-4 h-4" />
-                        </button>
+                        <div className="flex justify-center gap-2">
+                          <button
+                            title="Top-up Wallet"
+                            onClick={() => {
+                              setCustomerToTopup(customer._id || customer.id || customer.sl);
+                              setShowTopupDialog(true);
+                            }}
+                            className="p-1.5 rounded text-green-600 hover:bg-green-50 transition-colors"
+                          >
+                            <Wallet className="w-4 h-4" />
+                          </button>
+                          <button
+                            title="View Details"
+                            onClick={() => handleViewDetails(customer._id || customer.id || customer.sl)}
+                            className="p-1.5 rounded text-blue-600 hover:bg-blue-50 transition-colors"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -521,6 +593,34 @@ export default function Customers() {
               </tbody>
             </table>
           </div>
+
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between border-t border-slate-200 px-6 py-4 mt-4">
+              <div className="text-sm text-slate-500">
+                Showing <span className="font-medium">{(currentPage - 1) * itemsPerPage + 1}</span> to <span className="font-medium">{Math.min(currentPage * itemsPerPage, filteredCustomers.length)}</span> of <span className="font-medium">{filteredCustomers.length}</span> results
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                  disabled={currentPage === 1}
+                  className="px-3 py-1.5 rounded-lg border border-slate-300 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                >
+                  Previous
+                </button>
+                <div className="text-sm font-medium text-slate-700 px-2">
+                  Page {currentPage} of {totalPages}
+                </div>
+                <button
+                  onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                  disabled={currentPage === totalPages}
+                  className="px-3 py-1.5 rounded-lg border border-slate-300 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -565,7 +665,7 @@ export default function Customers() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
                       <div className="flex items-center gap-2 text-sm text-slate-600 min-w-0">
                         <Mail className="w-4 h-4" />
-                        <span className="truncate">{userDetails.email || "NA"}</span>
+                        <span className="truncate">{userDetails.email || "email not given by client"}</span>
                       </div>
                       <div className="flex items-center gap-2 text-sm text-slate-600 min-w-0">
                         <Phone className="w-4 h-4" />
@@ -694,7 +794,71 @@ export default function Customers() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Wallet Top-up Dialog */}
+      <Dialog open={showTopupDialog} onOpenChange={setShowTopupDialog}>
+        <DialogContent className="max-w-md mx-auto p-0 gap-0">
+          <DialogHeader className="px-6 pt-6 pb-4 border-b border-slate-200 bg-slate-50">
+            <DialogTitle className="pr-12 text-xl font-bold text-slate-900 flex items-center gap-2">
+              <Wallet className="w-5 h-5 text-blue-600" />
+              Wallet Top-up
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-5 px-6 py-6">
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-2">
+                Amount ({"\u20B9"})
+              </label>
+              <input
+                type="number"
+                value={topupAmount}
+                onChange={(e) => setTopupAmount(e.target.value)}
+                placeholder="Enter amount to add"
+                className="w-full px-4 py-2.5 border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm transition-all"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-2">
+                Description (Optional)
+              </label>
+              <input
+                type="text"
+                value={topupDescription}
+                onChange={(e) => setTopupDescription(e.target.value)}
+                placeholder="Ex: Promotional bonus"
+                className="w-full px-4 py-2.5 border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm transition-all"
+              />
+            </div>
+          </div>
+
+          <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex justify-end gap-3 rounded-b-lg">
+            <button
+              onClick={() => setShowTopupDialog(false)}
+              className="px-4 py-2.5 text-sm font-medium rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-100 transition-all"
+              disabled={isToppingUp}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={submitTopup}
+              disabled={isToppingUp}
+              className="px-4 py-2.5 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-sm"
+            >
+              {isToppingUp ? (
+                "Processing..."
+              ) : (
+                <>
+                  <Wallet className="w-4 h-4" />
+                  Top-up Wallet
+                </>
+              )}
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
+
 

@@ -25,9 +25,7 @@ import {
   Share2,
   Utensils,
   Trash2,
-  CalendarDays,
   Bell,
-  Loader2,
 } from "lucide-react";
 
 import AnimatedPage from "@food/components/user/AnimatedPage";
@@ -49,10 +47,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@food/components/ui/dialog";
-import { authAPI, userAPI } from "@food/api";
+import { authAPI, userAPI, notificationAPI } from "@food/api";
 import { firebaseAuth } from "@food/firebase";
 import { clearModuleAuth } from "@food/utils/auth";
-import { DEFAULT_APP_CUSTOMIZATION, loadAppCustomization } from "@food/utils/appCustomization";
 import { toast } from "sonner";
 const debugLog = (...args) => { };
 const debugWarn = (...args) => { };
@@ -61,6 +58,11 @@ const USER_SESSION_PREFERENCE_KEYS = ["userVegMode", "userHomeFoodPreference", "
 const HOME_FOOD_PREFERENCE_KEY = "userHomeFoodPreference";
 
 import { registerWebPushForCurrentModule } from "@food/utils/firebaseMessaging";
+
+const profilePageCache = {
+  referralReward: null,
+  walletBalance: null
+};
 
 export default function Profile() {
   const { userProfile, vegMode, setVegMode, getDefaultAddress, addresses } =
@@ -87,37 +89,23 @@ export default function Profile() {
   const [appearanceOpen, setAppearanceOpen] = useState(false);
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
-  const [referralReward, setReferralReward] = useState(0);
-  const [walletBalance, setWalletBalance] = useState(0);
+  const [referralReward, setReferralReward] = useState(() => profilePageCache.referralReward || 0);
+  const [walletBalance, setWalletBalance] = useState(() => profilePageCache.walletBalance || 0);
   const [deleteAccountOpen, setDeleteAccountOpen] = useState(false);
   const [deleteStep, setDeleteStep] = useState(1);
   const [deleteCaptcha, setDeleteCaptcha] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
-  const [isTestingPush, setIsTestingPush] = useState(false);
-  const [appCustomization, setAppCustomization] = useState(DEFAULT_APP_CUSTOMIZATION);
+  const [isTestingNotification, setIsTestingNotification] = useState(false);
 
   // Trigger web push registration when profile mounts to ensure FCM token is saved
   useEffect(() => {
     registerWebPushForCurrentModule().catch(console.error);
   }, []);
 
-  useEffect(() => {
-    let mounted = true;
-    loadAppCustomization()
-      .then((settings) => {
-        if (mounted) setAppCustomization(settings);
-      })
-      .catch(() => {});
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
   const handleVegModeUpdate = (nextValue) => {
     setVegMode(nextValue);
     localStorage.setItem("userVegMode", String(nextValue));
   };
-
   const [foodPreference, setFoodPreference] = useState(() => {
     const saved = localStorage.getItem(HOME_FOOD_PREFERENCE_KEY);
     return saved === "healthy" ? "healthy" : "all";
@@ -129,6 +117,7 @@ export default function Profile() {
     localStorage.setItem(HOME_FOOD_PREFERENCE_KEY, normalized);
     localStorage.setItem("userVegMode", String(normalized === "healthy"));
     setVegMode(normalized === "healthy");
+    window.dispatchEvent(new CustomEvent("userFoodPreferenceChanged", { detail: { preference: normalized } }));
   };
 
   // Settings states
@@ -280,12 +269,17 @@ export default function Profile() {
   const profileCompletion = calculateProfileCompletion();
   const isComplete = profileCompletion === 100;
   useEffect(() => {
+    if (profilePageCache.referralReward !== null) {
+      return;
+    }
     let mounted = true;
     userAPI
       .getReferralStats()
       .then((res) => {
         const reward = res?.data?.data?.stats?.rewardAmount;
-        if (mounted) setReferralReward(Number(reward) || 0);
+        const finalReward = Number(reward) || 0;
+        if (mounted) setReferralReward(finalReward);
+        profilePageCache.referralReward = finalReward;
       })
       .catch(() => { });
     return () => {
@@ -294,13 +288,18 @@ export default function Profile() {
   }, []);
 
   useEffect(() => {
+    if (profilePageCache.walletBalance !== null) {
+      return;
+    }
     let mounted = true;
     userAPI
       .getWallet()
       .then((res) => {
         const w = res?.data?.data?.wallet || res?.data?.wallet;
         const bal = Number(w?.balance);
-        if (mounted) setWalletBalance(Number.isFinite(bal) ? bal : 0);
+        const finalBal = Number.isFinite(bal) ? bal : 0;
+        if (mounted) setWalletBalance(finalBal);
+        profilePageCache.walletBalance = finalBal;
       })
       .catch(() => { });
     return () => {
@@ -469,68 +468,20 @@ export default function Profile() {
     }
   };
 
-  const handleTestPushNotification = async () => {
-    if (isTestingPush) return;
-    setIsTestingPush(true);
+  const handleTestNotification = async () => {
+    if (isTestingNotification) return;
+    setIsTestingNotification(true);
     try {
-      console.log("[Push Test] Starting user push notification test");
-      console.log("[Push Test] Notification permission:", typeof Notification !== "undefined" ? Notification.permission : "unsupported");
-      console.log("[Push Test] Service worker supported:", "serviceWorker" in navigator);
-      console.log("[Push Test] Registering/syncing web push token...");
-      await registerWebPushForCurrentModule();
-      console.log("[Push Test] Web push registration finished");
-      const savedToken = localStorage.getItem("fcm_web_registered_token_user") || "";
-      console.log("[Push Test] Local saved user token:", savedToken ? `${savedToken.slice(0, 14)}... (${savedToken.length})` : "not found");
-      if ("serviceWorker" in navigator) {
-        const registration = await navigator.serviceWorker.getRegistration("/firebase-messaging-sw.js");
-        console.log("[Push Test] Service worker registration:", registration ? {
-          scope: registration.scope,
-          active: Boolean(registration.active),
-          installing: Boolean(registration.installing),
-          waiting: Boolean(registration.waiting),
-        } : "not found");
+      let platform = "web";
+      if (typeof window !== "undefined" && window.flutter_inappwebview) {
+        platform = "mobile";
       }
-      console.log("[Push Test] Calling backend /fcm-tokens/test...");
-      const response = await userAPI.testFcmNotification();
-      console.log("[Push Test] Backend response:", response?.data);
-      const result = response?.data?.data || {};
-      if (Number(result.successCount || 0) < 1) {
-        const firstError = Array.isArray(result.results)
-          ? result.results.find((item) => item?.error)?.error
-          : "";
-        console.error("[Push Test] Firebase rejected the notification:", result);
-        throw new Error(firstError || "No active push token accepted by Firebase");
-      }
-      console.log("[Push Test] Notification accepted by Firebase:", result);
-      if (typeof Notification !== "undefined" && Notification.permission === "granted") {
-        try {
-          const registration = "serviceWorker" in navigator
-            ? await navigator.serviceWorker.getRegistration()
-            : null;
-          if (registration) {
-            await registration.showNotification("Local display test", {
-              body: "Browser can display notifications on this device.",
-              icon: "/favicon.ico",
-              tag: "local-display-test",
-            });
-            console.log("[Push Test] Local service-worker notification displayed");
-          } else {
-            new Notification("Local display test", {
-              body: "Browser can display notifications on this device.",
-              icon: "/favicon.ico",
-            });
-            console.log("[Push Test] Local browser notification displayed");
-          }
-        } catch (displayError) {
-          console.error("[Push Test] Local notification display failed:", displayError);
-        }
-      }
-      toast.success("Test push notification sent");
-    } catch (error) {
-      console.error("[Push Test] Failed:", error);
-      toast.error(error?.response?.data?.message || error?.message || "Failed to send test notification");
+      await notificationAPI.sendTestNotification(platform, { contextModule: "user" });
+      toast.success("Test notification sent! Check your device.");
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to send test notification");
     } finally {
-      setIsTestingPush(false);
+      setIsTestingNotification(false);
     }
   };
 
@@ -553,7 +504,7 @@ export default function Profile() {
               <motion.div
                 whileHover={{ scale: 1.1, rotate: 5 }}
                 transition={{ duration: 0.3, type: "spring", stiffness: 300 }}>
-                <Avatar className="h-16 w-16 bg-[#7e3866]/20 border-0">
+                <Avatar className="h-16 w-16 bg-primary/20 border-0">
                   {userProfile?.profileImage && (
                     <AvatarImage
                       src={
@@ -565,7 +516,7 @@ export default function Profile() {
                       alt={displayName}
                     />
                   )}
-                  <AvatarFallback className="bg-[#7e3866] text-white text-2xl font-semibold">
+                  <AvatarFallback className="bg-primary text-white text-2xl font-semibold">
                     {avatarInitial}
                   </AvatarFallback>
                 </Avatar>
@@ -601,64 +552,6 @@ export default function Profile() {
 
         {/* Account Options */}
         <div className="space-y-2 mb-3 mt-3">
-          <Link to="/food/user/profile/subscriptions" className="block">
-            <motion.div
-              whileHover={{ x: 4, scale: 1.01 }}
-              transition={{ duration: 0.2, type: "spring", stiffness: 300 }}>
-              <Card className="bg-white dark:bg-[#1a1a1a] py-0 rounded-xl shadow-sm border-0 dark:border-gray-800 cursor-pointer">
-                <CardContent className="p-4 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <motion.div
-                      className="bg-gray-100 dark:bg-gray-800 rounded-full p-2"
-                      whileHover={{ rotate: 15, scale: 1.1 }}
-                      transition={{ duration: 0.3 }}>
-                      <CalendarDays className="h-5 w-5 text-gray-700 dark:text-gray-300" />
-                    </motion.div>
-                    <span className="text-base font-medium text-gray-900 dark:text-white">
-                      Purchased Subscriptions
-                    </span>
-                  </div>
-                  <motion.div
-                    whileHover={{ x: 4 }}
-                    transition={{ duration: 0.2 }}>
-                    <ChevronRight className="h-5 w-5 text-gray-400 dark:text-gray-500" />
-                  </motion.div>
-                </CardContent>
-              </Card>
-            </motion.div>
-          </Link>
-
-          <motion.div
-            whileHover={{ x: 4, scale: 1.01 }}
-            transition={{ duration: 0.2, type: "spring", stiffness: 300 }}>
-            <Card
-              className="bg-white dark:bg-[#1a1a1a] py-0 rounded-xl shadow-sm border-0 dark:border-gray-800 cursor-pointer"
-              onClick={handleTestPushNotification}>
-              <CardContent className="p-4 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <motion.div
-                    className="bg-gray-100 dark:bg-gray-800 rounded-full p-2"
-                    whileHover={{ rotate: 15, scale: 1.1 }}
-                    transition={{ duration: 0.3 }}>
-                    {isTestingPush ? (
-                      <Loader2 className="h-5 w-5 animate-spin text-gray-700 dark:text-gray-300" />
-                    ) : (
-                      <Bell className="h-5 w-5 text-gray-700 dark:text-gray-300" />
-                    )}
-                  </motion.div>
-                  <span className="text-base font-medium text-gray-900 dark:text-white">
-                    Test push notification
-                  </span>
-                </div>
-                <motion.div
-                  whileHover={{ x: 4 }}
-                  transition={{ duration: 0.2 }}>
-                  <ChevronRight className="h-5 w-5 text-gray-400 dark:text-gray-500" />
-                </motion.div>
-              </CardContent>
-            </Card>
-          </motion.div>
-
           <Link to="/user/wallet" className="block">
             <motion.div
               whileHover={{ x: 4, scale: 1.01 }}
@@ -781,7 +674,7 @@ export default function Profile() {
                       e.stopPropagation();
                       handleShareReferral();
                     }}
-                    className="inline-flex items-center gap-1 text-xs text-[#7e3866] font-medium ml-2 px-2 py-1 rounded-md"
+                    className="inline-flex items-center gap-1 text-xs text-primary font-medium ml-2 px-2 py-1 rounded-md"
                     disabled={!referralLink}>
                     <Share2 className="h-3.5 w-3.5" />
                     Refer
@@ -849,8 +742,8 @@ export default function Profile() {
                   <div className="flex items-center gap-2">
                     <motion.span
                       className={`text-xs font-medium px-2 py-1 rounded transition-colors ${isComplete
-                          ? "bg-[#7e3866] text-white shadow-sm"
-                          : "bg-[#7e386615] text-[#7e3866] border border-[#7e3866]/10"
+                          ? "bg-primary text-white shadow-sm"
+                          : "bg-[#7e386615] text-primary border border-primary/10"
                         }`}
                       whileHover={{ scale: 1.1 }}
                       transition={{ duration: 0.2 }}>
@@ -908,7 +801,7 @@ export default function Profile() {
             <Card
               className="bg-white dark:bg-[#1a1a1a] py-0 rounded-xl shadow-sm border-0 dark:border-gray-800 cursor-pointer"
               onClick={() => setFoodPreferenceOpen(true)}>
-              <CardContent className="p-4  flex items-center justify-between">
+              <CardContent className="p-4 flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <motion.div
                     className="bg-gray-100 dark:bg-gray-800 rounded-full p-2"
@@ -921,22 +814,14 @@ export default function Profile() {
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <motion.span
-                    className="text-base font-medium text-gray-900 dark:text-white"
-                    whileHover={{ scale: 1.1 }}
-                    transition={{ duration: 0.2 }}>
+                  <span className="text-base font-medium text-gray-900 dark:text-white">
                     {foodPreference === "healthy" ? "Healthy" : "All Items"}
-                  </motion.span>
-                  <motion.div
-                    whileHover={{ x: 4 }}
-                    transition={{ duration: 0.2 }}>
-                    <ChevronRight className="h-5 w-5 text-gray-400" />
-                  </motion.div>
+                  </span>
+                  <ChevronRight className="h-5 w-5 text-gray-400" />
                 </div>
               </CardContent>
             </Card>
           </motion.div>
-
           <motion.div
             whileHover={{ x: 4, scale: 1.01 }}
             transition={{ duration: 0.2, type: "spring", stiffness: 300 }}>
@@ -976,7 +861,7 @@ export default function Profile() {
         {/* Collections Section */}
         <div className="mb-3">
           <div className="flex items-center gap-2 mb-2 px-1">
-            <div className="w-1 h-4 bg-[#7e3866] rounded"></div>
+            <div className="w-1 h-4 bg-primary rounded"></div>
             <h3 className="text-base font-semibold text-gray-900 dark:text-white">
               Collections
             </h3>
@@ -1009,50 +894,50 @@ export default function Profile() {
           </Link>
         </div>
 
-        {appCustomization.diningFlowEnabled !== false && (
-          <div className="mb-3">
-            <div className="flex items-center gap-2 mb-2 px-1">
-              <div className="w-1 h-4 bg-[#7e3866] rounded"></div>
-              <h3 className="text-base font-semibold text-gray-900 dark:text-white">
-                Dining Bookings
-              </h3>
-            </div>
-            <Link to="/user/profile/dining-bookings">
-              <motion.div
-                whileHover={{ x: 4, scale: 1.01 }}
-                transition={{ duration: 0.2, type: "spring", stiffness: 300 }}>
-                <Card className="bg-white dark:bg-[#1a1a1a] py-0 rounded-xl shadow-sm border-0 dark:border-gray-800 cursor-pointer">
-                  <CardContent className="p-4 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <motion.div
-                        className="bg-gray-100 dark:bg-gray-800 rounded-full p-2"
-                        whileHover={{ rotate: 15, scale: 1.1 }}
-                        transition={{ duration: 0.3 }}>
-                        <Utensils className="h-5 w-5 text-gray-700 dark:text-gray-300" />
-                      </motion.div>
-                      <div className="flex flex-col">
-                        <span className="text-base font-medium text-gray-900 dark:text-white">
-                          Your reservations
-                        </span>
-                        <span className="text-[10px] text-gray-500">View table booking status</span>
-                      </div>
-                    </div>
-                    <motion.div
-                      whileHover={{ x: 4 }}
-                      transition={{ duration: 0.2 }}>
-                      <ChevronRight className="h-5 w-5 text-gray-400 dark:text-gray-500" />
-                    </motion.div>
-                  </CardContent>
-                </Card>
-              </motion.div>
-            </Link>
+        {/* Dining Section 
+        <div className="mb-3">
+          <div className="flex items-center gap-2 mb-2 px-1">
+            <div className="w-1 h-4 bg-primary rounded"></div>
+            <h3 className="text-base font-semibold text-gray-900 dark:text-white">
+              Dining Bookings
+            </h3>
           </div>
-        )}
+          <Link to="/user/profile/dining-bookings">
+            <motion.div
+              whileHover={{ x: 4, scale: 1.01 }}
+              transition={{ duration: 0.2, type: "spring", stiffness: 300 }}>
+              <Card className="bg-white dark:bg-[#1a1a1a] py-0 rounded-xl shadow-sm border-0 dark:border-gray-800 cursor-pointer">
+                <CardContent className="p-4 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <motion.div
+                      className="bg-gray-100 dark:bg-gray-800 rounded-full p-2"
+                      whileHover={{ rotate: 15, scale: 1.1 }}
+                      transition={{ duration: 0.3 }}>
+                      <Utensils className="h-5 w-5 text-gray-700 dark:text-gray-300" />
+                    </motion.div>
+                    <div className="flex flex-col">
+                      <span className="text-base font-medium text-gray-900 dark:text-white">
+                        Your reservations
+                      </span>
+                      <span className="text-[10px] text-gray-500">View table booking status</span>
+                    </div>
+                  </div>
+                  <motion.div
+                    whileHover={{ x: 4 }}
+                    transition={{ duration: 0.2 }}>
+                    <ChevronRight className="h-5 w-5 text-gray-400 dark:text-gray-500" />
+                  </motion.div>
+                </CardContent>
+              </Card>
+            </motion.div>
+          </Link>
+        </div>
+        */}
 
         {/* Food Orders Section */}
         <div className="mb-3">
           <div className="flex items-center gap-2 mb-2 px-1">
-            <div className="w-1 h-4 bg-[#7e3866] rounded"></div>
+            <div className="w-1 h-4 bg-primary rounded"></div>
             <h3 className="text-base font-semibold text-gray-900 dark:text-white">
               Food Orders
             </h3>
@@ -1090,7 +975,7 @@ export default function Profile() {
         {/* More Section */}
         <div className="mb-8 pb-8">
           <div className="flex items-center gap-2 mb-2 px-1">
-            <div className="w-1 h-4 bg-[#7e3866] rounded"></div>
+            <div className="w-1 h-4 bg-primary rounded"></div>
             <h3 className="text-base font-semibold text-gray-900 dark:text-white">
               More
             </h3>
@@ -1176,6 +1061,36 @@ export default function Profile() {
                 </Card>
               </motion.div>
             </Link>
+
+            {/* Test Notification (Debug) */}
+            <motion.div
+              whileHover={{ x: 4, scale: 1.01 }}
+              transition={{ duration: 0.2, type: "spring", stiffness: 300 }}>
+              <Card
+                className="bg-white dark:bg-[#1a1a1a] py-0 rounded-xl shadow-sm border-0 dark:border-gray-800 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                onClick={handleTestNotification}>
+                <CardContent className="p-4 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <motion.div
+                      className="bg-blue-50 dark:bg-blue-900/20 rounded-full p-2"
+                      whileHover={{ rotate: 15, scale: 1.1 }}
+                      transition={{ duration: 0.3 }}>
+                      <Bell
+                        className={`h-5 w-5 text-blue-500 ${isTestingNotification ? "animate-pulse" : ""}`}
+                      />
+                    </motion.div>
+                    <span className="text-base font-medium text-gray-900 dark:text-white">
+                      {isTestingNotification ? "Sending test..." : "Test Notification"}
+                    </span>
+                  </div>
+                  <motion.div
+                    whileHover={{ x: 4 }}
+                    transition={{ duration: 0.2 }}>
+                    <ChevronRight className="h-5 w-5 text-gray-400 dark:text-gray-500" />
+                  </motion.div>
+                </CardContent>
+              </Card>
+            </motion.div>
 
             <motion.div
               whileHover={{ x: 4, scale: 1.01 }}
@@ -1285,12 +1200,12 @@ export default function Profile() {
                 setVegModeOpen(false);
               }}
               className={`w-full p-3 rounded-xl border-2 transition-all flex items-center justify-between ${!vegMode
-                  ? "border-[#55254b] bg-[#fdfafc] dark:bg-[#3c0f3d]/10"
+                  ? "border-secondary bg-[#fdfafc] dark:bg-[#3c0f3d]/10"
                   : "border-gray-200 dark:border-gray-800 bg-white hover:border-gray-300"
                 }`}>
               <div className="flex items-center gap-3">
                 <div
-                  className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${!vegMode ? "border-[#55254b] bg-[#55254b]" : "border-gray-300"
+                  className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${!vegMode ? "border-secondary bg-secondary" : "border-gray-300"
                     }`}>
                   {!vegMode && <Check className="h-3 w-3 text-white" />}
                 </div>
@@ -1402,7 +1317,7 @@ export default function Profile() {
               </Button>
               <Button
                 type="button"
-                className="flex-1 rounded-xl bg-[#55254b] hover:bg-[#3c0f3d] text-white"
+                className="flex-1 rounded-xl bg-secondary hover:bg-[#3c0f3d] text-white"
                 onClick={() => {
                   setLogoutConfirmOpen(false);
                   handleLogout();
@@ -1434,12 +1349,12 @@ export default function Profile() {
                 setAppearanceOpen(false);
               }}
               className={`w-full p-3 rounded-xl border-2 transition-all flex items-center gap-3 ${appearance === "light"
-                  ? "border-[#7e3866] bg-[#fdfafc] dark:border-[#b18da5] dark:bg-[#3c0f3d]/20"
+                  ? "border-primary bg-[#fdfafc] dark:border-[#b18da5] dark:bg-[#3c0f3d]/20"
                   : "border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-gray-300 dark:hover:border-gray-600"
                 }`}>
               <div
                 className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${appearance === "light"
-                    ? "border-[#7e3866] bg-[#7e3866] dark:border-[#b18da5] dark:bg-[#b18da5]"
+                    ? "border-primary bg-primary dark:border-[#b18da5] dark:bg-[#b18da5]"
                     : "border-gray-300 dark:border-gray-600"
                   }`}>
                 {appearance === "light" && (
@@ -1462,12 +1377,12 @@ export default function Profile() {
                 setAppearanceOpen(false);
               }}
               className={`w-full p-3 rounded-xl border-2 transition-all flex items-center gap-3 ${appearance === "dark"
-                  ? "border-[#7e3866] dark:border-[#b18da5] bg-[#fdfafc] dark:bg-[#3c0f3d]/20"
+                  ? "border-primary dark:border-[#b18da5] bg-[#fdfafc] dark:bg-[#3c0f3d]/20"
                   : "border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-gray-300 dark:hover:border-gray-600"
                 }`}>
               <div
                 className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${appearance === "dark"
-                    ? "border-[#7e3866] bg-[#7e3866] dark:border-[#b18da5] dark:bg-[#b18da5]"
+                    ? "border-primary bg-primary dark:border-[#b18da5] dark:bg-[#b18da5]"
                     : "border-gray-300 dark:border-gray-600"
                   }`}>
                 {appearance === "dark" && (

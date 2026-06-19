@@ -551,6 +551,20 @@ export default function OrderDetectDelivery() {
         setFilters={setFilters}
         onApply={handleApplyFilters}
         onReset={handleResetFilters}
+        orderStatuses={[
+          "Ordered",
+          "Restaurant Accepted",
+          "Rejected",
+          "Delivery Boy Assigned",
+          "Delivery Boy Reached Pickup",
+          "Order ID Accepted",
+          "Reached Drop",
+          "Ordered Delivered"
+        ]}
+        showPaymentStatus={false}
+        showDeliveryType={false}
+        showAmountRange={false}
+        showDateRange={false}
       />
     </div>
   )

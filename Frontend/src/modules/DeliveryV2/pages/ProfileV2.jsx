@@ -12,11 +12,13 @@ import {
   Loader2,
   Briefcase,
   Trash2,
-  AlertTriangle
+  AlertTriangle,
+  Bell
 } from "lucide-react"
-import { deliveryAPI } from "@food/api"
+import { deliveryAPI, notificationAPI } from "@food/api"
 import { toast } from "sonner"
 import { clearModuleAuth } from "@food/utils/auth"
+import { registerWebPushForCurrentModule } from "@food/utils/firebaseMessaging"
 
 /**
  * ProfileV2 - 1:1 EXACT Restoration of the Legacy Profile Hub.
@@ -34,6 +36,14 @@ export const ProfileV2 = () => {
   const [deleteStep, setDeleteStep] = useState(1)
   const [deleteCaptcha, setDeleteCaptcha] = useState("")
   const [isDeleting, setIsDeleting] = useState(false)
+  const [isTestingNotification, setIsTestingNotification] = useState(false)
+
+  useEffect(() => {
+    // Register for push notifications on mount for this module
+    registerWebPushForCurrentModule().catch(err => {
+      console.error("Failed to register push notifications:", err)
+    })
+  }, [])
 
   // Fetch profile data
   useEffect(() => {
@@ -82,13 +92,47 @@ export const ProfileV2 = () => {
     setShowLogoutConfirm(false)
     try {
       setLogoutSubmitting(true)
-      await deliveryAPI.logout()
+      let fcmToken = null;
+      let platform = "web";
+      try {
+        if (typeof window !== "undefined" && window.flutter_inappwebview) {
+          platform = "mobile";
+          const handlerNames = ["getFcmToken", "getFCMToken", "getPushToken", "getFirebaseToken"];
+          for (const handlerName of handlerNames) {
+            try {
+              const t = await window.flutter_inappwebview.callHandler(handlerName, { module: "delivery" });
+              if (t && typeof t === "string" && t.length > 20) {
+                fcmToken = t.trim();
+                break;
+              }
+            } catch (e) {}
+          }
+        }
+      } catch (e) {}
+      await deliveryAPI.logout(null, fcmToken, platform)
     } catch (error) {}
     clearModuleAuth("delivery")
     localStorage.removeItem("app:isOnline")
     toast.success("Logged out successfully")
     navigate("/food/delivery/login", { replace: true })
     setLogoutSubmitting(false)
+  }
+
+  const handleTestNotification = async () => {
+    if (isTestingNotification) return
+    setIsTestingNotification(true)
+    try {
+      let platform = "web"
+      if (typeof window !== "undefined" && window.flutter_inappwebview) {
+        platform = "mobile"
+      }
+      await notificationAPI.sendTestNotification(platform, { contextModule: "delivery" })
+      toast.success("Test notification sent! Check your device.")
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to send test notification")
+    } finally {
+      setIsTestingNotification(false)
+    }
   }
 
   if (loading) {
@@ -104,6 +148,13 @@ export const ProfileV2 = () => {
 
   return (
     <div className="min-h-screen bg-gray-100 text-gray-900 font-poppins pb-24">
+      {/* Top Header */}
+      <div className="w-full safe-top sticky top-0 z-50 shadow-sm" style={{ backgroundColor: 'var(--dv-primary)' }}>
+        <div className="flex items-center justify-center px-4 py-4">
+           <h1 className="text-lg font-black text-white uppercase tracking-wider">Profile</h1>
+        </div>
+      </div>
+
       {/* Profile Header Block */}
       <div className="bg-white p-4 w-full shadow-sm">
         <div 
@@ -148,6 +199,27 @@ export const ProfileV2 = () => {
 
         {/* Sections */}
         <div className="space-y-4">
+          {/* Shift Details */}
+          {profile?.shiftStartPic && (
+            <div className="bg-white rounded-xl p-4 flex flex-col gap-3">
+              <h3 className="text-gray-400 text-[10px] font-black uppercase tracking-[0.2em]">Current Shift Verification</h3>
+              <div className="flex gap-4 items-center">
+                <div className="w-20 h-20 shrink-0 rounded-xl border-2 border-green-500 overflow-hidden shadow-sm">
+                  <img src={profile.shiftStartPic} alt="Shift Start" className="w-full h-full object-cover" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-bold text-gray-900 mb-1">
+                    Started at {new Date(profile.shiftStartTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </p>
+                  {profile.shiftStartAddress && (
+                    <p className="text-xs text-gray-500 font-medium line-clamp-2">
+                      {profile.shiftStartAddress}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
           {/* Share & Earn */}
           <div className="bg-white rounded-xl p-4 flex items-center justify-between gap-4">
             <div className="min-w-0">
@@ -168,7 +240,7 @@ export const ProfileV2 = () => {
           <div>
             <h3 className="text-gray-400 text-[10px] font-black uppercase tracking-[0.2em] mb-3 px-1">Support</h3>
             <div 
-              onClick={() => navigate("/food/delivery/support")}
+              onClick={() => navigate("/food/delivery/help/tickets")}
               className="bg-white rounded-xl p-4 flex items-center justify-between cursor-pointer active:bg-gray-50 transition-colors"
             >
               <div className="flex items-center gap-3">
@@ -176,6 +248,20 @@ export const ProfileV2 = () => {
                 <span className="text-sm font-bold text-gray-900">Support tickets</span>
               </div>
               <ArrowRight className="w-5 h-5 text-gray-300" />
+            </div>
+          </div>
+
+          {/* Test Notification (Debug) */}
+          <div className="pt-0">
+            <div
+              onClick={handleTestNotification}
+              className="bg-white rounded-xl p-4 flex items-center justify-between cursor-pointer border border-blue-50 hover:bg-blue-50/30 active:bg-blue-50 transition-colors"
+            >
+              <div className="flex items-center gap-3">
+                <Bell className={`w-5 h-5 text-blue-500 ${isTestingNotification ? "animate-pulse" : ""}`} />
+                <span className="text-sm font-bold text-gray-900">{isTestingNotification ? "Sending test..." : "Test Notification"}</span>
+              </div>
+              <ArrowRight className="w-5 h-5 text-blue-200" />
             </div>
           </div>
 

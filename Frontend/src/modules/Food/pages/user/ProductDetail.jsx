@@ -2,7 +2,7 @@
 
 
 
-import { useEffect, useState, useMemo } from "react"
+import { useState, useMemo } from "react"
 import { useParams, Link, useNavigate } from "react-router-dom"
 import useAppBackNavigation from "@food/hooks/useAppBackNavigation"
 
@@ -16,7 +16,6 @@ import { Button } from "@food/components/ui/button"
 import { Badge } from "@food/components/ui/badge"
 import { Textarea } from "@food/components/ui/textarea"
 import { Label } from "@food/components/ui/label"
-import { DEFAULT_APP_CUSTOMIZATION, loadAppCustomization } from "@food/utils/appCustomization"
 
 // Sample product data - in a real app, this would come from an API
 const productsData = {
@@ -111,43 +110,11 @@ export default function ProductDetail() {
   const [helpfulVotes, setHelpfulVotes] = useState(new Set())
   const [replyStates, setReplyStates] = useState({})
   const [replies, setReplies] = useState({})
-  const [appCustomization, setAppCustomization] = useState(DEFAULT_APP_CUSTOMIZATION)
 
   const restaurant = product ? restaurantsData[product.restaurantSlug] : null
   const inCart = product ? isInCart(product.id) : false
   const cartItem = product ? getCartItem(product.id) : null
   const orders = getAllOrders()
-
-  useEffect(() => {
-    let mounted = true
-    loadAppCustomization()
-      .then((settings) => {
-        if (mounted) setAppCustomization(settings)
-      })
-      .catch(() => {})
-    return () => {
-      mounted = false
-    }
-  }, [])
-
-  const openMealSelection = () => {
-    if (!product) return
-
-    const params = new URLSearchParams()
-    if (product.name) params.set("dish", product.name)
-    if (product.id) params.set("dishId", String(product.id))
-    if (product.restaurant) params.set("restaurant", product.restaurant)
-    if (product.category) params.set("category", product.category)
-    if (Number.isFinite(Number(product.price))) params.set("price", String(product.price))
-
-    navigate(
-      {
-        pathname: "/food/user/choose-meal",
-        search: params.toString() ? `?${params.toString()}` : "",
-      },
-      { state: { dish: { ...product, itemId: product.id, restaurantName: product.restaurant } } },
-    )
-  }
 
   // Get order history for this product
   const orderHistory = useMemo(() => {
@@ -166,11 +133,6 @@ export default function ProductDetail() {
 
   const handleAddToCart = () => {
     if (product) {
-      if (appCustomization.normalOrderFlowEnabled === false) {
-        openMealSelection()
-        return
-      }
-
       for (let i = 0; i < quantity; i++) {
         const result = addToCart(product)
         if (result?.ok === false) {
@@ -332,7 +294,7 @@ export default function ProductDetail() {
 
           {/* Rating Badge - Top Right */}
           <div className="absolute top-4 right-4 z-10">
-            <Badge className="bg-[#7e3866] text-white shadow-lg">
+            <Badge className="bg-primary text-white shadow-lg">
               <Star className="h-3 w-3 fill-white text-white mr-1" />
               {averageRating}
             </Badge>
@@ -366,7 +328,7 @@ export default function ProductDetail() {
                 </div>
               </div>
               <div className="flex-shrink-0 text-right">
-                <div className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-extrabold text-[#7e3866]">
+                <div className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-extrabold text-primary">
                   ₹{(product.price * 83).toFixed(0)}
                 </div>
                 <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mt-1">per serving</p>
@@ -382,7 +344,7 @@ export default function ProductDetail() {
             <div className="space-y-4">
               {/* Breadcrumb */}
               <div className="flex items-center gap-2 text-xs sm:text-sm text-muted-foreground flex-wrap">
-                <Link to="/user" className="hover:text-[#7e3866] transition-colors">Home</Link>
+                <Link to="/user" className="hover:text-primary transition-colors">Home</Link>
                 <span>/</span>
                 <span className="text-foreground font-medium truncate">{restaurant?.name || "Restaurant"}</span>
                 <span>/</span>
@@ -398,7 +360,7 @@ export default function ProductDetail() {
               <h2 className="text-xl font-bold">Order</h2>
               {inCart ? (
                 <div className="flex items-center gap-4">
-                  <div className="flex items-center gap-2 border border-[#7e3866] rounded-lg">
+                  <div className="flex items-center gap-2 border border-primary rounded-lg">
                     <Button
                       variant="ghost"
                       size="icon"
@@ -421,7 +383,7 @@ export default function ProductDetail() {
                   </div>
                   <div className="flex-1">
                     <p className="text-sm text-muted-foreground">In cart</p>
-                    <p className="text-lg font-bold text-[#7e3866]">
+                    <p className="text-lg font-bold text-primary">
                       ₹{(product.price * 83 * (cartItem?.quantity || 0)).toFixed(0)}
                     </p>
                   </div>
@@ -454,7 +416,7 @@ export default function ProductDetail() {
                   >
                     <Button
                       onClick={handleAddToCart}
-                      className="bg-[#7e3866] hover:opacity-90 text-white"
+                      className="bg-primary hover:opacity-90 text-white"
                     >
                       <ShoppingBag className="h-5 w-5 mr-2" />
                       Add to Cart - ₹{(product.price * 83 * quantity).toFixed(0)}
@@ -476,7 +438,7 @@ export default function ProductDetail() {
                     </h3>
                     <p className="text-sm md:text-base text-muted-foreground">{restaurant.cuisine}</p>
                   </div>
-                  <Badge className="bg-[#7e3866] text-white text-sm md:text-base">{restaurant.priceRange}</Badge>
+                  <Badge className="bg-primary text-white text-sm md:text-base">{restaurant.priceRange}</Badge>
                 </div>
                 <div className="flex items-center gap-4 md:gap-6 flex-wrap text-sm md:text-base">
                   <div className="flex items-center gap-1.5">
@@ -569,7 +531,7 @@ export default function ProductDetail() {
                 {!showReviewForm && (
                   <Button
                     onClick={() => setShowReviewForm(true)}
-                    className="bg-[#7e3866] hover:opacity-90 text-white"
+                    className="bg-primary hover:opacity-90 text-white"
                   >
                     <MessageCircle className="h-4 w-4 mr-2" />
                     Write a Review
@@ -624,7 +586,7 @@ export default function ProductDetail() {
                       </Button>
                       <Button
                         type="submit"
-                        className="flex-1 bg-gradient-to-r bg-[#7e3866] hover:from-yellow-600 hover:to-#55254b"
+                        className="flex-1 bg-gradient-to-r bg-primary hover:from-yellow-600 hover:to-#55254b"
                       >
                         <Send className="h-4 w-4 mr-2" />
                         Submit Review
@@ -678,17 +640,17 @@ export default function ProductDetail() {
                               <button
                                 onClick={() => handleHelpful(review.id)}
                                 className={`flex items-center gap-2 text-sm transition-colors ${helpfulVotes.has(review.id)
-                                    ? "text-[#7e3866] font-semibold"
+                                    ? "text-primary font-semibold"
                                     : "text-muted-foreground hover:text-foreground"
                                   }`}
                               >
-                                <ThumbsUp className={`h-4 w-4 ${helpfulVotes.has(review.id) ? "fill-[#7e3866]" : ""}`} />
+                                <ThumbsUp className={`h-4 w-4 ${helpfulVotes.has(review.id) ? "fill-primary" : ""}`} />
                                 <span>Helpful ({review.helpful})</span>
                               </button>
                               <button
                                 onClick={() => handleReplyClick(review.id)}
                                 className={`flex items-center gap-2 text-sm transition-colors ${replyStates[review.id]
-                                    ? "text-[#7e3866] font-semibold"
+                                    ? "text-primary font-semibold"
                                     : "text-muted-foreground hover:text-foreground"
                                   }`}
                               >
@@ -723,7 +685,7 @@ export default function ProductDetail() {
                                       <Button
                                         type="button"
                                         size="sm"
-                                        className="bg-[#7e3866] hover:opacity-90 text-white"
+                                        className="bg-primary hover:opacity-90 text-white"
                                         onClick={() => {
                                           const textarea = document.getElementById(`reply-${review.id}`)
                                           if (textarea) {

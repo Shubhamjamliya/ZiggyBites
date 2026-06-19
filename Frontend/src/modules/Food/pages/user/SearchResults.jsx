@@ -33,7 +33,7 @@ export default function SearchResults() {
   const query = searchParams.get("q") || ""
   const navigate = useNavigate()
   const { location } = useLocation()
-  const { zoneId, isOutOfService } = useZone(location)
+  const { zoneId, isOutOfService, zoneStatus } = useZone(location)
   const [searchQuery, setSearchQuery] = useState(query)
   const [selectedCategory, setSelectedCategory] = useState('all')
   const [activeFilters, setActiveFilters] = useState(new Set())
@@ -62,10 +62,15 @@ export default function SearchResults() {
 
   // Fetch categories from admin API
   useEffect(() => {
+    if (zoneStatus === 'loading') return;
+    let isSubscribed = true;
+
     const fetchCategories = async () => {
       try {
         setLoadingCategories(true)
         const response = await adminAPI.getPublicCategories(zoneId ? { zoneId } : {})
+
+        if (!isSubscribed) return;
 
         if (response.data && response.data.success && response.data.data && response.data.data.categories) {
           const categoriesArray = response.data.data.categories
@@ -101,12 +106,18 @@ export default function SearchResults() {
         debugError('Error fetching categories:', error)
         // Keep default "All" category on error
       } finally {
-        setLoadingCategories(false)
+        if (isSubscribed) {
+          setLoadingCategories(false)
+        }
       }
     }
 
     fetchCategories()
-  }, [zoneId])
+
+    return () => {
+      isSubscribed = false;
+    }
+  }, [zoneId, zoneStatus])
 
   // Helper function to check if menu has dishes matching category keywords
   const checkCategoryInMenu = (menu, categoryId) => {
@@ -180,6 +191,9 @@ export default function SearchResults() {
 
   // Fetch restaurants from API
   useEffect(() => {
+    if (zoneStatus === 'loading') return;
+    let isSubscribed = true;
+
     const fetchRestaurants = async () => {
       try {
         setLoadingRestaurants(true)
@@ -190,6 +204,8 @@ export default function SearchResults() {
           params.zoneId = zoneId
         }
         const response = await restaurantAPI.getRestaurants(params)
+
+        if (!isSubscribed) return;
 
         debugLog('?? Full API Response:', response)
         debugLog('?? Response Data:', response?.data)
@@ -480,12 +496,18 @@ export default function SearchResults() {
         debugError('? Error response:', error.response?.data)
         setRestaurantsData([])
       } finally {
-        setLoadingRestaurants(false)
+        if (isSubscribed) {
+          setLoadingRestaurants(false)
+        }
       }
     }
 
     fetchRestaurants()
-  }, [zoneId, isOutOfService])
+
+    return () => {
+      isSubscribed = false;
+    }
+  }, [zoneId, isOutOfService, zoneStatus])
 
   // Update search query when URL changes
   useEffect(() => {
@@ -808,15 +830,15 @@ export default function SearchResults() {
                 <button
                   key={cat.id}
                   onClick={() => handleCategorySelect(cat.id)}
-                  className={`flex flex-col items-center gap-1.5 flex-shrink-0 pb-2 transition-all ${isSelected ? 'border-b-2 border-[#7e3866]' : ''
+                  className={`flex flex-col items-center gap-1.5 flex-shrink-0 pb-2 transition-all ${isSelected ? 'border-b-2 border-primary' : ''
                     }`}
                 >
                   {isAllCategory ? (
-                    <div className={`w-16 h-16 rounded-full border-2 transition-all flex items-center justify-center ${isSelected ? 'border-[#7e3866] dark:border-[#7e3866] shadow-lg bg-[#F9F9FB] dark:bg-[#7e3866]/20' : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-[#222222]'}`}>
-                      <Grid2x2 className={`h-6 w-6 ${isSelected ? 'text-[#7e3866]' : 'text-gray-500 dark:text-gray-400'}`} />
+                    <div className={`w-16 h-16 rounded-full border-2 transition-all flex items-center justify-center ${isSelected ? 'border-primary dark:border-primary shadow-lg bg-[#F9F9FB] dark:bg-primary/20' : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-[#222222]'}`}>
+                      <Grid2x2 className={`h-6 w-6 ${isSelected ? 'text-primary' : 'text-gray-500 dark:text-gray-400'}`} />
                     </div>
                   ) : cat.image ? (
-                    <div className={`w-16 h-16 rounded-full overflow-hidden border-2 transition-all ${isSelected ? 'border-[#7e3866] dark:border-[#7e3866] shadow-lg' : 'border-transparent'
+                    <div className={`w-16 h-16 rounded-full overflow-hidden border-2 transition-all ${isSelected ? 'border-primary dark:border-primary shadow-lg' : 'border-transparent'
                       }`}>
                       <img
                         src={cat.image}
@@ -825,12 +847,12 @@ export default function SearchResults() {
                       />
                     </div>
                   ) : (
-                    <div className={`w-16 h-16 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center border-2 transition-all ${isSelected ? 'border-[#7e3866] dark:border-[#7e3866] shadow-lg bg-[#F9F9FB] dark:bg-[#7e3866]/20' : 'border-transparent'
+                    <div className={`w-16 h-16 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center border-2 transition-all ${isSelected ? 'border-primary dark:border-primary shadow-lg bg-[#F9F9FB] dark:bg-primary/20' : 'border-transparent'
                       }`}>
                       <span className="text-xl">???</span>
                     </div>
                   )}
-                  <span className={`text-xs font-medium whitespace-nowrap ${isSelected ? 'text-[#7e3866] dark:text-[#7e3866]' : 'text-gray-600 dark:text-gray-400'
+                  <span className={`text-xs font-medium whitespace-nowrap ${isSelected ? 'text-primary dark:text-primary' : 'text-gray-600 dark:text-gray-400'
                     }`}>
                     {cat.name}
                   </span>
@@ -866,15 +888,15 @@ export default function SearchResults() {
                   variant="outline"
                   onClick={() => toggleFilter(filter.id)}
                   className={`h-9 px-3 rounded-lg flex items-center gap-1.5 whitespace-nowrap flex-shrink-0 transition-all font-medium ${isActive
-                    ? 'bg-[#7e3866] text-white border-[#7e3866] hover:bg-[#55254b] dark:bg-[#7e3866] dark:hover:bg-[#55254b]'
+                    ? 'bg-primary text-white border-primary hover:bg-secondary dark:bg-primary dark:hover:bg-secondary'
                     : 'bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300'
                     }`}
                 >
                   {filter.hasIcon && filter.id === 'price-match' && (
-                    <span className={`text-xs ${isActive ? 'text-white' : 'text-[#7e3866] dark:text-[#7e3866]'}`}>?</span>
+                    <span className={`text-xs ${isActive ? 'text-white' : 'text-primary dark:text-primary'}`}>?</span>
                   )}
                   {filter.hasIcon && filter.id === 'flat-50-off' && (
-                    <span className={`text-xs ${isActive ? 'text-white' : 'text-[#7e3866] dark:text-[#7e3866]'}`}>?</span>
+                    <span className={`text-xs ${isActive ? 'text-white' : 'text-primary dark:text-primary'}`}>?</span>
                   )}
                   <span className={`text-sm font-bold ${isActive ? 'text-white' : 'text-black dark:text-white'}`}>{filter.label}</span>
                 </Button>
@@ -924,7 +946,7 @@ export default function SearchResults() {
                         )}
                         {/* Offer Badge - Only show if offer exists */}
                         {restaurant.offer && (
-                          <div className="absolute top-1.5 left-1.5 bg-gradient-to-r from-[#7e3866] to-[#55254b] text-white text-[10px] font-semibold px-1.5 py-0.5 rounded">
+                          <div className="absolute top-1.5 left-1.5 bg-gradient-to-r from-primary to-secondary text-white text-[10px] font-semibold px-1.5 py-0.5 rounded">
                             {restaurant.offer}
                           </div>
                         )}
@@ -999,13 +1021,13 @@ export default function SearchResults() {
                         if (selectedCategory && selectedCategory !== 'all' && restaurant.menu) {
                           const categoryDish = getCategoryDishFromMenu(restaurant.menu, selectedCategory)
                           if (categoryDish && restaurant.featuredPrice) {
-                            displayText = `${categoryDish} • ₹${restaurant.featuredPrice}`
+                            displayText = `${categoryDish} • ₹${Number(restaurant.featuredPrice).toFixed(2)}`
                           }
                         }
 
                         // Fallback to featured dish
                         if (!displayText && restaurant.featuredDish && restaurant.featuredPrice) {
-                          displayText = `${restaurant.featuredDish} • ₹${restaurant.featuredPrice}`
+                          displayText = `${restaurant.featuredDish} • ₹${Number(restaurant.featuredPrice).toFixed(2)}`
                         }
 
                         return displayText ? (
@@ -1077,7 +1099,7 @@ export default function SearchResults() {
                       {/* Offer Badge */}
                       {restaurant.offer && (
                         <div className="flex items-center gap-2 text-sm lg:text-base mt-auto">
-                          <BadgePercent className="h-4 w-4 lg:h-5 lg:w-5 text-[#7e3866] dark:text-[#7e3866]" strokeWidth={2} />
+                          <BadgePercent className="h-4 w-4 lg:h-5 lg:w-5 text-primary dark:text-primary" strokeWidth={2} />
                           <span className="text-gray-700 dark:text-gray-300 font-medium">{restaurant.offer}</span>
                         </div>
                       )}

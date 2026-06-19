@@ -89,35 +89,59 @@ export const searchUnified = async (query = {}, options = {}) => {
         });
 
         // B. Search by Food Item Name
-        const foodFilters = { approvalStatus: 'approved' };
+        const validRestaurants = await FoodRestaurant.find(restaurantFilter).select('_id').lean();
+        const validRestaurantIds = validRestaurants.map(r => r._id);
+
+        const foodFilters = { 
+            approvalStatus: 'approved',
+            restaurantId: { $in: validRestaurantIds }
+        };
+        if (categoryId && mongoose.Types.ObjectId.isValid(categoryId)) {
+            foodFilters.categoryId = new mongoose.Types.ObjectId(categoryId);
+        }
         if (isVeg === 'true') foodFilters.foodType = 'Veg';
         
         const matchedFoods = await FoodItem.find({
             ...foodFilters,
             name: { $regex: regex }
-        }).limit(limit * 2).lean();
+        }).limit(limit * 5).lean();
 
         const foodRestaurantIds = matchedFoods.map(f => f.restaurantId.toString());
         
         if (foodRestaurantIds.length > 0) {
-            const unmatchedIds = foodRestaurantIds.filter(id => !restaurantIds.has(id));
-            if (unmatchedIds.length > 0) {
-                const rsForFoods = await FoodRestaurant.find({
-                    ...restaurantFilter,
-                    _id: { $in: unmatchedIds.map(id => new mongoose.Types.ObjectId(id)) }
-                }).lean();
+            const uniqueRestIds = [...new Set(foodRestaurantIds)];
+            const rsForFoods = await FoodRestaurant.find({
+                ...restaurantFilter,
+                _id: { $in: uniqueRestIds.map(id => new mongoose.Types.ObjectId(id)) }
+            }).lean();
 
-                rsForFoods.forEach(r => {
-                    restaurantIds.add(r._id.toString());
-                    restaurantDetailsMap.set(r._id.toString(), { 
-                        ...r, 
+            const rsMap = new Map();
+            rsForFoods.forEach(r => {
+                restaurantIds.add(r._id.toString());
+                rsMap.set(r._id.toString(), r);
+                // Ensure restaurant is in results if not already
+                if (!restaurantDetailsMap.has(r._id.toString())) {
+                    restaurantDetailsMap.set(r._id.toString(), { ...r, matchType: 'restaurant' });
+                }
+            });
+
+            // Add every matched food as a separate result
+            matchedFoods.forEach(f => {
+                const rest = rsMap.get(f.restaurantId.toString());
+                if (rest) {
+                    restaurantDetailsMap.set('dish_' + f._id.toString(), { 
+                        ...rest, 
+                        _id: new mongoose.Types.ObjectId(), // Virtual ID for the result item
+                        originalRestaurantId: rest._id,
                         matchType: 'food',
-                        matchedDish: matchedFoods.find(f => f.restaurantId.toString() === r._id.toString())?.name,
-                        matchedDishImage: matchedFoods.find(f => f.restaurantId.toString() === r._id.toString())?.image,
-                        matchedDishId: matchedFoods.find(f => f.restaurantId.toString() === r._id.toString())?._id
+                        matchedDish: f.name,
+                        matchedDishImage: f.image,
+                        matchedDishId: f._id,
+                        matchedDishPrice: f.price,
+                        matchedDishDescription: f.description
                     });
-                });
-            }
+                }
+            });
         }
     } else {
         // No search text -> List all restaurants matching filters (category/zone)
@@ -128,8 +152,38 @@ export const searchUnified = async (query = {}, options = {}) => {
             
         allMatching.forEach(r => {
             restaurantIds.add(r._id.toString());
-            restaurantDetailsMap.set(r._id.toString(), r);
+            restaurantDetailsMap.set(r._id.toString(), { ...r, matchType: 'restaurant' });
         });
+
+        // If category is selected, let's ALSO fetch and append ALL the dishes from that category
+        if (categoryId && mongoose.Types.ObjectId.isValid(categoryId)) {
+            const validRestaurantIds = allMatching.map(r => r._id);
+            const foodFilters = { 
+                approvalStatus: 'approved', 
+                categoryId: new mongoose.Types.ObjectId(categoryId),
+                restaurantId: { $in: validRestaurantIds }
+            };
+            if (isVeg === 'true') foodFilters.foodType = 'Veg';
+            
+            const matchedFoods = await FoodItem.find(foodFilters).limit(limit * 5).lean();
+            
+            matchedFoods.forEach(f => {
+                const rest = allMatching.find(r => r._id.toString() === f.restaurantId.toString());
+                if (rest) {
+                    restaurantDetailsMap.set('dish_' + f._id.toString(), {
+                        ...rest,
+                        _id: new mongoose.Types.ObjectId(), // Virtual ID for the result item
+                        originalRestaurantId: rest._id,
+                        matchType: 'food',
+                        matchedDish: f.name,
+                        matchedDishImage: f.image,
+                        matchedDishId: f._id,
+                        matchedDishPrice: f.price,
+                        matchedDishDescription: f.description
+                    });
+                }
+            });
+        }
     }
 
     // 4. Final Result Formatting
@@ -151,6 +205,12 @@ export const searchUnified = async (query = {}, options = {}) => {
             }
         });
         results.sort((a, b) => (a.distanceScore || 999) - (b.distanceScore || 999));
+        
+        // Filter out results that are too far away
+        const maxRadius = parseFloat(radiusKm) || 20;
+        if (maxRadius > 0) {
+            results = results.filter(res => (res.distanceScore || 999) <= maxRadius);
+        }
     }
 
     // ... (rest of logic up to result formation)
@@ -186,19 +246,25 @@ export const getAdminCategories = async (query = {}) => {
     const filter = { 
         isActive: true, 
         isApproved: true,
-        $or: [
-            { restaurantId: { $exists: false } },
-            { restaurantId: null },
-            { restaurantId: { $eq: undefined } }
+        $and: [
+            {
+                $or: [
+                    { restaurantId: { $exists: false } },
+                    { restaurantId: null },
+                    { restaurantId: { $eq: undefined } }
+                ]
+            }
         ]
     };
 
     if (query.zoneId && mongoose.Types.ObjectId.isValid(query.zoneId)) {
-        filter.$or = [
-            { zoneId: new mongoose.Types.ObjectId(query.zoneId) },
-            { zoneId: { $exists: false } },
-            { zoneId: null }
-        ];
+        filter.$and.push({
+            $or: [
+                { zoneId: new mongoose.Types.ObjectId(query.zoneId) },
+                { zoneId: { $exists: false } },
+                { zoneId: null }
+            ]
+        });
     }
 
     const categories = await FoodCategory.find(filter).sort({ sortOrder: 1, name: 1 }).lean();

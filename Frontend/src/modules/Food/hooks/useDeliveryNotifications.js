@@ -1,10 +1,12 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, useContext } from 'react';
 import io from 'socket.io-client';
 import { API_BASE_URL } from '@food/api/config';
 import { deliveryAPI } from '@food/api';
-const alertSound = '/alert.mp3';
-const originalSound = '/original.mp3';
+import { toast } from 'sonner';
+import alertSound from '@food/assets/audio/alert.mp3';
+import originalSound from '@food/assets/audio/original.mp3';
 import { dispatchNotificationInboxRefresh } from '@food/hooks/useNotificationInbox';
+import { DeliveryNotificationContext } from '../context/DeliveryNotificationContext';
 
 const shouldLogDeliverySocket = () => {
   if (typeof window === 'undefined') return import.meta.env.DEV;
@@ -52,6 +54,17 @@ const safeReadJson = (key) => {
   } catch {
     return null;
   }
+};
+
+const isRiderOnline = () => {
+  try {
+    const raw = localStorage.getItem('delivery-v2-online-pref');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      return !!parsed?.state?.isOnline;
+    }
+  } catch (e) {}
+  return false;
 };
 
 const decodeJwtPayload = (token) => {
@@ -168,6 +181,9 @@ const triggerWebViewNativeNotification = async (orderData = {}) => {
 
 
 export const useDeliveryNotifications = () => {
+  const context = useContext(DeliveryNotificationContext);
+  if (context) return context;
+  
   // CRITICAL: All hooks must be called unconditionally and in the same order every render
   // Order: useRef -> useState -> useEffect -> useCallback
   
@@ -188,6 +204,7 @@ export const useDeliveryNotifications = () => {
   const [orderStatusUpdate, setOrderStatusUpdate] = useState(null);
   const [isConnected, setIsConnected] = useState(false);
   const [deliveryPartnerId, setDeliveryPartnerId] = useState(null);
+  const [autoKilledOrder, setAutoKilledOrder] = useState(null);
   const [claimedOrderId, setClaimedOrderId] = useState(null); // set when another partner claims an order
   const [adminNotification, setAdminNotification] = useState(null);
   const joinedDeliveryRoomRef = useRef(null);
@@ -267,11 +284,8 @@ export const useDeliveryNotifications = () => {
         return;
       }
 
-      // Get current selected sound preference from localStorage
-      const selectedSound = localStorage.getItem('delivery_alert_sound') || 'zomato_tone';
-      const soundFile = selectedSound === 'original'
-        ? resolveAudioSource(originalSound, 'delivery-original')
-        : resolveAudioSource(alertSound, 'delivery-alert');
+      // Always use original sound for delivery
+      const soundFile = resolveAudioSource(originalSound, 'delivery-original');
       
       // Update audio source if preference changed or initialize if not exists
       if (audioRef.current) {
@@ -282,7 +296,7 @@ export const useDeliveryNotifications = () => {
           audioRef.current.pause();
           audioRef.current.src = newSrc;
           audioRef.current.load();
-          debugLog('?? Audio source updated to:', selectedSound === 'original' ? 'Original' : 'Zomato Tone');
+          debugLog('?? Audio source updated to Original');
         }
       } else {
         // Initialize audio if not exists
@@ -291,7 +305,7 @@ export const useDeliveryNotifications = () => {
         audioRef.current.preload = 'auto';
         audioRef.current.volume = 0.9;
         audioRef.current.load();
-        debugLog('?? Audio initialized with:', selectedSound === 'original' ? 'Original' : 'Zomato Tone', 'Source:', soundFile);
+        debugLog('?? Audio initialized with Original Sound', 'Source:', soundFile);
       }
       
       if (audioRef.current) {
@@ -335,7 +349,7 @@ export const useDeliveryNotifications = () => {
             requireInteraction: true,
             silent: false,
             vibrate: [200, 100, 200, 100, 300],
-            icon: '/favicon.ico',
+            icon: '/logo.png',
             data: notificationOptions.data,
           });
           return;
@@ -347,7 +361,7 @@ export const useDeliveryNotifications = () => {
         tag: notificationOptions.tag,
         requireInteraction: true,
         silent: false,
-        icon: '/favicon.ico',
+        icon: '/logo.png',
         data: notificationOptions.data,
       });
     } catch (error) {
@@ -412,7 +426,7 @@ export const useDeliveryNotifications = () => {
         const dispatchStatus = order?.dispatch?.status;
         return (
           ['unassigned', 'assigned'].includes(dispatchStatus) &&
-          ['preparing', 'ready_for_pickup'].includes(order?.orderStatus)
+          ['confirmed', 'preparing', 'ready_for_pickup'].includes(order?.orderStatus)
         );
       });
 
@@ -523,7 +537,10 @@ export const useDeliveryNotifications = () => {
   useEffect(() => {
     const onVisibilityChange = () => {
       if (typeof document === 'undefined') return;
-      if (document.visibilityState !== 'hidden') return;
+      if (document.visibilityState !== 'hidden') {
+        void recoverDeliveryState();
+        return;
+      }
       if (!activeOrderRef.current) return;
 
       playNotificationSound(activeOrderRef.current);
@@ -534,17 +551,14 @@ export const useDeliveryNotifications = () => {
     return () => {
       document.removeEventListener('visibilitychange', onVisibilityChange);
     };
-  }, [playNotificationSound, showBackgroundOrderNotification]);
+  }, [playNotificationSound, showBackgroundOrderNotification, recoverDeliveryState]);
 
   // Track user interaction for autoplay policy
   useEffect(() => {
     const handleUserInteraction = async () => {
       userInteractedRef.current = true;
 
-      const selectedSound = localStorage.getItem('delivery_alert_sound') || 'zomato_tone';
-      const soundFile = selectedSound === 'original'
-        ? resolveAudioSource(originalSound, 'delivery-original')
-        : resolveAudioSource(alertSound, 'delivery-alert');
+      const soundFile = resolveAudioSource(originalSound, 'delivery-original');
 
       if (!audioRef.current) {
         audioRef.current = new Audio(soundFile);
@@ -558,10 +572,7 @@ export const useDeliveryNotifications = () => {
           audioRef.current.muted = true;
           // Ensure src is set even if it was just initialized
           if (!audioRef.current.src || audioRef.current.src === window.location.href) {
-             const selectedSound = localStorage.getItem('delivery_alert_sound') || 'zomato_tone';
-             const soundFile = selectedSound === 'original'
-                ? resolveAudioSource(originalSound)
-                : resolveAudioSource(alertSound);
+             const soundFile = resolveAudioSource(originalSound);
              audioRef.current.src = soundFile;
           }
           audioRef.current.load();
@@ -605,17 +616,14 @@ export const useDeliveryNotifications = () => {
   
   // Initialize audio on mount - use selected preference from localStorage
   useEffect(() => {
-    // Get selected alert sound preference from localStorage
-    const selectedSound = localStorage.getItem('delivery_alert_sound') || 'zomato_tone';
-    const soundFile = selectedSound === 'original'
-      ? resolveAudioSource(originalSound, 'delivery-original')
-      : resolveAudioSource(alertSound, 'delivery-alert');
+    // Always use original sound for delivery
+    const soundFile = resolveAudioSource(originalSound, 'delivery-original');
     
     if (!audioRef.current) {
       audioRef.current = new Audio(soundFile);
       audioRef.current.preload = 'auto';
       audioRef.current.volume = 0.7;
-      debugLog('?? Audio initialized with:', selectedSound === 'original' ? 'Original' : 'Zomato Tone');
+      debugLog('?? Audio initialized with Original Sound');
     } else {
       // Update audio source if preference changed
       const currentSrc = audioRef.current.src;
@@ -624,7 +632,7 @@ export const useDeliveryNotifications = () => {
         audioRef.current.pause();
         audioRef.current.src = newSrc;
         audioRef.current.load();
-        debugLog('?? Audio updated to:', selectedSound === 'original' ? 'Original' : 'Zomato Tone');
+        debugLog('?? Audio updated to Original');
       }
     }
     
@@ -857,6 +865,10 @@ export const useDeliveryNotifications = () => {
         orderId: orderData?.orderId || orderData?.orderMongoId || orderData?._id,
         dispatchStatus: orderData?.dispatch?.status,
       });
+      if (!isRiderOnline()) {
+        debugLog('?? Ignored new_order - rider is offline');
+        return;
+      }
       setNewOrder(orderData);
       handleIncomingOrderAlert(orderData);
     });
@@ -868,6 +880,10 @@ export const useDeliveryNotifications = () => {
         phase: orderData?.phase || 'unknown',
         dispatchStatus: orderData?.dispatch?.status,
       });
+      if (!isRiderOnline()) {
+        debugLog('?? Ignored new_order_available - rider is offline');
+        return;
+      }
       // Treat it the same as new_order for now - delivery boy can accept it
       setNewOrder(orderData);
       handleIncomingOrderAlert(orderData);
@@ -877,6 +893,10 @@ export const useDeliveryNotifications = () => {
       debugLog('play_notification_sound received', {
         orderId: data?.orderId || data?.orderMongoId || data?.order_id,
       });
+      if (!isRiderOnline()) {
+        debugLog('?? Ignored play_notification_sound - rider is offline');
+        return;
+      }
       const normalizedData = {
         orderId: data?.orderId || data?.order_id,
         orderMongoId: data?.orderMongoId || data?.order_mongo_id,
@@ -902,39 +922,18 @@ export const useDeliveryNotifications = () => {
 
     socketRef.current.on('order_status_update', (statusData) => {
       debugLog('?? Delivery order status update received via socket:', statusData);
-      const payloadKey = getOrderAlertKey(statusData);
-      const activeKey = getOrderAlertKey(activeOrderRef.current || {});
-      const payloadStatus = String(
-        statusData?.orderStatus ||
-        statusData?.status ||
-        statusData?.dispatchStatus ||
-        statusData?.dispatch?.status ||
-        '',
-      ).toLowerCase().trim();
-      const isPendingStatus = ['confirmed', 'preparing', 'ready_for_pickup'].includes(payloadStatus);
-      const shouldClearAlert =
-        payloadKey &&
-        activeKey &&
-        payloadKey === activeKey &&
-        (
-          !isPendingStatus ||
-          payloadStatus === 'accepted' ||
-          payloadStatus === 'picked_up' ||
-          payloadStatus === 'reached_drop' ||
-          payloadStatus === 'delivered'
-        );
-
-      if (shouldClearAlert) {
-        stopAlertLoop();
-        activeOrderRef.current = null;
-        setNewOrder(null);
-      }
-
       setOrderStatusUpdate(statusData || null);
     });
 
     socketRef.current.on('order_cancelled', (statusData) => {
       debugLog('?? Delivery order cancelled event received via socket:', statusData);
+      stopAlertLoop();
+      activeOrderRef.current = null;
+      setNewOrder(null);
+      
+      const cancelledId = statusData?.orderId || statusData?.orderMongoId || statusData?._id;
+      if (cancelledId) setClaimedOrderId({ orderId: cancelledId, claimedBy: 'cancelled' });
+      
       setOrderStatusUpdate({
         ...(statusData || {}),
         status: 'cancelled'
@@ -947,6 +946,22 @@ export const useDeliveryNotifications = () => {
         ...(statusData || {}),
         status: 'deleted'
       });
+    });
+
+    socketRef.current.on('order_auto_killed', (data) => {
+      debugLog('?? Delivery order auto-killed event received via socket:', data);
+      stopAlertLoop();
+      activeOrderRef.current = null;
+      setNewOrder(null);
+      
+      const cancelledId = data?.orderId || data?.orderMongoId || data?._id;
+      if (cancelledId) setClaimedOrderId({ orderId: cancelledId, claimedBy: 'cancelled' });
+      
+      setOrderStatusUpdate({
+        ...(data || {}),
+        status: 'cancelled'
+      });
+      setAutoKilledOrder(data);
     });
 
     socketRef.current.on('order_reassigned_elsewhere', (data) => {
@@ -964,13 +979,33 @@ export const useDeliveryNotifications = () => {
       activeOrderRef.current = null;
       setNewOrder(null);
       const claimedId = data?.orderId || data?.orderMongoId || data?.order_id;
-      if (claimedId) setClaimedOrderId(claimedId);
+      if (claimedId) setClaimedOrderId({ orderId: claimedId, claimedBy: data?.claimedBy });
     });
 
     socketRef.current.on('admin_notification', (payload) => {
       debugLog('Admin broadcast received via socket', payload);
       setAdminNotification(payload);
       dispatchNotificationInboxRefresh();
+    });
+
+    socketRef.current.on('admin_force_status', async (payload) => {
+      debugLog('Admin force status received via socket', payload);
+      try {
+        const { useDeliveryStore } = await import('@/modules/DeliveryV2/store/useDeliveryStore');
+        const isOnline = payload?.status === 'online';
+        useDeliveryStore.getState().setOnline(isOnline);
+        
+        if (isOnline) {
+            toast.success(payload?.message || 'You have been marked online by the Admin.', { duration: 5000 });
+        } else {
+            toast.error(payload?.message || 'You have been marked offline by the Admin.', { duration: 8000 });
+            stopAlertLoop();
+            activeOrderRef.current = null;
+            setNewOrder(null);
+        }
+      } catch (err) {
+        debugError('Error handling admin_force_status:', err);
+      }
     });
 
     // Auth change/refresh listeners
@@ -1086,6 +1121,8 @@ export const useDeliveryNotifications = () => {
     clearAdminNotification,
     claimedOrderId,
     clearClaimedOrderId,
+    autoKilledOrder,
+    clearAutoKilledOrder: () => setAutoKilledOrder(null),
     isConnected,
     playNotificationSound,
     emitLocation

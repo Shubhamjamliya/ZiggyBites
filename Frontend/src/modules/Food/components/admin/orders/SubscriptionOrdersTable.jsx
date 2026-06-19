@@ -2,11 +2,9 @@ import { useState, useEffect, useMemo } from "react"
 import { Eye, Printer, ArrowUpDown } from "lucide-react"
 
 const getStatusColor = (status) => {
-  const normalized = String(status || "").toLowerCase()
-  if (normalized === "expired") return "bg-blue-100 text-blue-700"
-  if (normalized === "active") return "bg-emerald-100 text-emerald-700"
-  if (normalized.includes("pending")) return "bg-amber-100 text-amber-700"
-  if (normalized.includes("failed") || normalized.includes("cancel")) return "bg-rose-100 text-rose-700"
+  if (status === "Expired") return "bg-blue-100 text-blue-700"
+  if (status === "Active") return "bg-emerald-100 text-emerald-700"
+  if (status === "Pending") return "bg-amber-100 text-amber-700"
   return "bg-slate-100 text-slate-700"
 }
 
@@ -113,7 +111,7 @@ export default function SubscriptionOrdersTable({ orders, visibleColumns, onView
           <tbody className="bg-white divide-y divide-slate-100">
             {paginatedOrders.map((order, index) => (
               <tr 
-                key={order.id || order.subscriptionId} 
+                key={order.subscriptionId} 
                 className="hover:bg-slate-50 transition-colors"
               >
                 {visibleColumns.si && (
@@ -123,7 +121,7 @@ export default function SubscriptionOrdersTable({ orders, visibleColumns, onView
                 )}
                 {visibleColumns.subscriptionId && (
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="text-sm font-medium text-slate-900">{order.shortId || order.subscriptionId}</span>
+                    <span className="text-sm font-medium text-slate-900">{order.subscriptionId}</span>
                   </td>
                 )}
                 {visibleColumns.orderType && (
@@ -153,7 +151,7 @@ export default function SubscriptionOrdersTable({ orders, visibleColumns, onView
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center gap-2">
                       <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(order.status)}`}>
-                        {order.statusLabel || order.status}
+                        {order.status}
                       </span>
                     </div>
                     <div className="mt-2 space-y-0.5">

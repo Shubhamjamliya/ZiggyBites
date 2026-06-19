@@ -1,4 +1,4 @@
-import { appCustomizationAPI } from "@food/api"
+import { publicGetOnce } from "@food/api"
 
 export const DEFAULT_APP_CUSTOMIZATION = {
   normalOrderFlowEnabled: true,
@@ -39,8 +39,8 @@ export function applyAppTheme(settings = {}) {
 }
 
 export async function loadAppCustomization() {
-  const response = await appCustomizationAPI.getPublic()
-  const settings = response?.data?.data?.settings || {}
+  const response = await publicGetOnce("/food/app-customization/public")
+  const settings = response?.data?.data?.settings || response?.data?.data || response?.data || {}
   const normalized = {
     ...DEFAULT_APP_CUSTOMIZATION,
     ...settings,
@@ -61,3 +61,5 @@ export async function loadAppCustomization() {
   applyAppTheme(normalized)
   return normalized
 }
+
+

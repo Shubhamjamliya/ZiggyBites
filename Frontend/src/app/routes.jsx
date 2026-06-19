@@ -10,7 +10,19 @@ const FoodApp = lazy(() => import('../modules/Food/routes'))
 const AuthApp = lazy(() => import('../modules/auth/routes'))
 import ProtectedRoute from '@food/components/ProtectedRoute'
 
-const PageLoader = () => <AppShellSkeleton />
+const PageLoader = () => {
+  if (typeof window !== 'undefined') {
+    const path = window.location.pathname.toLowerCase()
+    if (
+      path.includes('/terms') ||
+      path.includes('/privacy') ||
+      path.includes('/support')
+    ) {
+      return null
+    }
+  }
+  return <AppShellSkeleton />
+}
 
 /**
  * FoodAppWrapper — Quick-spicy App. को /food prefix के साथ render करता है.
@@ -36,7 +48,6 @@ const RedirectToFood = () => {
   return <Navigate to={`/food${location.pathname}${location.search}`} replace />;
 };
 
-// const MasterLandingPage = lazy(() => import('./MasterLandingPage'))
 const AdminRouter = lazy(() => import('../modules/Food/components/admin/AdminRouter'))
 
 const AppRoutes = () => {
@@ -75,7 +86,7 @@ const AppRoutes = () => {
       {/* Global Admin Portal - AdminRouter handles its own protection for sub-routes */}
       <Route path="/admin/*" element={<AdminRouter />} />
 
-      {/* Handle root and other paths via FoodAppWrapper */}
+      {/* Root and other user-facing paths open the food user app. */}
       <Route path="/*" element={<FoodAppWrapper />} />
     </Routes>
   )

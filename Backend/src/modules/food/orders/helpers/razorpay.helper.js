@@ -36,51 +36,6 @@ export function createRazorpayOrder(amountPaise, currency = 'INR', receipt = '')
     });
 }
 
-export function createRazorpayPlan({
-    period = 'monthly',
-    interval = 1,
-    amountPaise,
-    currency = 'INR',
-    name,
-    description = '',
-    notes = {}
-}) {
-    const instance = getRazorpayInstance();
-    if (!instance) return Promise.reject(new Error('Razorpay not configured'));
-    return instance.plans.create({
-        period,
-        interval: Math.max(1, Math.round(Number(interval) || 1)),
-        item: {
-            name: name || 'Subscription Plan',
-            amount: Math.round(amountPaise),
-            currency,
-            description
-        },
-        notes
-    });
-}
-
-export function createRazorpaySubscription({
-    planId,
-    totalCount = 12,
-    quantity = 1,
-    customerNotify = true,
-    expireBy,
-    notes = {}
-}) {
-    const instance = getRazorpayInstance();
-    if (!instance) return Promise.reject(new Error('Razorpay not configured'));
-    const payload = {
-        plan_id: planId,
-        total_count: Math.max(1, Math.round(Number(totalCount) || 12)),
-        quantity: Math.max(1, Math.round(Number(quantity) || 1)),
-        customer_notify: Boolean(customerNotify),
-        notes
-    };
-    if (expireBy) payload.expire_by = expireBy;
-    return instance.subscriptions.create(payload);
-}
-
 export function createPaymentLink({ amountPaise, currency = 'INR', description, orderId, customerName, customerEmail, customerPhone }) {
     const instance = getRazorpayInstance();
     if (!instance) return Promise.reject(new Error('Razorpay not configured'));
@@ -101,20 +56,6 @@ export function verifyPaymentSignature(orderId, paymentId, signature) {
     const body = `${orderId}|${paymentId}`;
     const expected = crypto.createHmac('sha256', KEY_SECRET).update(body).digest('hex');
     return expected === signature;
-}
-
-export function verifySubscriptionSignature(paymentId, subscriptionId, signature) {
-    if (!KEY_SECRET) return false;
-    const body = `${paymentId}|${subscriptionId}`;
-    const expected = crypto.createHmac('sha256', KEY_SECRET).update(body).digest('hex');
-    return expected === signature;
-}
-
-export async function fetchRazorpaySubscription(subscriptionId) {
-    const instance = getRazorpayInstance();
-    if (!instance) throw new Error('Razorpay not configured');
-    if (!subscriptionId) throw new Error('subscriptionId is required');
-    return instance.subscriptions.fetch(String(subscriptionId));
 }
 
 /**

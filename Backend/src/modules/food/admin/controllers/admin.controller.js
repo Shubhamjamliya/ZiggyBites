@@ -9,6 +9,10 @@ import { validateDeliveryCommissionRuleDto, validateOptionalStatusDto, validateR
 import { validateFeeSettingsUpsertDto } from '../validators/feeSettings.validator.js';
 import { validateDeliveryEmergencyHelpUpsertDto } from '../validators/deliveryEmergencyHelp.validator.js';
 import { validateReferralSettingsUpsertDto } from '../validators/referralSettings.validator.js';
+import { topupUserWalletByAdmin } from '../../user/services/userWallet.service.js';
+import { invalidateCache } from '../../../../middleware/cache.js';
+import { FoodBusinessSettings } from '../models/businessSettings.model.js';
+import { sendRestaurantOnboardingEmail } from '../../../../utils/email.js';
 
 // ----- Customers / Users -----
 export async function getCustomers(req, res, next) {
@@ -44,6 +48,27 @@ export async function updateCustomerStatus(req, res, next) {
         const updated = await adminService.updateCustomerStatus(id, isActive);
         if (!updated) return res.status(404).json({ success: false, message: 'Customer not found' });
         res.status(200).json({ success: true, message: 'Customer status updated successfully', data: { user: updated, customer: updated } });
+    } catch (error) {
+        next(error);
+    }
+}
+
+export async function topupCustomerWallet(req, res, next) {
+    try {
+        const { id } = req.params;
+        const { amount, description } = req.body;
+        
+        if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({ success: false, message: 'Invalid customer id' });
+        }
+        if (!amount || amount <= 0) {
+            return res.status(400).json({ success: false, message: 'Invalid amount' });
+        }
+
+        const adminId = req.user ? req.user.id : null;
+        
+        const result = await topupUserWalletByAdmin(id, amount, adminId, description);
+        res.status(200).json({ success: true, message: 'Wallet topped up successfully', data: result });
     } catch (error) {
         next(error);
     }
@@ -401,6 +426,10 @@ export async function updateRestaurantById(req, res, next) {
         if (!updated) {
             return res.status(404).json({ success: false, message: 'Restaurant not found' });
         }
+        await invalidateCache('restaurants:*');
+        await invalidateCache('restaurant_detail:*');
+        await invalidateCache('restaurant_menu:*');
+        await invalidateCache('restaurant:*');
         res.status(200).json({ success: true, message: 'Restaurant updated successfully', data: { restaurant: updated } });
     } catch (error) {
         next(error);
@@ -1125,6 +1154,23 @@ export async function approveRestaurant(req, res, next) {
 export async function createRestaurant(req, res, next) {
     try {
         const restaurant = await adminService.createRestaurantByAdmin(req.body || {});
+
+        // Send onboarding email with T&C asynchronously
+        (async () => {
+            try {
+                const settings = await FoodBusinessSettings.findOne().lean();
+                const pdfUrl = settings?.termsAndConditionsPdf?.url || null;
+                const email = req.body?.ownerEmail || restaurant.ownerEmail;
+                const restaurantName = req.body?.restaurantName || restaurant.restaurantName;
+                
+                if (email) {
+                    await sendRestaurantOnboardingEmail(email, restaurantName, pdfUrl);
+                }
+            } catch (err) {
+                console.error("Error sending onboarding email from admin panel:", err);
+            }
+        })();
+
         res.status(201).json({
             success: true,
             message: 'Restaurant created successfully',
@@ -1347,6 +1393,75 @@ export async function rejectDeliveryPartner(req, res, next) {
     }
 }
 
+export async function deleteDeliveryPartner(req, res, next) {
+    try {
+        const partner = await adminService.deleteDeliveryPartner(req.params.id);
+        if (!partner) {
+            return res.status(404).json({
+                success: false,
+                message: 'Delivery partner not found'
+            });
+        }
+        res.status(200).json({
+            success: true,
+            message: 'Delivery partner deactivated successfully',
+            data: partner
+        });
+    } catch (error) {
+        next(error);
+    }
+}
+
+export async function getAvailableDeliveryPartners(req, res, next) {
+    try {
+        const data = await adminService.getAvailableDeliveryPartners(req.query);
+        res.status(200).json({
+            success: true,
+            message: 'Available delivery partners fetched successfully',
+            data
+        });
+    } catch (error) {
+        next(error);
+    }
+}
+
+export async function updateDeliveryPartnerAvailabilityAdmin(req, res, next) {
+    try {
+        const { id } = req.params;
+        const { status } = req.body;
+        const { FoodDeliveryPartner } = await import('../../delivery/models/deliveryPartner.model.js');
+        const partner = await FoodDeliveryPartner.findById(id);
+        if (!partner) {
+            return res.status(404).json({ success: false, message: 'Delivery partner not found' });
+        }
+        partner.availabilityStatus = status;
+        if (status === 'offline') {
+            partner.shiftStartPic = undefined;
+            partner.shiftStartTime = undefined;
+            partner.shiftStartAddress = undefined;
+        }
+        
+        // Force the partner status in real-time
+        try {
+            const { getIO } = await import('../../../../config/socket.js');
+            const io = getIO();
+            if (io) {
+                io.to(`delivery:${id}`).emit('admin_force_status', {
+                    status: status,
+                    message: `You have been marked ${status} by the Admin.`
+                });
+            }
+        } catch (err) {
+            console.error('Failed to emit admin_force_status socket event:', err);
+        }
+
+        await partner.save();
+        res.status(200).json({ success: true, message: 'Delivery partner availability updated', data: partner });
+    } catch (error) {
+        next(error);
+    }
+}
+
 // ----- Zones -----
 export async function getZones(req, res, next) {
     try {
@@ -1549,6 +1664,27 @@ export async function getExpiredFssaiNotifications(req, res, next) {
             message: 'Expired FSSAI notifications fetched successfully',
             data: { items }
         });
+    } catch (error) {
+        next(error);
+    }
+}
+
+export async function updateRestaurantZoneRank(req, res, next) {
+    try {
+        const { id } = req.params;
+        const { rank } = req.body;
+        const updated = await adminService.updateRestaurantZoneRank(id, rank);
+        await invalidateCache('restaurants:*');
+        res.status(200).json({ success: true, message: 'Restaurant zone rank updated successfully', data: { restaurant: updated } });
+    } catch (error) {
+        next(error);
+    }
+}
+
+export async function updateGlobalRestaurantCommissionSettings(req, res, next) {
+    try {
+        const data = await adminService.updateGlobalRestaurantCommissionSettings(req.body || {});
+        res.status(200).json({ success: true, message: 'Global commission settings updated successfully', data });
     } catch (error) {
         next(error);
     }

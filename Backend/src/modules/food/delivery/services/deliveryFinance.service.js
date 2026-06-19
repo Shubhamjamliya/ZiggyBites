@@ -26,40 +26,19 @@ export const getDeliveryPartnerWalletEnhanced = async (deliveryPartnerId) => {
     const partner = await FoodDeliveryPartner.findById(partnerId).lean();
     if (!partner) throw new ValidationError('Delivery partner not found');
 
-    const [cashLimitSettings, earningsAgg, cashCollectedAgg, cashDepositsAgg, bonusAgg, withdrawalAgg, withdrawalsList, depositList] = await Promise.all([
+    const [cashLimitSettings, earningsAgg, bonusAgg, withdrawalAgg, withdrawalsList, depositList] = await Promise.all([
         getDeliveryCashLimitSettings(),
         // 1. Total Earnings from Delivered Orders
         FoodOrder.aggregate([
             { $match: { 'dispatch.deliveryPartnerId': partnerId, orderStatus: 'delivered' } },
             { $group: { _id: null, totalEarned: { $sum: { $ifNull: ['$riderEarning', 0] } } } }
         ]),
-        // 2. Gross cash collected (COD orders)
-        FoodOrder.aggregate([
-            { 
-                $match: { 
-                    'dispatch.deliveryPartnerId': partnerId, 
-                    orderStatus: 'delivered', 
-                    'payment.method': 'cash'
-                } 
-            },
-            { $group: { _id: null, cashCollected: { $sum: { $ifNull: ['$pricing.total', 0] } } } }
-        ]),
-        // 3. Cash deposits (deduct from cash-in-hand)
-        FoodDeliveryCashDeposit.aggregate([
-            {
-                $match: {
-                    deliveryPartnerId: partnerId,
-                    status: 'Completed'
-                }
-            },
-            { $group: { _id: null, depositedCash: { $sum: { $ifNull: ['$amount', 0] } } } }
-        ]),
-        // 4. Admin Bonuses
+        // 2. Admin Bonuses
         DeliveryBonusTransaction.aggregate([
             { $match: { deliveryPartnerId: partnerId } },
             { $group: { _id: null, total: { $sum: { $ifNull: ['$amount', 0] } } } }
         ]),
-        // 5. Withdrawal Aggregates (Approved vs Pending)
+        // 3. Withdrawal Aggregates (Approved vs Pending)
         FoodDeliveryWithdrawal.aggregate([
             { $match: { deliveryPartnerId: partnerId } },
             { 
@@ -70,7 +49,7 @@ export const getDeliveryPartnerWalletEnhanced = async (deliveryPartnerId) => {
                 } 
             }
         ]),
-        // 6. Recent Withdrawals for History
+        // 4. Recent Withdrawals for History
         FoodDeliveryWithdrawal.find({ deliveryPartnerId: partnerId })
             .sort({ createdAt: -1 })
             .limit(50)
@@ -81,10 +60,42 @@ export const getDeliveryPartnerWalletEnhanced = async (deliveryPartnerId) => {
             .lean()
     ]);
 
+    // ── Cash-in-Hand: COD collected SINCE last deposit ─────────────────────────
+    // Find the most recent completed deposit date (cutoff point)
+    const lastDepositDoc = depositList?.find(d => String(d.status || '').toLowerCase() === 'completed');
+    const lastDepositAt = lastDepositDoc?.createdAt || null;
+
+    // Sum COD orders delivered AFTER the last deposit (or all time if no deposit)
+    const cashInHandMatchStage = {
+        'dispatch.deliveryPartnerId': partnerId,
+        orderStatus: 'delivered',
+        ...(lastDepositAt ? { createdAt: { $gt: new Date(lastDepositAt) } } : {})
+    };
+
+    const cashCollectedAgg = await FoodOrder.aggregate([
+        { $match: cashInHandMatchStage },
+        {
+            $lookup: {
+                from: 'food_transactions',
+                localField: '_id',
+                foreignField: 'orderId',
+                as: 'tx'
+            }
+        },
+        {
+            $match: {
+                $or: [
+                    { 'tx.paymentMethod': 'cash' },
+                    { 'tx': { $size: 0 }, 'payment.method': 'cash' }
+                ]
+            }
+        },
+        { $group: { _id: null, cashCollected: { $sum: { $ifNull: ['$pricing.total', 0] } } } }
+    ]);
+
     const totalEarned = Number(earningsAgg?.[0]?.totalEarned) || 0;
-    const grossCashCollected = Number(cashCollectedAgg?.[0]?.cashCollected) || 0;
-    const totalDepositedCash = Number(cashDepositsAgg?.[0]?.depositedCash) || 0;
-    const cashInHand = Math.max(0, grossCashCollected - totalDepositedCash);
+    // Cash in hand = COD collected since last deposit (no subtraction needed - already scoped by date)
+    const cashInHand = Math.max(0, Number(cashCollectedAgg?.[0]?.cashCollected) || 0);
     const totalBonus = Number(bonusAgg?.[0]?.total) || 0;
     const totalWithdrawn = Number(withdrawalAgg?.[0]?.totalWithdrawn) || 0;
     const pendingWithdrawals = Number(withdrawalAgg?.[0]?.pendingWithdrawals) || 0;
@@ -92,9 +103,9 @@ export const getDeliveryPartnerWalletEnhanced = async (deliveryPartnerId) => {
     const totalCashLimit = Number(cashLimitSettings.deliveryCashLimit) || 0;
     const deliveryWithdrawalLimit = Number(cashLimitSettings.deliveryWithdrawalLimit) || 100;
 
-    // Pocket Balance = (Earnings + Bonus) - Total Withdrawn (approved) - Pending Withdrawals
-    // Wait, usually pocket balance subtracts pending too so user knows how much is "left" to request.
-    const pocketBalance = Math.max(0, (totalEarned + totalBonus) - (totalWithdrawn + pendingWithdrawals));
+    // Pocket Balance = (Earnings + Bonus) - Total Withdrawn (approved)
+    // As requested: Pending withdrawals are NOT deducted from the displayed balance until admin approves them.
+    const pocketBalance = Math.max(0, (totalEarned + totalBonus) - totalWithdrawn);
 
     // Fetch transactions for UI (Orders, Bonuses, Withdrawals)
     const [ordersTx] = await Promise.all([
@@ -146,6 +157,7 @@ export const getDeliveryPartnerWalletEnhanced = async (deliveryPartnerId) => {
         totalEarned,
         totalBonus,
         totalCashLimit,
+        // Available cash limit is simply the total cash limit minus the cash currently in hand.
         availableCashLimit: Math.max(0, totalCashLimit - cashInHand),
         deliveryWithdrawalLimit,
         transactions: transactions.slice(0, 50)
@@ -161,11 +173,15 @@ export const requestDeliveryWithdrawal = async (deliveryPartnerId, payload) => {
     if (!amount || amount < 1) throw new ValidationError('Invalid amount');
 
     const wallet = await getDeliveryPartnerWalletEnhanced(deliveryPartnerId);
+    
+    // Prevent double-spending by checking balance against already pending withdrawals
+    const availableToWithdraw = Math.max(0, wallet.pocketBalance - wallet.pendingWithdrawals);
+
     if (amount < wallet.deliveryWithdrawalLimit) {
         throw new ValidationError(`Minimum withdrawal amount is ₹${wallet.deliveryWithdrawalLimit}`);
     }
-    if (amount > wallet.pocketBalance) {
-        throw new ValidationError('Insufficient balance for this withdrawal');
+    if (amount > availableToWithdraw) {
+        throw new ValidationError(`Insufficient balance. You already have ₹${wallet.pendingWithdrawals} in pending requests.`);
     }
 
     const partner = await FoodDeliveryPartner.findById(deliveryPartnerId).lean();

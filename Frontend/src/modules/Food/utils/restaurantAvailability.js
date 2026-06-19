@@ -53,12 +53,20 @@ const parseTimeToMinutes = (timeValue) => {
 }
 
 const getTodayTiming = (restaurant, dayName) => {
+  // Format 1: Nested timings array (from separate API call: { outletTimings: { timings: [...] } })
   const outletTimingsArray = restaurant?.outletTimings?.timings
   if (Array.isArray(outletTimingsArray)) {
     const exact = outletTimingsArray.find((entry) => normalizeDay(entry?.day) === dayName)
     if (exact) return exact
   }
 
+  // Format 2: Direct flat array from backend $lookup (outletTimings: [{day, isOpen, openingTime, closingTime}, ...])
+  if (Array.isArray(restaurant?.outletTimings)) {
+    const exact = restaurant.outletTimings.find((entry) => normalizeDay(entry?.day) === dayName)
+    if (exact) return exact
+  }
+
+  // Format 3: Object keyed by day name ({ Monday: { isOpen, openingTime, closingTime }, ... })
   const outletTimingsObject = restaurant?.outletTimings
   if (outletTimingsObject && typeof outletTimingsObject === "object" && !Array.isArray(outletTimingsObject)) {
     const direct = outletTimingsObject[dayName]
@@ -108,6 +116,7 @@ const formatTimeLabel = (timeValue) => {
 
 const formatClosingCountdown = (minutesUntilClose, closingTime) => {
   if (minutesUntilClose === null || minutesUntilClose === undefined) return null
+  if (minutesUntilClose > 120) return null // Hide if more than 2 hours remaining
 
   if (minutesUntilClose <= 0) {
     const closingLabel = formatTimeLabel(closingTime)

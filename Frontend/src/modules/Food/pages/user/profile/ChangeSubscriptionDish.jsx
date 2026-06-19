@@ -76,12 +76,12 @@ export default function ChangeSubscriptionDish() {
     const list = Array.isArray(schedule?.availableDishes) ? schedule.availableDishes : [];
     const currentDish = schedule?.dishId
       ? {
-          id: schedule.dishId,
-          name: schedule.dishName,
-          price: schedule.price || schedule.subscription?.creditPerOrder,
-          image: schedule.image || "",
-          foodType: schedule.foodType,
-        }
+        id: schedule.dishId,
+        name: schedule.dishName,
+        price: schedule.price || schedule.subscription?.creditPerOrder,
+        image: schedule.image || "",
+        foodType: schedule.foodType,
+      }
       : null;
 
     const merged = currentDish ? [currentDish, ...list] : list;
@@ -199,18 +199,16 @@ export default function ChangeSubscriptionDish() {
                   type="button"
                   disabled={selected}
                   onClick={() => openCheckout(dish)}
-                  className={`flex w-full gap-4 border-b border-gray-100 p-4 text-left last:border-none transition-colors dark:border-gray-800 ${
-                    selected
+                  className={`flex w-full gap-4 border-b border-gray-100 p-4 text-left last:border-none transition-colors dark:border-gray-800 ${selected
                       ? "bg-[#55254b]/5"
                       : "bg-white hover:bg-[#55254b]/5 dark:bg-[#1a1a1a] dark:hover:bg-[#55254b]/10"
-                  } disabled:cursor-default`}
+                    } disabled:cursor-default`}
                 >
                   <div className="min-w-0 flex-1">
                     <div className="mb-1 flex items-center gap-2">
                       <span
-                        className={`flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-sm border-2 ${
-                          veg ? "border-green-600" : "border-red-600"
-                        }`}
+                        className={`flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-sm border-2 ${veg ? "border-green-600" : "border-red-600"
+                          }`}
                       >
                         <span className={`h-2 w-2 rounded-full ${veg ? "bg-green-600" : "bg-red-600"}`} />
                       </span>

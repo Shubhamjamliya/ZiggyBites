@@ -204,6 +204,10 @@ const restaurantSchema = new mongoose.Schema(
       ref: "FoodZone",
       index: true,
     },
+    previousZoneId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "FoodZone",
+    },
     businessModel: {
       type: String,
       trim: true,
@@ -223,6 +227,18 @@ const restaurantSchema = new mongoose.Schema(
     featuredDish: { type: String },
     featuredPrice: { type: Number },
     offer: { type: String },
+    discount: { type: Number, default: 0, min: 0, max: 100 },
+    itemDiscounts: [{
+      itemId: { type: String },
+      discountValue: { type: Number },
+      discountType: { type: String, enum: ['PERCENTAGE', 'FLAT'], default: 'PERCENTAGE' }
+    }],
+    discountRules: [{
+      conditionType: { type: String, enum: ['PRICE_ABOVE', 'PRICE_BELOW', 'CATEGORY'] },
+      conditionValue: { type: String },
+      discountValue: { type: Number },
+      discountType: { type: String, enum: ['PERCENTAGE', 'FLAT'], default: 'PERCENTAGE' }
+    }],
     /** Rating fields for filtering/sorting (defaults to 0 if never rated). */
     rating: {
       type: Number,
@@ -237,6 +253,11 @@ const restaurantSchema = new mongoose.Schema(
       isEnabled: { type: Boolean, default: false },
       maxGuests: { type: Number, default: 6 },
       diningType: { type: [String], default: ["family-dining"] },
+    },
+    // NEW: Petpooja Mapping Configuration
+    petpoojaSettings: {
+      enabled: { type: Boolean, default: false },
+      restID: { type: String, trim: true },
     },
     menu: {
       sections: { type: Array, default: [] },
@@ -259,6 +280,13 @@ const restaurantSchema = new mongoose.Schema(
     pendingUpdateReason: {
       type: String,
       trim: true,
+    },
+    zoneRank: {
+      type: Number,
+      min: 1,
+      max: 5,
+      default: null,
+      index: true,
     },
   },
   {

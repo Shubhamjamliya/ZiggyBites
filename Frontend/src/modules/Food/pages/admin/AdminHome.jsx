@@ -8,6 +8,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@food/components/ui/select"
+import { Switch } from "@food/components/ui/switch"
+import { Label } from "@food/components/ui/label"
 import {
   Area,
   AreaChart,
@@ -189,7 +191,8 @@ export default function AdminHome() {
             </div>
 
           </div>
-          <div className="flex flex-wrap gap-3">
+          <div className="flex flex-wrap items-center gap-4">
+
             <Select value={selectedZone} onValueChange={setSelectedZone}>
               <SelectTrigger className="min-w-[160px] border-neutral-300 bg-white text-neutral-900">
                 <SelectValue placeholder="All zones" />

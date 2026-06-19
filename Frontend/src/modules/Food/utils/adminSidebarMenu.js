@@ -12,6 +12,31 @@ export const adminSidebarMenu = [
     icon: "CreditCard",
   },
   {
+    type: "link",
+    label: "Real Time Status",
+    path: "/admin/food/status-monitor",
+    icon: "Activity",
+  },
+  {
+    type: "expandable",
+    label: "Orders",
+    icon: "FileText",
+    subItems: [
+      { label: "All", path: "/admin/food/orders/all" },
+      { label: "Scheduled", path: "/admin/food/orders/scheduled" },
+      { label: "Pending", path: "/admin/food/orders/pending" },
+      { label: "Accepted", path: "/admin/food/orders/accepted" },
+      { label: "Processing", path: "/admin/food/orders/processing" },
+      { label: "Food On The Way", path: "/admin/food/orders/food-on-the-way" },
+      { label: "Delivered", path: "/admin/food/orders/delivered" },
+      { label: "Cancelled", path: "/admin/food/orders/canceled" },
+      { label: "Restaurant cancelled", path: "/admin/food/orders/restaurant-cancelled" },
+      { label: "Payment Failed", path: "/admin/food/orders/payment-failed" },
+      { label: "Refunded", path: "/admin/food/orders/refunded" },
+      { label: "Offline Payments", path: "/admin/food/orders/offline-payments" },
+    ],
+  },
+  {
     type: "section",
     label: "FOOD MANAGEMENT",
     items: [
@@ -49,13 +74,21 @@ export const adminSidebarMenu = [
         icon: "MapPin",
       },
       {
+        type: "link",
+        label: "Zone Ranking",
+        path: "/admin/food/zone-ranking",
+        icon: "MapPin",
+      },
+      {
         type: "expandable",
         label: "Restaurants",
         icon: "UtensilsCrossed",
         subItems: [
           { label: "Restaurants List", path: "/admin/food/restaurants" },
+          { label: "Menu Bulk Upload", path: "/admin/food/restaurants/menu-bulk-upload" },
           { label: "New Joining Request", path: "/admin/food/restaurants/joining-request" },
           { label: "Restaurant Commission", path: "/admin/food/restaurants/commission" },
+          { label: "Restaurant Discount", path: "/admin/food/restaurants/discount" },
           { label: "Restaurant Reviews", path: "/admin/food/restaurants/reviews" },
           { label: "Restaurant Complaints", path: "/admin/food/restaurants/complaints" },
         ],
@@ -229,19 +262,30 @@ export const adminSidebarMenu = [
   },
   {
     type: "section",
+    label: "BANNER SETTINGS",
+    items: [
+      { type: "link", label: "App Intro & Ads", path: "/admin/food/app-intro-ads", icon: "Image" },
+      { type: "link", label: "Landing Page Management", path: "/admin/food/hero-banner-management", icon: "Image" },
+    ],
+  },
+  /* {
+    type: "section",
     label: "DINING MANAGEMENT",
     items: [
       { type: "link", label: "Dining Banners", path: "/admin/food/dining-management", icon: "UtensilsCrossed" },
       { type: "link", label: "Dining List", path: "/admin/food/dining-list", icon: "FileText" },
       { type: "link", label: "Dining Category Request", path: "/admin/food/dining-requests", icon: "CheckCircle" },
     ],
-  },
+  }, */
   {
     type: "section",
     label: "SYSTEM SETTINGS",
     items: [
+      { type: "link", label: "Env Managements", path: "/admin/food/env-managements", icon: "Database" },
       { type: "link", label: "Broadcast Notification", path: "/admin/food/broadcast-notification", icon: "Bell" },
+      { type: "link", label: "Toggle Management", path: "/admin/food/toggle-management", icon: "ToggleLeft" },
       { type: "link", label: "Business Setup", path: "/admin/food/business-setup", icon: "Settings" },
+      { type: "link", label: "Theme Settings", path: "/admin/food/theme-settings", icon: "Palette" },
     ],
   },
   {
@@ -257,3 +301,5 @@ export const adminSidebarMenu = [
     ],
   },
 ];
+
+

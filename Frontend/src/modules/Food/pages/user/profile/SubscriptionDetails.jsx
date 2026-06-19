@@ -188,10 +188,7 @@ export default function SubscriptionDetails() {
                   Meals: <span className="font-medium">{Array.isArray(subscription.meals) ? subscription.meals.join(", ") : "-"}</span>
                 </p>
                 <p>
-                  Active:{" "}
-                  <span className="font-medium">
-                    {formatDate(subscription.startDate)} to {formatDate(subscription.endDate)}
-                  </span>
+                  Active: <span className="font-medium">{formatDate(subscription.startDate)} to {formatDate(subscription.endDate)}</span>
                 </p>
               </div>
             </CardContent>

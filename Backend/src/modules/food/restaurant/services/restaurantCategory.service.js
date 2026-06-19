@@ -63,9 +63,6 @@ export async function listRestaurantCategories(restaurantId, query = {}) {
     const includeInactive = query.includeInactive === 'true' || query.includeInactive === '1';
     const withCounts = query.withCounts === 'true' || query.withCounts === '1';
     const compact = query.compact === 'true' || query.compact === '1';
-    const healthyFilter = query.healthy === true || query.healthy === 'true' || query.healthy === '1'
-        ? true
-        : (query.healthy === false || query.healthy === 'false' || query.healthy === '0' ? false : undefined);
     const zoneIdRaw = typeof query.zoneId === 'string' ? query.zoneId.trim() : context.zoneId;
 
     const filter = {};
@@ -104,9 +101,6 @@ export async function listRestaurantCategories(restaurantId, query = {}) {
         const term = escapeRegex(search.slice(0, 80));
         filter.$and.push({ name: { $regex: term, $options: 'i' } });
     }
-    if (healthyFilter !== undefined) {
-        filter.healthy = healthyFilter;
-    }
     applyZoneVisibilityFilter(filter.$and, zoneIdRaw);
 
     if (compact && context.pureVegRestaurant) {
@@ -119,8 +113,8 @@ export async function listRestaurantCategories(restaurantId, query = {}) {
         .limit(limit)
         .select(
             compact
-                ? 'name image type healthy foodTypeScope approvalStatus rejectionReason zoneId restaurantId createdByRestaurantId isActive sortOrder requestedAt approvedAt rejectedAt globalizedAt'
-                : 'name image type healthy foodTypeScope approvalStatus rejectionReason zoneId restaurantId createdByRestaurantId isActive sortOrder requestedAt approvedAt rejectedAt globalizedAt createdAt updatedAt'
+                ? 'name image type foodTypeScope approvalStatus rejectionReason zoneId restaurantId createdByRestaurantId isActive sortOrder requestedAt approvedAt rejectedAt globalizedAt'
+                : 'name image type foodTypeScope approvalStatus rejectionReason zoneId restaurantId createdByRestaurantId isActive sortOrder requestedAt approvedAt rejectedAt globalizedAt createdAt updatedAt'
         );
 
     const [list, total] = await Promise.all([
@@ -171,15 +165,23 @@ export async function listPublicCategories(query = {}) {
     const skip = (page - 1) * limit;
 
     const search = typeof query.search === 'string' ? query.search.trim() : '';
-    const healthyFilter = query.healthy === true || query.healthy === 'true' || query.healthy === '1'
-        ? true
-        : (query.healthy === false || query.healthy === 'false' || query.healthy === '0' ? false : undefined);
     const zoneIdRaw = typeof query.zoneId === 'string' ? query.zoneId.trim() : '';
 
-    const approvedCategoryIds = await FoodItem.distinct('categoryId', {
+    const itemFilter = {
         approvalStatus: 'approved',
         categoryId: { $ne: null }
-    });
+    };
+
+    if (zoneIdRaw && mongoose.Types.ObjectId.isValid(zoneIdRaw)) {
+        // Only consider categories that have approved items in restaurants of THIS zone.
+        const zoneRestaurants = await FoodRestaurant.distinct('_id', {
+            zoneId: new mongoose.Types.ObjectId(zoneIdRaw),
+            status: 'approved'
+        });
+        itemFilter.restaurantId = { $in: zoneRestaurants };
+    }
+
+    const approvedCategoryIds = await FoodItem.distinct('categoryId', itemFilter);
 
     if (!approvedCategoryIds.length) {
         return { categories: [], total: 0, page, limit };
@@ -195,9 +197,6 @@ export async function listPublicCategories(query = {}) {
         const term = escapeRegex(search.slice(0, 80));
         filter.$and.push({ name: { $regex: term, $options: 'i' } });
     }
-    if (healthyFilter !== undefined) {
-        filter.healthy = healthyFilter;
-    }
     applyZoneVisibilityFilter(filter.$and, zoneIdRaw);
 
     const [list, total] = await Promise.all([
@@ -205,7 +204,7 @@ export async function listPublicCategories(query = {}) {
             .sort({ sortOrder: 1, createdAt: -1 })
             .skip(skip)
             .limit(limit)
-            .select('name image type healthy foodTypeScope zoneId sortOrder createdAt updatedAt')
+            .select('name image type foodTypeScope zoneId sortOrder createdAt updatedAt')
             .lean(),
         FoodCategory.countDocuments(filter)
     ]);
@@ -239,7 +238,6 @@ export async function createRestaurantCategory(restaurantId, body = {}) {
         name,
         image: typeof body.image === 'string' ? body.image.trim() : '',
         type: typeof body.type === 'string' ? body.type.trim() : '',
-        healthy: body.healthy === true,
         foodTypeScope,
         isActive: body.isActive !== false,
         sortOrder: Number.isFinite(Number(body.sortOrder)) ? Number(body.sortOrder) : 0,
@@ -284,7 +282,6 @@ export async function updateRestaurantCategory(restaurantId, id, body = {}) {
     }
     if (body.image !== undefined) doc.image = String(body.image || '').trim();
     if (body.type !== undefined) doc.type = String(body.type || '').trim();
-    if (body.healthy !== undefined) doc.healthy = body.healthy === true;
     if (body.isActive !== undefined) doc.isActive = body.isActive !== false;
     if (body.sortOrder !== undefined) doc.sortOrder = Number(body.sortOrder) || 0;
     if (body.foodTypeScope !== undefined) {

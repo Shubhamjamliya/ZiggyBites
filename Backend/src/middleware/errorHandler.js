@@ -7,17 +7,11 @@ const errorHandler = (err, req, res, next) => {
     const requestId = req.requestId || '-';
 
     logger.error(
-        `[${requestId}] ${req.method} ${req.originalUrl} ${statusCode} - ${err.name || 'Error'} - ${message}`,
-        {
-            method: req.method,
-            url: req.originalUrl,
-            statusCode,
-            errorName: err.name,
-            errorMessage: message,
-            stack: err.stack,
-            requestId
-        }
+        `[${requestId}] ${req.method} ${req.originalUrl} ${statusCode} - ${err.name || 'Error'} - ${message}`
     );
+    if (config.nodeEnv === 'development' && err.stack) {
+        logger.error(`[${requestId}] ${err.stack}`);
+    }
 
     res.status(statusCode).json({
         success: false,

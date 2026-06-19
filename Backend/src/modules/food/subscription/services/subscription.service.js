@@ -696,10 +696,21 @@ export async function sendSubscriptionMealToDelivery(scheduleId, restaurantId) {
   if (!schedule) throw new NotFoundError('Subscription meal not found');
   if (schedule.status === 'sent_to_delivery' && schedule.orderId) {
     const existingOrder = await FoodOrder.findById(schedule.orderId);
+    if (!existingOrder) {
+      throw new NotFoundError('Linked subscription order not found');
+    }
+
+    const dispatchResult = await dispatchService.resendDeliveryNotificationRestaurant(
+      existingOrder._id,
+      restaurantId,
+    );
+
     return {
       schedule,
-      order: existingOrder ? normalizeOrderForClient(existingOrder) : null,
+      order: normalizeOrderForClient(existingOrder),
       alreadySent: true,
+      resent: true,
+      dispatch: dispatchResult,
     };
   }
   if (schedule.status !== 'scheduled') {
@@ -1323,6 +1334,8 @@ export async function syncSubscriptionScheduleReminders() {
             type: 'subscription_dish_change_reminder',
             scheduleId: String(schedule._id),
             subscriptionId: String(schedule.subscriptionId),
+            link: '/food/user/profile/subscriptions/' + String(schedule.subscriptionId) + '/change-dish/' + String(schedule._id),
+            targetUrl: '/food/user/profile/subscriptions/' + String(schedule.subscriptionId) + '/change-dish/' + String(schedule._id),
           },
         },
       );
@@ -1339,6 +1352,8 @@ export async function syncSubscriptionScheduleReminders() {
             type: 'subscription_address_change_reminder',
             scheduleId: String(schedule._id),
             subscriptionId: String(schedule.subscriptionId),
+            link: '/food/user/profile/subscriptions/' + String(schedule.subscriptionId),
+            targetUrl: '/food/user/profile/subscriptions/' + String(schedule.subscriptionId),
           },
         },
       );
@@ -1375,6 +1390,8 @@ export async function sendTestSubscriptionReminder(type = 'dish') {
             type: 'subscription_address_change_reminder_test',
             scheduleId: String(schedule._id),
             subscriptionId: String(schedule.subscriptionId),
+            link: '/food/user/profile/subscriptions/' + String(schedule.subscriptionId),
+            targetUrl: '/food/user/profile/subscriptions/' + String(schedule.subscriptionId),
           },
         }
       : {
@@ -1384,6 +1401,8 @@ export async function sendTestSubscriptionReminder(type = 'dish') {
             type: 'subscription_dish_change_reminder_test',
             scheduleId: String(schedule._id),
             subscriptionId: String(schedule.subscriptionId),
+            link: '/food/user/profile/subscriptions/' + String(schedule.subscriptionId) + '/change-dish/' + String(schedule._id),
+            targetUrl: '/food/user/profile/subscriptions/' + String(schedule.subscriptionId) + '/change-dish/' + String(schedule._id),
           },
         };
 

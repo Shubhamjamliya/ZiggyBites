@@ -9,8 +9,27 @@ import {
   UserCircle2,
   Utensils,
 } from "lucide-react";
-import api from "@food/api";
+import api, { restaurantAPI } from "@food/api";
 import { loadAppCustomization } from "@food/utils/appCustomization";
+const getImageUrl = (value) => {
+  const candidate =
+    typeof value === "string"
+      ? value
+      : value?.url || value?.secure_url || value?.imageUrl || value?.image || "";
+  if (!candidate) return "";
+  if (/^(https?:|data:|blob:)/i.test(candidate)) return candidate;
+
+  const apiOrigin = String(api.defaults?.baseURL || "")
+    .replace(/\/api\/v1\/?$/, "")
+    .replace(/\/$/, "");
+  return `${apiOrigin}/${String(candidate).replace(/^\/+/, "")}`;
+};
+
+const getMenuSections = (response) => {
+  const payload = response?.data?.data ?? response?.data ?? {};
+  const menu = payload?.menu ?? payload;
+  return menu?.sections || payload?.sections || [];
+};
 
 const fallbackMealSlots = [
   {
@@ -61,6 +80,7 @@ export default function ChooseMeal() {
   const [searchParams] = useSearchParams();
   const [selectedSlots, setSelectedSlots] = useState([]);
   const [mealSlots, setMealSlots] = useState(fallbackMealSlots);
+  const [resolvedDishImage, setResolvedDishImage] = useState("");
 
   useEffect(() => {
     let mounted = true;
@@ -95,6 +115,46 @@ export default function ChooseMeal() {
       foodType: stateDish.foodType || "",
     };
   }, [location.state, searchParams]);
+  useEffect(() => {
+    setResolvedDishImage(getImageUrl(dish.image));
+  }, [dish.image]);
+
+  useEffect(() => {
+    if (resolvedDishImage || !dish.restaurantId || !dish.itemId) return;
+
+    let cancelled = false;
+    restaurantAPI
+      .getMenuByRestaurantId(dish.restaurantId, { noCache: true })
+      .then((response) => {
+        if (cancelled) return;
+        const items = getMenuSections(response).flatMap((section) => [
+          ...(Array.isArray(section?.items) ? section.items : []),
+          ...(Array.isArray(section?.subsections)
+            ? section.subsections.flatMap((subsection) =>
+                Array.isArray(subsection?.items) ? subsection.items : [],
+              )
+            : []),
+        ]);
+        const selectedDish = items.find(
+          (item) =>
+            String(item?._id || item?.id || item?.itemId || "") ===
+            String(dish.itemId),
+        );
+        setResolvedDishImage(
+          getImageUrl(
+            selectedDish?.image ||
+              selectedDish?.imageUrl ||
+              selectedDish?.photoUrl ||
+              selectedDish?.images?.[0],
+          ),
+        );
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
+  }, [dish.itemId, dish.restaurantId, resolvedDishImage]);
 
   const canContinue = selectedSlots.length > 0;
   const toggleSlot = (slotId) => {
@@ -120,7 +180,13 @@ export default function ChooseMeal() {
             title: slot.title,
             timeLabel: slot.timeLabel,
             description: slot.description || "",
-            imageUrl: slot.imageUrl || "",
+            imageUrl: getImageUrl(
+              slot.imageUrl ||
+                slot.image ||
+                slot.photoUrl ||
+                slot.thumbnail ||
+                slot.images?.[0],
+            ),
             icon: iconMap[slot.icon] || Utensils,
             accentColor: slot.accentColor || "#ef2b24",
             backgroundColor: slot.backgroundColor || "#fff7ed",
@@ -263,9 +329,9 @@ export default function ChooseMeal() {
             </p>
           </div>
           <div className="relative w-[42%] shrink-0">
-            {dish.image ? (
+            {resolvedDishImage ? (
               <img
-                src={dish.image}
+                src={resolvedDishImage}
                 alt={dish.name}
                 className="absolute bottom-0 right-2 h-24 w-28 rounded-full object-cover"
               />

@@ -5,27 +5,22 @@ importScripts("https://www.gstatic.com/firebasejs/10.13.2/firebase-messaging-com
 const sanitize = (value) => String(value || "").trim().replace(/^['"]|['"]$/g, "");
 const PUSH_DEBUG_PREFIX = "[push-sw]";
 const pushDebugLog = () => {};
-const SW_VERSION = "2026-06-06-notification-dedupe";
+const getNotificationKey = (payload) => {
+  const fcmId = payload?.messageId || payload?.data?.messageId || payload?.data?.notificationId;
+  if (fcmId) return String(fcmId);
 
-self.addEventListener("install", () => {
-  pushDebugLog(PUSH_DEBUG_PREFIX, "Service worker install", { version: SW_VERSION });
-  self.skipWaiting();
-});
+  const title = (payload?.notification?.title || payload?.data?.title || "").trim();
+  const body = (payload?.notification?.body || payload?.data?.body || "").trim();
+  const orderId = payload?.data?.orderId || "";
+  
+  if (!title && !body && !orderId) return "unknown";
 
-self.addEventListener("activate", (event) => {
-  pushDebugLog(PUSH_DEBUG_PREFIX, "Service worker activate", { version: SW_VERSION });
-  event.waitUntil(clients.claim());
-});
-const getNotificationKey = (payload) =>
-  payload?.data?.notificationId ||
-  payload?.data?.messageId ||
-  payload?.messageId ||
-  [
-    payload?.notification?.title || payload?.data?.title || "",
-    payload?.notification?.body || payload?.data?.body || "",
-    payload?.data?.orderId || "",
-    payload?.data?.targetUrl || payload?.data?.link || "",
-  ].join("::");
+  return [
+    title.toLowerCase(),
+    body.toLowerCase(),
+    orderId
+  ].join("|");
+};
 
 async function notifyOpenClients(payload) {
   pushDebugLog(PUSH_DEBUG_PREFIX, "Broadcasting push to open clients", { payload });
@@ -133,19 +128,22 @@ async function loadFirebaseWebConfig() {
     pushDebugLog(PUSH_DEBUG_PREFIX, "Received Firebase background message", { payload });
     
     const visibleClient = await hasVisibleClientForTarget(payload);
-    const shouldShowManualNotification = !payload?.notification;
     
-    if (!visibleClient && shouldShowManualNotification) {
-      const title = payload?.notification?.title || payload?.data?.title || "New Notification";
-      const body = payload?.notification?.body || payload?.data?.body || "";
+    // 💡 IMPORTANT: If the payload contains a 'notification' object, the browser/FCM SDK
+    // will often display a system notification automatically in the background.
+    // To prevent double notifications (one from browser, one from our manual call),
+    // we only call showNotification manually if 'notification' is missing (Data-only message)
+    // AND there is no visible window for the user.
+    if (!visibleClient && !payload.notification) {
+      const title = payload?.data?.title || "New Notification";
+      const body = payload?.data?.body || "";
       const image =
-        payload?.notification?.image ||
         payload?.data?.image ||
         payload?.data?.imageUrl ||
         undefined;
       const notificationKey = getNotificationKey(payload);
       
-      pushDebugLog(PUSH_DEBUG_PREFIX, "Showing service worker notification", {
+      pushDebugLog(PUSH_DEBUG_PREFIX, "Showing manual service worker notification (Data-only message)", {
         title,
         body,
         image,
@@ -154,19 +152,14 @@ async function loadFirebaseWebConfig() {
   
       self.registration.showNotification(title, {
         body,
-        icon: "/favicon.ico",
+        icon: "/logo.png",
         image,
         tag: notificationKey,
-        renotify: false,
+        renotify: true,
         silent: false,
-        requireInteraction: false,
+        requireInteraction: true,
         vibrate: [200, 100, 200, 100, 300],
         data: payload?.data || {},
-      });
-    } else {
-      pushDebugLog(PUSH_DEBUG_PREFIX, "Skipping manual service worker notification", {
-        hasVisibleClient: visibleClient,
-        hasFirebaseNotificationPayload: Boolean(payload?.notification),
       });
     }
 

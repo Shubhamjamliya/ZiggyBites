@@ -67,12 +67,12 @@ export default function FeedNavbar({ className = "" }) {
   useEffect(() => {
     const loadLogo = async () => {
       const cached = getCachedSettings()
-      if (cached?.deliveryLogo?.url || cached?.logo?.url) {
-        setLogoUrl(cached.deliveryLogo?.url || cached.logo.url)
+      if (cached?.logo?.url) {
+        setLogoUrl(cached.logo.url)
       } else {
         const settings = await loadBusinessSettings()
-        if (settings?.deliveryLogo?.url || settings?.logo?.url) {
-          setLogoUrl(settings.deliveryLogo?.url || settings.logo.url)
+        if (settings?.logo?.url) {
+          setLogoUrl(settings.logo.url)
         }
       }
     }
@@ -80,8 +80,8 @@ export default function FeedNavbar({ className = "" }) {
 
     const handleSettingsUpdate = () => {
       const cached = getCachedSettings()
-      if (cached?.deliveryLogo?.url || cached?.logo?.url) {
-        setLogoUrl(cached.deliveryLogo?.url || cached.logo.url)
+      if (cached?.logo?.url) {
+        setLogoUrl(cached.logo.url)
       }
     }
     window.addEventListener('businessSettingsUpdated', handleSettingsUpdate)
@@ -147,6 +147,26 @@ export default function FeedNavbar({ className = "" }) {
     e?.stopPropagation?.();
 
     const next = !isOnline;
+    
+    if (next) {
+        if (!navigator.geolocation) {
+            toast.error("Geolocation is not supported by your browser.");
+            return;
+        }
+        
+        try {
+            await new Promise((resolve, reject) => {
+                navigator.geolocation.getCurrentPosition(resolve, reject, {
+                    timeout: 10000,
+                    maximumAge: 0,
+                    enableHighAccuracy: true
+                });
+            });
+        } catch (err) {
+            toast.error("Please enable your GPS for current location");
+            return; // Do not move to next step
+        }
+    }
     
     // Update state immediately for better UX
     setIsOnline(next);
@@ -243,7 +263,7 @@ export default function FeedNavbar({ className = "" }) {
       title: "Support tickets", 
       subtitle: "Check status of tickets raised", 
       icon: "ticket", 
-      path: "/delivery/support"
+      path: "/delivery/help/tickets"
     },
     { 
       id: "idCard", 
@@ -270,6 +290,7 @@ export default function FeedNavbar({ className = "" }) {
     accidentHelpline: "",
     contactPolice: "",
     insurance: "",
+    teamLeader: "",
   });
 
   const [showEmergencyPopup, setShowEmergencyPopup] = useState(false);
@@ -293,6 +314,7 @@ export default function FeedNavbar({ className = "" }) {
             accidentHelpline: response.data.data.accidentHelpline || "",
             contactPolice: response.data.data.contactPolice || "",
             insurance: response.data.data.insurance || "",
+            teamLeader: response.data.data.teamLeader || "",
           });
         }
       } catch (error) {
@@ -364,6 +386,21 @@ export default function FeedNavbar({ className = "" }) {
         }
       }
     },
+    { 
+      id: "teamLeader", 
+      title: "Team Leader", 
+      subtitle: "Contact your assigned team leader", 
+      icon: "teamLeader", 
+      phone: emergencyNumbers.teamLeader,
+      onClick: () => {
+        const phoneToDial = normalizePhoneForDial(emergencyNumbers.teamLeader);
+        if (phoneToDial.length >= 3) {
+          window.location.href = `tel:${phoneToDial}`;
+        } else {
+          toast.error("Team leader number not configured");
+        }
+      }
+    },
   ];
 
   // Fetch profile image
@@ -409,7 +446,7 @@ export default function FeedNavbar({ className = "" }) {
     <>
     <div 
       className={`px-4 py-3 flex items-center justify-between sticky top-0 z-50 border-b border-gray-200 ${className}`}
-      style={{ background: 'linear-gradient(33deg, #15498b 0%, #000000 100%)' }}
+      style={{ backgroundColor: 'var(--dv-primary)' }}
     >
         {/* Logo and Online/Offline Toggle */}
       <div className="flex items-center gap-3">
@@ -569,6 +606,9 @@ export default function FeedNavbar({ className = "" }) {
                 )}
                 {option.icon === "insurance" && (
                   <ShieldCheck className="w-6 h-6 text-green-600" />
+                )}
+                {option.icon === "teamLeader" && (
+                  <User className="w-6 h-6 text-purple-600" />
                 )}
               </div>
 

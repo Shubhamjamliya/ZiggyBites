@@ -51,7 +51,7 @@ function isOtpMatch(expectedOtp, enteredOtp) {
   return false;
 }
 
-async function getPartnerCashCapacity(deliveryPartnerId) {
+export async function getPartnerCashCapacity(deliveryPartnerId) {
   const partnerObjectId = new mongoose.Types.ObjectId(deliveryPartnerId);
   const limitDoc = await FoodDeliveryCashLimit.findOne({ isActive: true })
     .sort({ createdAt: -1 })
@@ -165,7 +165,7 @@ function emitOrderUpdate(order, deliveryPartnerId, options = {}) {
     let riderTitle = '';
     let riderBody = '';
 
-    const orderId = order._id.toString();
+    const orderId = order.order_id || order.orderId || order._id.toString();
 
     if (status === 'picked_up') {
       userTitle = 'Order on the way!';
@@ -227,25 +227,6 @@ function emitOrderUpdate(order, deliveryPartnerId, options = {}) {
   } catch (error) {
     logger.error(`Error emitting delivery order update: ${error?.message || error}`);
   }
-}
-
-async function notifyUserDeliveryDropOtp(order, plainOtp) {
-  const otp = String(plainOtp || '').trim();
-  if (!otp || !order?.userId) return;
-
-  await notifyOwnerSafely(
-    { ownerType: 'USER', ownerId: order.userId },
-    {
-      title: 'Delivery OTP',
-      body: `Your OTP for order #${order._id.toString()} is ${otp}. Share it with the delivery partner to complete handover.`,
-      data: {
-        type: 'delivery_drop_otp',
-        orderId: String(order._id.toString()),
-        orderMongoId: String(order._id),
-        otp,
-      },
-    },
-  );
 }
 
 async function syncRazorpayQrPayment(orderDoc) {
@@ -330,10 +311,8 @@ export async function listOrdersAvailableDelivery(deliveryPartnerId, query) {
   const { page, limit, skip } = buildPaginationOptions(query);
   const partnerCapacity = await getPartnerCashCapacity(deliveryPartnerId);
   const cashLimit = {
-    blocked: !partnerCapacity.hasCapacity,
-    message: !partnerCapacity.hasCapacity
-      ? 'Please deposit your amount to get new orders.'
-      : '',
+    blocked: false,
+    message: '',
     totalCashLimit: Number(partnerCapacity.totalCashLimit || 0),
     cashInHand: Number(partnerCapacity.cashInHand || 0),
     availableCashLimit: Number(partnerCapacity.availableCashLimit || 0),
@@ -347,21 +326,20 @@ export async function listOrdersAvailableDelivery(deliveryPartnerId, query) {
         'cancelled_by_user',
         'cancelled_by_restaurant',
         'cancelled_by_admin',
+        'dead',
       ],
     },
   };
 
-  const filter = partnerCapacity.hasCapacity
-    ? {
-        $or: [
-          {
-            'dispatch.status': 'unassigned',
-            orderStatus: { $in: ['confirmed', 'preparing', 'ready_for_pickup'] },
-          },
-          activeOwnOrderFilter,
-        ],
-      }
-    : activeOwnOrderFilter;
+  const filter = {
+    $or: [
+      {
+        'dispatch.status': 'unassigned',
+        orderStatus: { $in: ['confirmed', 'preparing', 'ready_for_pickup'] },
+      },
+      activeOwnOrderFilter,
+    ],
+  };
 
   const [docs, total] = await Promise.all([
     FoodOrder.find(filter)
@@ -424,13 +402,7 @@ export async function acceptOrderDelivery(orderId, deliveryPartnerId) {
   const partnerCapacity = await getPartnerCashCapacity(deliveryPartnerId);
   const hasAmountCapacity = Number(partnerCapacity.availableCashLimit || 0) >= orderAmount;
 
-  if (isCashOrder && !hasAmountCapacity && !canBypassCashLimit) {
-    throw new ValidationError('Cash limit is not enough for this order amount. Please deposit your amount to get orders.');
-  }
-
-  if (!partnerCapacity.hasCapacity && !canBypassCashLimit) {
-    throw new ValidationError('Cash limit reached. Please deposit your amount to get orders.');
-  }
+  // Cash limit restriction removed. All riders can accept orders.
 
   const now = new Date();
   const acceptedStatuses = ['confirmed', 'preparing', 'ready_for_pickup', 'picked_up'];
@@ -438,6 +410,7 @@ export async function acceptOrderDelivery(orderId, deliveryPartnerId) {
     'cancelled_by_user',
     'cancelled_by_restaurant',
     'cancelled_by_admin',
+    'dead',
   ];
 
   const statusHistoryEntry = {
@@ -581,9 +554,19 @@ export async function acceptOrderDelivery(orderId, deliveryPartnerId) {
           orderMongoId: order._id?.toString?.(),
           claimedBy: deliveryPartnerId.toString(),
         };
-        // 1. Global broadcast to all_delivery room — covers every online delivery boy
+        
+        // 1. Specific broadcast to EVERY partner who was offered this order (100% reliable)
+        if (Array.isArray(order.dispatch?.offeredTo)) {
+          for (const offer of order.dispatch.offeredTo) {
+            if (String(offer.partnerId) !== String(deliveryPartnerId)) {
+              io.to(rooms.delivery(offer.partnerId)).emit('order_claimed', claimedPayload);
+            }
+          }
+        }
+        
+        // 2. Global broadcast fallback
         io.to('all_delivery').emit('order_claimed', claimedPayload);
-        logger.info(`[DeliveryDispatch] Broadcasted order_claimed globally (all_delivery room) for order ${order._id.toString()}`);
+        logger.info(`[DeliveryDispatch] Broadcasted order_claimed specifically and globally for order ${order._id.toString()}`);
 
       }
 
@@ -591,7 +574,7 @@ export async function acceptOrderDelivery(orderId, deliveryPartnerId) {
         { ownerType: 'USER', ownerId: order.userId },
         {
           title: `Delivery partner assigned`,
-          body: `A delivery partner has accepted Order #${order._id.toString()}.`,
+          body: `A delivery partner has accepted Order #${order.order_id || order.orderId || order._id.toString()}.`,
           data: {
             type: 'delivery_accepted',
             orderId: order._id.toString(),
@@ -606,7 +589,7 @@ export async function acceptOrderDelivery(orderId, deliveryPartnerId) {
         { ownerType: 'RESTAURANT', ownerId: order.restaurantId },
         {
           title: `Rider assigned`,
-          body: `Order #${order._id.toString()} is now assigned to a delivery partner.`,
+          body: `Order #${order.order_id || order.orderId || order._id.toString()} is now assigned to a delivery partner.`,
           data: {
             type: 'delivery_accepted',
             orderId: order._id.toString(),
@@ -636,7 +619,7 @@ export async function acceptOrderDelivery(orderId, deliveryPartnerId) {
   return responseOrder;
 }
 
-export async function rejectOrderDelivery(orderId, deliveryPartnerId) {
+export async function rejectOrderDelivery(orderId, deliveryPartnerId, reason = '') {
   const identity = buildOrderIdentityFilter(orderId);
   if (!identity) throw new ValidationError('Order id required');
 
@@ -653,6 +636,21 @@ export async function rejectOrderDelivery(orderId, deliveryPartnerId) {
   );
   if (offer) offer.action = 'rejected';
 
+  // If the order is dead, we don't need to put it back in the unassigned pool. 
+  // We just want to record the rider's reason.
+  if (order.orderStatus === 'dead') {
+    pushStatusHistory(order, {
+      byRole: 'DELIVERY_PARTNER',
+      byId: deliveryPartnerId,
+      from: 'assigned',
+      to: 'dead_reason',
+      note: `Delivery Failure Reason: ${reason || 'Not provided'}`,
+    });
+    order.cancellationReason = reason || order.cancellationReason;
+    await order.save();
+    return order.toObject();
+  }
+
   order.dispatch.status = 'unassigned';
   order.dispatch.deliveryPartnerId = undefined;
   order.dispatch.assignedAt = undefined;
@@ -662,7 +660,7 @@ export async function rejectOrderDelivery(orderId, deliveryPartnerId) {
     byId: deliveryPartnerId,
     from: 'assigned',
     to: 'unassigned',
-    note: 'Rejected',
+    note: `Rejected. Reason: ${reason || 'Not provided'}`,
   });
   await order.save();
 
@@ -685,7 +683,7 @@ export async function confirmReachedPickupDelivery(orderId, deliveryPartnerId) {
   const identity = buildOrderIdentityFilter(orderId);
   if (!identity) throw new ValidationError('Order id required');
 
-  const order = await FoodOrder.findOne(identity).select('+deliveryOtp');
+  const order = await FoodOrder.findOne(identity).select('+deliveryOtp +pickupOtp');
   if (!order) throw new NotFoundError('Order not found');
   if (
     order.dispatch?.deliveryPartnerId?.toString() !== deliveryPartnerId.toString()
@@ -698,7 +696,20 @@ export async function confirmReachedPickupDelivery(orderId, deliveryPartnerId) {
 
   const currentPhase = order.deliveryState?.currentPhase || '';
   const currentStatus = order.deliveryState?.status || '';
+  
+  // If already at pickup but somehow missing OTP, generate it
   if (currentPhase === 'at_pickup' || currentStatus === 'reached_pickup') {
+    if (!order.pickupOtp) {
+      order.pickupOtp = generateFourDigitDeliveryOtp();
+      
+      if (!order.deliveryVerification?.pickupOtp) {
+        order.deliveryVerification = {
+          ...(order.deliveryVerification?.toObject?.() || order.deliveryVerification || {}),
+          pickupOtp: { required: true, verified: false },
+        };
+      }
+      await order.save();
+    }
     return order.toObject();
   }
 
@@ -709,6 +720,18 @@ export async function confirmReachedPickupDelivery(orderId, deliveryPartnerId) {
     status: 'reached_pickup',
     reachedPickupAt: order.deliveryState?.reachedPickupAt || new Date(),
   };
+
+  const existingPickupOtp = String(order.pickupOtp || '').trim();
+  if (!existingPickupOtp) {
+    order.pickupOtp = generateFourDigitDeliveryOtp();
+  }
+  
+  if (!order.deliveryVerification?.pickupOtp) {
+    order.deliveryVerification = {
+      ...(order.deliveryVerification?.toObject?.() || order.deliveryVerification || {}),
+      pickupOtp: { required: true, verified: false },
+    };
+  }
   pushStatusHistory(order, {
     byRole: 'DELIVERY_PARTNER',
     byId: deliveryPartnerId,
@@ -734,7 +757,7 @@ export async function confirmReachedPickupDelivery(orderId, deliveryPartnerId) {
         title: 'Rider arrived!',
         body: `${partner?.name || 'The delivery partner'} has arrived at ${
           restaurant?.restaurantName || 'your restaurant'
-        } to pick up Order #${order._id.toString()}.`,
+        } to pick up Order #${order.order_id || order.orderId || order._id.toString()}.`,
         data: {
           type: 'rider_arrived',
           orderId: String(order._id.toString()),
@@ -762,9 +785,67 @@ export async function confirmReachedPickupDelivery(orderId, deliveryPartnerId) {
   return order.toObject();
 }
 
-export async function confirmPickupDelivery(orderId, deliveryPartnerId, billImageUrl) {
+/**
+ * Rider presses "Request OTP" button after uploading bill.
+ * Emits pickup OTP to restaurant via socket so they can relay it verbally.
+ */
+export async function requestPickupOtp(orderId, deliveryPartnerId) {
   const identity = buildOrderIdentityFilter(orderId);
-  const order = await FoodOrder.findOne(identity).select('+deliveryOtp');
+  if (!identity) throw new ValidationError('Order id required');
+
+  const order = await FoodOrder.findOne(identity).select('+pickupOtp');
+  if (!order) throw new NotFoundError('Order not found');
+  if (order.dispatch?.deliveryPartnerId?.toString() !== deliveryPartnerId.toString()) {
+    throw new ForbiddenError('Not your order');
+  }
+
+  const otp = order.pickupOtp;
+  if (!otp) {
+    throw new ValidationError('Pickup OTP not generated yet. Please confirm arrival at restaurant first.');
+  }
+
+  // Update DB to register the request so fallback polling can catch it
+  if (!order.deliveryVerification) order.deliveryVerification = {};
+  if (!order.deliveryVerification.pickupOtp) order.deliveryVerification.pickupOtp = {};
+  order.deliveryVerification.pickupOtp.requestedAt = new Date();
+  order.markModified('deliveryVerification');
+  await order.save();
+
+  const io = getIO();
+  if (io) {
+    io.to(rooms.restaurant(order.restaurantId)).emit('pickup_otp_reveal', {
+      orderMongoId: order._id.toString(),
+      orderId: order.order_id || order._id.toString(),
+      otp,
+      message: 'Delivery partner is requesting the Pickup OTP. Please share this code with them.',
+    });
+  }
+
+  try {
+    const restaurant = await mongoose.model('FoodRestaurant').findById(order.restaurantId).select('restaurantName').lean();
+    await notifyOwnersSafely(
+      [{ ownerType: 'RESTAURANT', ownerId: order.restaurantId }],
+      {
+        title: 'OTP Requested! 🔐',
+        body: `Delivery partner is requesting the Pickup OTP for Order #${order.order_id || order._id.toString()}. The OTP is: ${otp}`,
+        data: {
+          type: 'pickup_otp_request',
+          orderId: String(order.order_id || order._id.toString()),
+          orderMongoId: String(order._id),
+          otp: String(otp)
+        },
+      },
+    );
+  } catch (error) {
+    logger.error(`Error notifying restaurant about OTP request for ${order._id}: ${error?.message || error}`);
+  }
+
+  return { otp };
+}
+
+export async function confirmPickupDelivery(orderId, deliveryPartnerId, billImageUrl, otp) {
+  const identity = buildOrderIdentityFilter(orderId);
+  const order = await FoodOrder.findOne(identity).select('+deliveryOtp +pickupOtp');
   if (!order) throw new NotFoundError('Order not found');
   if (
     order.dispatch?.deliveryPartnerId?.toString() !== deliveryPartnerId.toString()
@@ -777,6 +858,21 @@ export async function confirmPickupDelivery(orderId, deliveryPartnerId, billImag
   if (!isStatusAdvance(from, nextStatus)) {
       throw new ValidationError(`Order is already at status '${from}'. Cannot re-mark as '${nextStatus}'.`);
   }
+
+  const pickupRequired = order.deliveryVerification?.pickupOtp?.required !== false;
+  const pickupVerified = order.deliveryVerification?.pickupOtp?.verified === true;
+
+  if (pickupRequired && !pickupVerified) {
+    if (!otp) {
+      throw new ValidationError("Pickup OTP is required to mark this order as picked up.");
+    }
+    if (!isOtpMatch(order.pickupOtp, otp)) {
+      throw new ValidationError("Invalid Pickup OTP. Please ask the restaurant for the correct OTP.");
+    }
+    order.deliveryVerification.pickupOtp.verified = true;
+    order.markModified('deliveryVerification.pickupOtp.verified');
+  }
+
   order.orderStatus = nextStatus;
   order.deliveryState = {
     ...(order.deliveryState?.toObject?.() || order.deliveryState || {}),
@@ -849,7 +945,6 @@ export async function confirmReachedDropDelivery(orderId, deliveryPartnerId) {
     }
     // Rider explicitly requested OTP again at drop, re-emit same OTP without regenerating.
     emitDeliveryDropOtpToUser(order, existingOtp);
-    void notifyUserDeliveryDropOtp(order, existingOtp);
     return sanitizeOrderForExternal(order);
   }
 
@@ -886,7 +981,6 @@ export async function confirmReachedDropDelivery(orderId, deliveryPartnerId) {
   await order.save();
 
   emitDeliveryDropOtpToUser(order, String(order.deliveryOtp || '').trim());
-  void notifyUserDeliveryDropOtp(order, String(order.deliveryOtp || '').trim());
   emitOrderUpdate(order, deliveryPartnerId);
   enqueueOrderEvent('reached_drop', {
     orderMongoId: order._id?.toString?.(),

@@ -11,7 +11,6 @@ import {
     uploadRestaurantCoverImages,
     uploadRestaurantMenuImages,
     listPublicOffers,
-    listPublicDishes,
     getRestaurantComplaints
 } from '../services/restaurant.service.js';
 import {
@@ -20,11 +19,30 @@ import {
 } from '../../dining/services/dining.service.js';
 import { validateRestaurantRegisterDto } from '../validators/restaurant.validator.js';
 import { sendResponse } from '../../../../utils/response.js';
+import { FoodBusinessSettings } from '../../admin/models/businessSettings.model.js';
+import { sendRestaurantOnboardingEmail } from '../../../../utils/email.js';
 
 export const registerRestaurantController = async (req, res, next) => {
     try {
         const validated = validateRestaurantRegisterDto(req.body);
         const restaurant = await registerRestaurant(validated, req.files);
+
+        // Send onboarding email with T&C asynchronously
+        (async () => {
+            try {
+                const settings = await FoodBusinessSettings.findOne().lean();
+                const pdfUrl = settings?.termsAndConditionsPdf?.url || null;
+                const email = validated.ownerEmail || restaurant.ownerEmail;
+                const restaurantName = validated.restaurantName || restaurant.restaurantName;
+                
+                if (email) {
+                    await sendRestaurantOnboardingEmail(email, restaurantName, pdfUrl);
+                }
+            } catch (err) {
+                console.error("Error sending onboarding email:", err);
+            }
+        })();
+
         return sendResponse(res, 201, 'Restaurant registered successfully', restaurant);
     } catch (error) {
         next(error);
@@ -35,15 +53,6 @@ export const listApprovedRestaurantsController = async (req, res, next) => {
     try {
         const data = await listApprovedRestaurants(req.query);
         return sendResponse(res, 200, 'Restaurants fetched successfully', data);
-    } catch (error) {
-        next(error);
-    }
-};
-
-export const listPublicDishesController = async (req, res, next) => {
-    try {
-        const data = await listPublicDishes(req.query || {});
-        return sendResponse(res, 200, 'Dishes fetched successfully', data);
     } catch (error) {
         next(error);
     }

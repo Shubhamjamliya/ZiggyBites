@@ -39,10 +39,6 @@ const pricingSchema = z.object({
     deliveryFee: z.number().min(0).optional(),
     platformFee: z.number().min(0).optional(),
     discount: z.number().min(0).optional(),
-    originalTotal: z.number().min(0).optional(),
-    payableTotal: z.number().min(0).optional(),
-    subscriptionCreditApplied: z.number().min(0).optional(),
-    subscriptionWalletCredit: z.number().min(0).optional(),
     total: z.number().min(0),
     currency: z.string().optional()
 });
@@ -51,7 +47,6 @@ export function validateCalculateOrderDto(body) {
     const schema = z.object({
         items: z.array(orderItemSchema).min(1, 'At least one item required'),
         restaurantId: z.string().min(1, 'Restaurant id required'),
-        restaurantName: z.string().optional(),
         deliveryAddress: z
             .object({
                 location: z
@@ -91,7 +86,7 @@ export function validateCreateOrderDto(body) {
         restaurantNote: z.string().optional(),
         sendCutlery: z.boolean().optional(),
         // 'razorpay_qr' means COD-style flow, but payment is collected via Razorpay QR at delivery.
-        paymentMethod: z.enum(['cash', 'razorpay', 'razorpay_qr', 'card', 'wallet', 'subscription']),
+        paymentMethod: z.enum(['cash', 'razorpay', 'razorpay_qr', 'card', 'wallet']),
         zoneId: z.string().nullable().optional(),
         scheduledAt: z.string().datetime({ offset: true }).nullable().optional()
     });

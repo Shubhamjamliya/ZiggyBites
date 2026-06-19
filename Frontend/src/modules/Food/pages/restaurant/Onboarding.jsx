@@ -14,7 +14,7 @@ import {
   SelectValue,
 } from "@food/components/ui/select"
 import { restaurantAPI, zoneAPI, uploadAPI, api } from "@food/api"
-import { MobileTimePicker } from "@mui/x-date-pickers/MobileTimePicker"
+import { TimePicker } from "@mui/x-date-pickers/TimePicker"
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider"
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs"
 import dayjs from "dayjs"
@@ -41,7 +41,7 @@ const IFSC_CODE_REGEX = /^[A-Z0-9]{11}$/
 const OWNER_NAME_REGEX = /^[A-Za-z ]+$/
 const ACCOUNT_HOLDER_NAME_REGEX = /^[A-Za-z ]+$/
 const GST_LEGAL_NAME_REGEX = /^[A-Za-z ]+$/
-const LOCAL_IMAGE_FILE_ACCEPT = ".jpg,.jpeg,.png,.webp,.heic,.heif"
+const LOCAL_IMAGE_FILE_ACCEPT = "image/*,.jpg,.jpeg,.png,.webp,.heic,.heif"
 const LOCAL_PDF_FILE_ACCEPT = ".pdf,application/pdf"
 const GALLERY_IMAGE_ACCEPT =
   ".jpg,.jpeg,.png,.webp,.heic,.heif,image/jpeg,image/png,image/webp,image/heic,image/heif"
@@ -102,12 +102,34 @@ const getFileFromDB = async (key) => {
     const tx = db.transaction(FILES_STORE, "readonly")
     const request = tx.objectStore(FILES_STORE).get(key)
     return new Promise((resolve) => {
-      request.onsuccess = () => resolve(request.result)
+      request.onsuccess = () => {
+        resolve(request.result || null)
+      }
       request.onerror = () => resolve(null)
     })
   } catch (err) {
     debugError("IndexedDB load failed:", err)
     return null
+  }
+}
+
+const getAllFilesFromDB = async (keys) => {
+  try {
+    const db = await openOnboardingFilesDB()
+    const tx = db.transaction(FILES_STORE, "readonly")
+    const store = tx.objectStore(FILES_STORE)
+    
+    const results = await Promise.all(
+      keys.map(key => new Promise(resolve => {
+        const req = store.get(key)
+        req.onsuccess = () => resolve(req.result || null)
+        req.onerror = () => resolve(null)
+      }))
+    )
+    return results
+  } catch (err) {
+    debugError("IndexedDB bulk load failed:", err)
+    return keys.map(() => null)
   }
 }
 
@@ -237,10 +259,32 @@ const formatNameToCapital = (str) => {
 const normalizeIFSC = (val) => String(val || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 11)
 const normalizePAN = (val) => String(val || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 10)
 const normalizeGST = (val) => String(val || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 15)
-const normalizeFssaiNumber = (val) => String(val || "").replace(/\D/g, "").slice(0, 14)
 const normalizeBankAcc = (val) => String(val || "").replace(/\D/g, "").slice(0, 18)
 
 const getTodayLocalYMD = () => formatDateToLocalYMD(new Date())
+
+const findZoneForLocation = (lat, lng, zonesList) => {
+  if (!lat || !lng || !zonesList || !zonesList.length) return null;
+  const isPointInPolygon = (latitude, longitude, polygon) => {
+    let isInside = false;
+    for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+      const xi = polygon[i].latitude, yi = polygon[i].longitude;
+      const xj = polygon[j].latitude, yj = polygon[j].longitude;
+      const intersect = ((yi > longitude) !== (yj > longitude)) &&
+          (latitude < (xj - xi) * (longitude - yi) / (yj - yi) + xi);
+      if (intersect) isInside = !isInside;
+    }
+    return isInside;
+  };
+  for (const zone of zonesList) {
+    if (zone.coordinates && zone.coordinates.length >= 3) {
+      if (isPointInPolygon(lat, lng, zone.coordinates)) {
+        return String(zone._id || zone.id);
+      }
+    }
+  }
+  return null;
+}
 
 // Helper functions for localStorage
 const saveOnboardingToLocalStorage = (step1, step2, step3, currentStep) => {
@@ -289,6 +333,7 @@ const saveOnboardingToLocalStorage = (step1, step2, step3, currentStep) => {
       step3: serializableStep3,
       currentStep,
       timestamp: Date.now(),
+      loginPhone: getVerifiedPhoneFromStoredRestaurant(),
     }
     localStorage.setItem(ONBOARDING_STORAGE_KEY, JSON.stringify(dataToSave))
   } catch (error) {
@@ -459,6 +504,10 @@ function TimeSelector({ label, value, onChange }) {
   })()
 
   const applyTimeValue = (newValue) => {
+    if (newValue === null) {
+      onChange("")
+      return
+    }
     if (!newValue || (typeof newValue.isValid === "function" && !newValue.isValid())) {
       return
     }
@@ -480,7 +529,7 @@ function TimeSelector({ label, value, onChange }) {
         <Clock className="w-4 h-4 text-gray-800" />
         <span className="text-xs font-medium text-gray-900">{label}</span>
       </div>
-      <MobileTimePicker 
+      <TimePicker 
         ampm={true}
         value={timeValue}
         onChange={applyTimeValue}
@@ -522,7 +571,23 @@ export default function RestaurantOnboarding() {
   const companyName = useCompanyName()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const [step, setStep] = useState(1)
+  const [step, setStep] = useState(() => {
+    try {
+      const stepParam = searchParams.get("step")
+      if (stepParam) {
+        const s = parseInt(stepParam, 10)
+        if (s >= 1 && s <= 3) return s
+      }
+      const stored = localStorage.getItem(ONBOARDING_STORAGE_KEY)
+      if (stored) {
+        const parsed = JSON.parse(stored)
+        if (parsed.currentStep) {
+          return Math.min(3, Math.max(1, Number(parsed.currentStep)))
+        }
+      }
+    } catch (e) {}
+    return 1
+  })
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState("")
@@ -532,7 +597,31 @@ export default function RestaurantOnboarding() {
     if (isLoggingOut) return
     setIsLoggingOut(true)
     try {
-      await restaurantAPI.logout()
+      let fcmToken = null;
+      let platform = "web";
+      try {
+        if (typeof window !== "undefined") {
+          if (window.flutter_inappwebview) {
+            platform = "mobile";
+            const handlerNames = ["getFcmToken", "getFCMToken", "getPushToken", "getFirebaseToken"];
+            for (const handlerName of handlerNames) {
+              try {
+                const t = await window.flutter_inappwebview.callHandler(handlerName, { module: "restaurant" });
+                if (t && typeof t === "string" && t.length > 20) {
+                  fcmToken = t.trim();
+                  break;
+                }
+              } catch (e) {}
+            }
+          } else {
+            fcmToken = localStorage.getItem("fcm_web_registered_token_restaurant") || null;
+          }
+        }
+      } catch (e) {
+        console.warn("Failed to get FCM token during logout", e);
+      }
+      
+      await restaurantAPI.logout(null, fcmToken, platform)
       clearModuleAuth("restaurant")
       clearAuthData()
       // Clear onboarding data and files
@@ -556,8 +645,13 @@ export default function RestaurantOnboarding() {
   const [hasExistingRestaurantProfile, setHasExistingRestaurantProfile] = useState(false)
   const [isFssaiCalendarOpen, setIsFssaiCalendarOpen] = useState(false)
   const [zones, setZones] = useState([])
+  const zonesRef = useRef([])
   const [zonesLoading, setZonesLoading] = useState(false)
   const [isOnboardingHydrated, setIsOnboardingHydrated] = useState(false)
+
+  useEffect(() => {
+    zonesRef.current = zones
+  }, [zones])
 
   const [step1, setStep1] = useState({
     restaurantName: "",
@@ -636,6 +730,37 @@ export default function RestaurantOnboarding() {
   const [locationSearchValue, setLocationSearchValue] = useState("")
   const [locationSuggestions, setLocationSuggestions] = useState([])
   const [isSearchingLocation, setIsSearchingLocation] = useState(false)
+  const justSelectedRef = useRef(false)
+  const googleMapsReadyRef = useRef(false)
+
+  const handleLocationSelect = (parsed) => {
+    let matchedZoneId = "";
+    if (parsed.latitude && parsed.longitude && zonesRef.current.length > 0) {
+      matchedZoneId = findZoneForLocation(parsed.latitude, parsed.longitude, zonesRef.current) || "";
+      if (!matchedZoneId) {
+        toast.error("This address is not in our service zone. Please select a valid location.", { id: 'out-of-zone' });
+      }
+    }
+
+    setStep1((prev) => ({
+      ...prev,
+      zoneId: matchedZoneId || prev.zoneId,
+      location: {
+        ...prev.location,
+        formattedAddress: parsed.formattedAddress || prev.location.formattedAddress,
+        addressLine1: parsed.formattedAddress || prev.location.addressLine1 || "",
+        area: parsed.area || prev.location.area,
+        city: parsed.city || prev.location.city,
+        state: parsed.state || prev.location.state,
+        pincode: parsed.pincode || prev.location.pincode,
+        latitude: parsed.latitude !== "" ? parsed.latitude : prev.location.latitude,
+        longitude: parsed.longitude !== "" ? parsed.longitude : prev.location.longitude,
+      },
+    }))
+    
+    setLocationSearchValue(parsed.formattedAddress)
+    setLocationSuggestions([])
+  }
 
   const getPreviewImageUrl = (value) => {
     if (!value) return null
@@ -855,11 +980,8 @@ export default function RestaurantOnboarding() {
   }
 
 
-  // Load from localStorage on mount and check URL parameter
+  // Separate effect to handle URL step changes without reloading data
   useEffect(() => {
-    setVerifiedPhoneNumber(getVerifiedPhoneFromStoredRestaurant())
-
-    // Check if step is specified in URL (from OTP login redirect)
     const stepParam = searchParams.get("step")
     if (stepParam) {
       const stepNum = parseInt(stepParam, 10)
@@ -867,8 +989,32 @@ export default function RestaurantOnboarding() {
         setStep(stepNum)
       }
     }
+  }, [searchParams])
+
+  // Separate effect for background zone fetching to prevent UI blocking
+  useEffect(() => {
+    const fetchZones = async () => {
+      try {
+        setZonesLoading(true)
+        const zoneRes = await zoneAPI.getPublicZones()
+        if (zoneRes.data?.success) {
+          setZones(zoneRes.data.data?.zones || zoneRes.data.data || [])
+        }
+      } catch (zErr) {
+        debugError("Failed to fetch zones:", zErr)
+      } finally {
+        setZonesLoading(false)
+      }
+    }
+    fetchZones()
+  }, [])
+
+  // Load from localStorage on mount
+  useEffect(() => {
+    setVerifiedPhoneNumber(getVerifiedPhoneFromStoredRestaurant())
 
     const loadData = async () => {
+      const stepParam = searchParams.get("step")
       let loadingTimer = null
       try {
         setLoading(true)
@@ -876,19 +1022,6 @@ export default function RestaurantOnboarding() {
           loadingTimer = window.setTimeout(() => {
             setLoading(false)
           }, 8000)
-        }
-
-        // Fetch zones for Step 1 location selection
-        try {
-          setZonesLoading(true)
-          const zoneRes = await zoneAPI.getPublicZones()
-          if (zoneRes.data?.success) {
-            setZones(zoneRes.data.data?.zones || zoneRes.data.data || [])
-          }
-        } catch (zErr) {
-          debugError("Failed to fetch zones:", zErr)
-        } finally {
-          setZonesLoading(false)
         }
 
         const currentPhone = getVerifiedPhoneFromStoredRestaurant()
@@ -967,11 +1100,13 @@ export default function RestaurantOnboarding() {
         // 3. APPLY LOCAL OVERRIDES (The "Persistence" fix)
         // If localStorage has unsaved changes for this user, apply them over the API/Initial state.
         if (localData) {
-          const savedPhone = normalizePhoneDigits(localData.step1?.ownerPhone || "")
+          const savedLoginPhone = normalizePhoneDigits(localData.loginPhone || "")
+          const savedOwnerPhone = normalizePhoneDigits(localData.step1?.ownerPhone || "")
+          const checkPhone = savedLoginPhone || savedOwnerPhone
           const normalizedCurrent = normalizePhoneDigits(currentPhone)
           
-          // Only use local data if it belongs to the same user
-          if (savedPhone && normalizedCurrent && savedPhone === normalizedCurrent) {
+          // Only use local data if it belongs to the same user or if the phone was not saved yet
+          if (!checkPhone || !normalizedCurrent || checkPhone === normalizedCurrent) {
             debugLog("? Matching local session found. Resuming with unsaved changes.")
             
             if (localData.step1) {
@@ -994,7 +1129,7 @@ export default function RestaurantOnboarding() {
             if (localData.currentStep && !stepParam) {
               setStep(Math.min(3, Math.max(1, Number(localData.currentStep))))
             }
-          } else if (savedPhone && normalizedCurrent && savedPhone !== normalizedCurrent) {
+          } else {
              debugLog("? Phone mismatch, data belongs to different user. Clearing local cache.")
              clearOnboardingFromLocalStorage()
              await clearAllFilesFromDB()
@@ -1003,14 +1138,16 @@ export default function RestaurantOnboarding() {
 
         // 4. Finally re-hydrate heavy files from IndexedDB if they exist 
         // (IndexedDB is reliable for large files which don't fit in localStorage)
-        const [prof, pan, gst, fs, pdf, ...menuImages] = await Promise.all([
-          getFileFromDB("profileImage"),
-          getFileFromDB("panImage"),
-          getFileFromDB("gstImage"),
-          getFileFromDB("fssaiImage"),
-          getFileFromDB("menuPdf"),
-          ...Array.from({ length: 10 }, (_, i) => getFileFromDB(`menuImage_${i}`))
-        ]);
+        const fileKeys = [
+          "profileImage",
+          "panImage",
+          "gstImage",
+          "fssaiImage",
+          "menuPdf",
+          ...Array.from({ length: 10 }, (_, i) => `menuImage_${i}`)
+        ];
+        
+        const [prof, pan, gst, fs, pdf, ...menuImages] = await getAllFilesFromDB(fileKeys);
 
         if (prof) setStep2(p => ({ ...p, profileImage: prof }));
         if (pan) setStep3(p => ({ ...p, panImage: pan }));
@@ -1041,7 +1178,7 @@ export default function RestaurantOnboarding() {
     }
 
     loadData()
-  }, [searchParams])
+  }, []) // Empty dependency array to prevent data wipe on URL changes
 
   useEffect(() => {
     if (!verifiedPhoneNumber) return
@@ -1217,22 +1354,7 @@ export default function RestaurantOnboarding() {
   const validateStep2 = () => {
     const errors = []
 
-    // Check menu images - must have at least one File or existing URL
-    const hasMenuImages = step2.menuImages && step2.menuImages.length > 0
-    if (!hasMenuImages) {
-      errors.push("At least one menu image is required")
-    } else {
-      // Verify that menu images are either File objects or have valid URLs
-      const validMenuImages = step2.menuImages.filter(img => {
-        if (isUploadableFile(img)) return true
-        if (img?.url && typeof img.url === 'string') return true
-        if (typeof img === 'string' && img.trim()) return true
-        return false
-      })
-      if (validMenuImages.length === 0) {
-        errors.push("Please upload at least one valid menu image")
-      }
-    }
+
 
     // Check profile image - must be a File or existing URL
     if (!step2.profileImage) {
@@ -1248,17 +1370,7 @@ export default function RestaurantOnboarding() {
       }
     }
 
-    if (!step2.menuPdf) {
-      errors.push("Menu PDF is required")
-    } else {
-      const isValidMenuPdf =
-        isUploadableFile(step2.menuPdf) ||
-        (step2.menuPdf?.url && typeof step2.menuPdf.url === "string") ||
-        (typeof step2.menuPdf === "string" && step2.menuPdf.trim())
-      if (!isValidMenuPdf) {
-        errors.push("Please upload a valid menu PDF")
-      }
-    }
+
 
     if (!step2.openingTime?.trim()) {
       errors.push("Opening time is required")
@@ -1377,7 +1489,7 @@ export default function RestaurantOnboarding() {
     if (!step3.ifscCode?.trim()) {
       errors.push("IFSC code is required")
     } else if (!IFSC_CODE_REGEX.test(step3.ifscCode.trim().toUpperCase())) {
-      errors.push("Bank IFSC code must be valid (11 characters, e.g., HDFC0001234)")
+      errors.push("IFSC code must contain exactly 11 alphanumeric characters")
     }
     if (!step3.accountHolderName?.trim()) {
       errors.push("Account holder name is required")
@@ -1431,21 +1543,17 @@ export default function RestaurantOnboarding() {
       } else if (step === 3) {
         if (hasExistingRestaurantProfile) {
           const [
-            menuImagesPayload,
             profileImagePayload,
             panImagePayload,
             gstImagePayload,
             fssaiImagePayload,
-            menuPdfPayload,
           ] = await Promise.all([
-            resolveMenuImagesForProfileUpdate(step2.menuImages || []),
             resolveImageForProfileUpdate(step2.profileImage, "food/restaurants/profile"),
             resolveImageForProfileUpdate(step3.panImage, "food/restaurants/pan"),
             step3.gstRegistered
               ? resolveImageForProfileUpdate(step3.gstImage, "food/restaurants/gst")
               : Promise.resolve(null),
             resolveImageForProfileUpdate(step3.fssaiImage, "food/restaurants/fssai"),
-            resolveMenuPdfForProfileUpdate(step2.menuPdf),
           ])
 
           const updatePayload = {
@@ -1473,7 +1581,6 @@ export default function RestaurantOnboarding() {
             openingTime: normalizeTimeValue(step2.openingTime) || "",
             closingTime: normalizeTimeValue(step2.closingTime) || "",
             openDays: Array.isArray(step2.openDays) ? step2.openDays : [],
-            menuImages: menuImagesPayload,
             profileImage: profileImagePayload || "",
             panNumber: step3.panNumber || "",
             nameOnPan: step3.nameOnPan || "",
@@ -1490,10 +1597,6 @@ export default function RestaurantOnboarding() {
             ifscCode: (step3.ifscCode || "").toUpperCase(),
             accountHolderName: step3.accountHolderName || "",
             accountType: step3.accountType || "",
-          }
-
-          if (menuPdfPayload) {
-            updatePayload.menuPdf = menuPdfPayload
           }
 
           await restaurantAPI.updateProfile(updatePayload)
@@ -1539,16 +1642,6 @@ export default function RestaurantOnboarding() {
         formData.append("closingTime", normalizeTimeValue(step2.closingTime) || "")
         formData.append("openDays", (step2.openDays || []).join(","))
 
-        const menuFiles = (step2.menuImages || []).filter((f) => isUploadableFile(f))
-        if (menuFiles.length === 0) {
-          throw new Error("At least one menu image must be uploaded")
-        }
-        menuFiles.forEach((file) => formData.append("menuImages", file))
-
-        if (!isUploadableFile(step2.menuPdf)) {
-          throw new Error("Menu PDF is required")
-        }
-        formData.append("menuPdf", step2.menuPdf)
 
         if (!isUploadableFile(step2.profileImage)) {
           throw new Error("Restaurant profile image is required")
@@ -1758,29 +1851,6 @@ export default function RestaurantOnboarding() {
           <p className="text-sm text-gray-700">
             Add your restaurant's location for order pick-up.
           </p>
-          <div>
-            <Label className="text-xs text-gray-700">Service zone*</Label>
-            <select
-              value={step1.zoneId || ""}
-              onChange={(e) => setStep1({ ...step1, zoneId: e.target.value })}
-              className="mt-1 w-full h-9 rounded-md border border-input bg-white px-3 text-sm"
-              disabled={zonesLoading || !isEditing}
-            >
-              <option value="">{zonesLoading ? "Loading zones..." : "Select a zone"}</option>
-              {zones.map((z) => {
-                const id = String(z?._id || z?.id || "")
-                const label = z?.name || z?.zoneName || z?.serviceLocation || id
-                return (
-                  <option key={id} value={id}>
-                    {label}
-                  </option>
-                )
-              })}
-            </select>
-            <p className="text-[11px] text-gray-500 mt-1">
-              Choose the service zone where your restaurant will be available.
-            </p>
-          </div>
           <div className="relative">
             <Label className="text-xs text-gray-700">Search location</Label>
             <div className="relative">
@@ -1791,6 +1861,7 @@ export default function RestaurantOnboarding() {
                 className="mt-1 bg-white text-sm text-black! dark:text-white! placeholder:text-gray-500 dark:placeholder:text-gray-400 caret-black dark:caret-white"
                 style={{ color: "#000", WebkitTextFillColor: "#000" }}
                 placeholder="Start typing your restaurant address..."
+                disabled={!isEditing}
               />
               {isSearchingLocation && (
                 <div className="absolute right-3 top-1/2 -translate-y-1/2">
@@ -1806,29 +1877,61 @@ export default function RestaurantOnboarding() {
                   <button
                     key={s.id}
                     type="button"
-                    onClick={() => {
-                      const { lat, lng, display, addr } = s
-                      const area = addr.suburb || addr.neighbourhood || addr.city_district || addr.locality || ""
-                      const city = addr.city || addr.town || addr.village || ""
-                      const state = addr.state || ""
-                      const pincode = addr.postcode || ""
-
-                      setStep1((prev) => ({
-                        ...prev,
-                        location: {
-                          ...prev.location,
-                          formattedAddress: display,
-                          addressLine1: display,
-                          area: area || prev.location.area,
-                          city: city || prev.location.city,
-                          state: state || prev.location.state,
-                          pincode: pincode || prev.location.pincode,
-                          latitude: lat,
-                          longitude: lng,
-                        },
-                      }))
-                      setLocationSearchValue(display)
+                    onClick={async () => {
+                      // Prevent re-search after selecting
+                      justSelectedRef.current = true
                       setLocationSuggestions([])
+
+                      if (s.isGoogle) {
+                        // Fetch details from Google Places API
+                        try {
+                          const dummyNode = document.createElement("div")
+                          const service = new window.google.maps.places.PlacesService(dummyNode)
+                          service.getDetails(
+                            { placeId: s.id, fields: ["formatted_address", "address_components", "geometry"] },
+                            (place, status) => {
+                              if (status === window.google.maps.places.PlacesServiceStatus.OK && place) {
+                                const comps = Array.isArray(place.address_components) ? place.address_components : []
+                                const get = (types) => comps.find(c => types.some(t => c.types?.includes(t)))?.long_name || ""
+
+                                handleLocationSelect({
+                                  formattedAddress: place.formatted_address || s.display,
+                                  area: get(["sublocality_level_1", "sublocality", "neighborhood"]) || get(["locality"]),
+                                  city: get(["locality"]) || get(["administrative_area_level_2"]),
+                                  state: get(["administrative_area_level_1"]) || get(["administrative_area_level_2"]),
+                                  pincode: get(["postal_code"]),
+                                  latitude: place.geometry?.location?.lat?.() || "",
+                                  longitude: place.geometry?.location?.lng?.() || ""
+                                })
+                              } else {
+                                handleLocationSelect({ formattedAddress: s.display })
+                              }
+                            }
+                          )
+                        } catch (err) {
+                          handleLocationSelect({ formattedAddress: s.display })
+                        }
+                      } else {
+                        // Handle Nominatim selection
+                        const { lat, lng, display, addr } = s
+                        const area = addr.suburb || addr.neighbourhood || addr.city_district || addr.locality || ""
+                        const city = addr.city || addr.town || addr.village || ""
+                        const state = addr.state || ""
+                        const pincode = addr.postcode || ""
+
+                        handleLocationSelect({
+                          formattedAddress: display,
+                          area,
+                          city,
+                          state,
+                          pincode,
+                          latitude: lat,
+                          longitude: lng
+                        })
+                      }
+
+                      // Reset flag after debounce window
+                      setTimeout(() => { justSelectedRef.current = false }, 600)
                     }}
                     className="w-full px-4 py-2 text-left text-[13px] hover:bg-orange-50 border-b border-gray-100 last:border-none font-medium text-gray-700"
                   >
@@ -1852,6 +1955,7 @@ export default function RestaurantOnboarding() {
             }
             className="bg-white text-sm"
             placeholder="Shop no. / building no. (optional)"
+            disabled={!isEditing}
           />
           <Input
             value={step1.location?.addressLine2 || ""}
@@ -1863,6 +1967,7 @@ export default function RestaurantOnboarding() {
             }
             className="bg-white text-sm"
             placeholder="Floor / tower (optional)"
+            disabled={!isEditing}
           />
           <Input
             value={step1.location?.landmark || ""}
@@ -1874,6 +1979,7 @@ export default function RestaurantOnboarding() {
             }
             className="bg-white text-sm"
             placeholder="Nearby landmark (optional)"
+            disabled={!isEditing}
           />
           <Input
             value={step1.location?.area || ""}
@@ -1885,34 +1991,20 @@ export default function RestaurantOnboarding() {
             }
             className="bg-white text-sm"
             placeholder="Area / Sector / Locality*"
+            disabled={!isEditing}
           />
-          <Select
+          <Input
             value={step1.location?.city || ""}
-            onValueChange={(value) =>
+            onChange={(e) =>
               setStep1({
                 ...step1,
-                location: { ...step1.location, city: value },
+                location: { ...step1.location, city: e.target.value },
               })
             }
-          >
-            <SelectTrigger className="bg-white text-sm text-gray-700">
-              <SelectValue placeholder="Select City*" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="Indore">Indore</SelectItem>
-              <SelectItem value="Bhopal">Bhopal</SelectItem>
-              <SelectItem value="Gwalior">Gwalior</SelectItem>
-              <SelectItem value="Jabalpur">Jabalpur</SelectItem>
-              <SelectItem value="Mumbai">Mumbai</SelectItem>
-              <SelectItem value="Pune">Pune</SelectItem>
-              <SelectItem value="Delhi">Delhi</SelectItem>
-              <SelectItem value="Bangalore">Bangalore</SelectItem>
-              <SelectItem value="Ahmedabad">Ahmedabad</SelectItem>
-              <SelectItem value="Hyderabad">Hyderabad</SelectItem>
-              <SelectItem value="Chennai">Chennai</SelectItem>
-              <SelectItem value="Kolkata">Kolkata</SelectItem>
-            </SelectContent>
-          </Select>
+            className="bg-white text-sm"
+            placeholder="City*"
+            disabled={!isEditing}
+          />
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Input
               value={step1.location?.state || ""}
@@ -1924,6 +2016,7 @@ export default function RestaurantOnboarding() {
               }
               className="bg-white text-sm"
               placeholder="State"
+              disabled={!isEditing}
             />
             <Input
               value={step1.location?.pincode || ""}
@@ -1935,195 +2028,103 @@ export default function RestaurantOnboarding() {
               }
               className="bg-white text-sm"
               placeholder="Pincode"
+              disabled={!isEditing}
             />
           </div>
           <p className="text-[11px] text-gray-500 mt-1">
             Please ensure that this address is the same as mentioned on your FSSAI license.
           </p>
+
+          <div className="pt-2">
+            <Label className="text-xs text-gray-700">Service zone*</Label>
+            <select
+              value={step1.zoneId || ""}
+              onChange={(e) => setStep1({ ...step1, zoneId: e.target.value })}
+              className="mt-1 w-full h-9 rounded-md border border-input bg-white px-3 text-sm disabled:opacity-50"
+              disabled={zonesLoading || !isEditing || !!step1.location?.latitude}
+            >
+              <option value="">{zonesLoading ? "Loading zones..." : "Select a zone"}</option>
+              {zones.map((z) => {
+                const id = String(z?._id || z?.id || "")
+                const label = z?.name || z?.zoneName || z?.serviceLocation || id
+                return (
+                  <option key={id} value={id}>
+                    {label}
+                  </option>
+                )
+              })}
+            </select>
+            <p className="text-[11px] text-gray-500 mt-1">
+              Choose the service zone where your restaurant will be available.
+            </p>
+          </div>
         </div>
       </section>
     </div>
   )
 
 
-  // Initialize Google Places Autocomplete for Step 1 location search.
+  // ── Load Google Maps Script (No UI widget, just API) ──────────────
+
   useEffect(() => {
     if (step !== 1) return
-
     let cancelled = false
-    let autocomplete = null
 
-    const init = async () => {
-      // Wait for the input ref to be attached
-      let inputElement = null
-      for (let i = 0; i < 50; i++) {
-        if (locationSearchInputRef.current) {
-          inputElement = locationSearchInputRef.current
-          break
-        }
-        await new Promise((r) => setTimeout(r, 100))
+    const loadMaps = async () => {
+      if (window.google?.maps?.places?.AutocompleteService) {
+        googleMapsReadyRef.current = true
+        return
       }
 
-      if (!inputElement || cancelled) return
+      const apiKey = await getGoogleMapsApiKey()
+      if (!apiKey) return
 
-      const loadMaps = async () => {
-        // 1. If already available with places, return true
-        if (window.google?.maps?.places?.Autocomplete) {
-          mapsScriptLoadedRef.current = true
-          return true
-        }
+      window.gm_authFailure = () => {
+        debugError("Google Maps auth failed.")
+        googleMapsReadyRef.current = false
+      }
 
-        // 2. Load API Key
-        const apiKey = await getGoogleMapsApiKey()
-        if (!apiKey) {
-          debugError("Google Maps API Key missing or invalid")
-          return false
-        }
-
-        // 3. Handle Auth Failure
-        window.gm_authFailure = () => {
-          debugError("Google Maps authentication failed.")
-          // Don't show toast here as we have Nominatim fallback
-        }
-
-        // 4. Check for existing script and force libraries=places if needed
-        const scripts = Array.from(document.getElementsByTagName("script"))
-        const mapsScript = scripts.find(s => s.src?.includes("maps.googleapis.com/maps/api/js"))
-        
-        if (mapsScript && !mapsScript.src.includes("libraries=places")) {
-          debugLog("Found maps script without places, removing to reload properly.")
-          mapsScript.remove()
-        } else if (mapsScript && mapsScript.src.includes("libraries=places")) {
-           // Wait if it's still loading
-           for (let i = 0; i < 60; i++) {
-             if (window.google?.maps?.places?.Autocomplete) return true
-             if (cancelled) return false
-             await new Promise(r => setTimeout(r, 100))
+      const scripts = Array.from(document.getElementsByTagName("script"))
+      const mapsScript = scripts.find(s => s.src?.includes("maps.googleapis.com/maps/api/js"))
+      
+      if (mapsScript && !mapsScript.src.includes("libraries=places")) {
+        mapsScript.remove()
+      } else if (mapsScript && mapsScript.src.includes("libraries=places")) {
+         for (let i = 0; i < 60; i++) {
+           if (window.google?.maps?.places?.AutocompleteService) {
+             googleMapsReadyRef.current = true
+             return
            }
-        }
+           if (cancelled) return
+           await new Promise(r => setTimeout(r, 100))
+         }
+      }
 
-        // 5. Create and append new script
-        return new Promise((resolve) => {
-          const script = document.createElement("script")
-          script.id = "google-maps-sdk"
-          script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&v=weekly`
-          script.async = true
-          script.defer = true
-          script.onload = () => {
-            setTimeout(() => {
-              const ok = !!window.google?.maps?.places?.Autocomplete
-              mapsScriptLoadedRef.current = ok
-              resolve(ok)
-            }, 200)
+      const script = document.createElement("script")
+      script.id = "google-maps-sdk"
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&v=weekly`
+      script.async = true
+      script.defer = true
+      script.onload = () => {
+        setTimeout(() => {
+          if (window.google?.maps?.places?.AutocompleteService) {
+            googleMapsReadyRef.current = true
           }
-          script.onerror = () => resolve(false)
-          document.head.appendChild(script)
-        })
+        }, 200)
       }
-
-      const parsePlace = (place) => {
-        const formattedAddress = place?.formatted_address || ""
-        const comps = Array.isArray(place?.address_components) ? place.address_components : []
-        const get = (types) => comps.find((c) => types.some((t) => c.types?.includes(t)))?.long_name || ""
-
-        const area = get(["sublocality_level_1", "sublocality", "neighborhood"]) || get(["locality"])
-        const city = get(["locality"]) || get(["administrative_area_level_2"])
-        const state = get(["administrative_area_level_1"]) || get(["administrative_area_level_2"])
-        const pincode = get(["postal_code"])
-        const lat = place?.geometry?.location?.lat?.()
-        const lng = place?.geometry?.location?.lng?.()
-
-        return {
-          formattedAddress,
-          area,
-          city,
-          state,
-          pincode,
-          latitude: typeof lat === "number" ? Number(lat.toFixed(6)) : "",
-          longitude: typeof lng === "number" ? Number(lng.toFixed(6)) : "",
-        }
-      }
-
-      const ok = await loadMaps()
-      if (!ok || cancelled || !inputElement) return
-
-      if (inputElement.hasAttribute("data-google-places-initialized")) return
-
-      try {
-        autocomplete = new window.google.maps.places.Autocomplete(inputElement, {
-          fields: ["formatted_address", "address_components", "geometry"],
-          componentRestrictions: { country: "in" },
-          types: ["geocode", "establishment"]
-        })
-
-        inputElement.setAttribute("data-google-places-initialized", "true")
-        placesAutocompleteRef.current = autocomplete
-
-        autocomplete.addListener("place_changed", () => {
-          const place = autocomplete.getPlace()
-          if (!place?.geometry) return
-
-          const parsed = parsePlace(place)
-          setStep1((prev) => ({
-            ...prev,
-            location: {
-              ...prev.location,
-              formattedAddress: parsed.formattedAddress || prev.location.formattedAddress,
-              addressLine1: parsed.formattedAddress || prev.location.addressLine1 || "",
-              area: parsed.area || prev.location.area,
-              city: parsed.city || prev.location.city,
-              state: parsed.state || prev.location.state,
-              pincode: parsed.pincode || prev.location.pincode,
-              latitude: parsed.latitude !== "" ? parsed.latitude : prev.location.latitude,
-              longitude: parsed.longitude !== "" ? parsed.longitude : prev.location.longitude,
-            },
-          }))
-          
-          setLocationSearchValue(parsed.formattedAddress)
-          inputElement.blur()
-        })
-
-        const pacContainerFix = () => {
-          const applyFix = () => {
-            const containers = document.querySelectorAll(".pac-container")
-            if (containers.length > 0) {
-              containers.forEach((container) => {
-                container.style.zIndex = "999999"
-                container.style.pointerEvents = "auto"
-                container.style.visibility = "visible"
-                container.style.display = "block"
-              })
-            }
-          }
-          applyFix()
-          setTimeout(applyFix, 100)
-          setTimeout(applyFix, 300)
-        }
-
-        inputElement.addEventListener("focus", pacContainerFix)
-        inputElement.addEventListener("input", pacContainerFix)
-      } catch (e) {
-        debugError("Autocomplete error:", e)
-      }
+      document.head.appendChild(script)
     }
 
-    init().catch(() => {})
-
-    return () => {
-      cancelled = true
-      if (autocomplete) {
-        try { window.google?.maps?.event?.clearInstanceListeners(autocomplete) } catch {}
-      }
-      if (locationSearchInputRef.current) {
-        locationSearchInputRef.current.removeAttribute("data-google-places-initialized")
-      }
-      placesAutocompleteRef.current = null
-    }
+    loadMaps().catch(() => {})
+    return () => { cancelled = true }
   }, [step])
 
-  // Hybrid Search Fallback (Nominatim)
+  // ── Unified Search (Google Places API primary, Nominatim fallback) ────────
+
   useEffect(() => {
     if (step !== 1) return
+    if (justSelectedRef.current) return
+
     const q = String(locationSearchValue || "").trim()
     if (q.length < 3) {
       setLocationSuggestions([])
@@ -2132,9 +2133,41 @@ export default function RestaurantOnboarding() {
     }
 
     const t = setTimeout(async () => {
+      if (justSelectedRef.current) return
+
+      setIsSearchingLocation(true)
+
+      // Try Google Places AutocompleteService first
+      if (googleMapsReadyRef.current && window.google?.maps?.places?.AutocompleteService) {
+        try {
+          const service = new window.google.maps.places.AutocompleteService()
+          service.getPlacePredictions(
+            { input: q, componentRestrictions: { country: "in" } },
+            (predictions, status) => {
+              if (status === window.google.maps.places.PlacesServiceStatus.OK && predictions) {
+                const mapped = predictions.map(p => ({
+                  id: p.place_id,
+                  display: p.description,
+                  isGoogle: true
+                }))
+                setLocationSuggestions(mapped)
+                setIsSearchingLocation(false)
+              } else {
+                // If ZERO_RESULTS or error, we could fallback, but let's just show empty
+                setLocationSuggestions([])
+                setIsSearchingLocation(false)
+              }
+            }
+          )
+          return // Exit here, callback handles state
+        } catch (e) {
+          debugError("Google AutocompleteService failed:", e)
+        }
+      }
+
+      // Fallback to Nominatim if Google Maps isn't loaded/failed
       try {
-        setIsSearchingLocation(true)
-        const url = `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=4&q=${encodeURIComponent(q)}&countrycodes=in`
+        const url = `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=5&q=${encodeURIComponent(q)}&countrycodes=in`
         const res = await fetch(url, { headers: { Accept: "application/json" } })
         const json = await res.json()
         const mapped = (Array.isArray(json) ? json : []).map(r => ({
@@ -2143,6 +2176,7 @@ export default function RestaurantOnboarding() {
           lat: Number(r.lat),
           lng: Number(r.lon),
           addr: r.address || {},
+          isGoogle: false
         }))
         setLocationSuggestions(mapped)
       } catch (e) {
@@ -2154,6 +2188,8 @@ export default function RestaurantOnboarding() {
 
     return () => clearTimeout(t)
   }, [locationSearchValue, step])
+
+
 
   useEffect(() => {
     if (step !== 1) return
@@ -2183,7 +2219,9 @@ export default function RestaurantOnboarding() {
             lastOutOfZoneToastKeyRef.current = null
           } else {
             if (lastOutOfZoneToastKeyRef.current !== key) {
-              toast.error("Selected location is outside all service zones")
+              if (justSelectedRef.current) {
+                toast.error("Selected location is outside all service zones")
+              }
               lastOutOfZoneToastKeyRef.current = key
             }
             setStep1((prev) => (prev.zoneId ? { ...prev, zoneId: "" } : prev))
@@ -2226,177 +2264,12 @@ export default function RestaurantOnboarding() {
     <div className="space-y-6">
       {/* Images section */}
       <section className="bg-white p-4 sm:p-6 rounded-md space-y-5">
-        <h2 className="text-lg font-semibold text-black">Menu & photos</h2>
+        <h2 className="text-lg font-semibold text-black">Restaurant photo</h2>
         <p className="text-xs text-gray-500">
-          Add clear photos of your printed menu and a primary profile image. This helps customers
-          understand what you serve.
+          Add a clear primary profile image for your restaurant. This helps customers recognize your brand.
         </p>
 
-        {/* Menu images */}
-        <div className="space-y-2">
-          <Label className="text-xs font-medium text-gray-700">Menu images</Label>
-          <div className="mt-1 border border-dashed border-gray-300 rounded-md bg-gray-50/70 px-4 py-3 flex items-center justify-between flex-col gap-3">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-md bg-white flex items-center justify-center">
-                <ImageIcon className="w-5 h-5 text-gray-700" />
-              </div>
-              <div className="flex flex-col">
-                <span className="text-xs font-medium text-gray-900">Upload menu images</span>
-                <span className="text-[11px] text-gray-500">
-                  JPG, PNG, WebP ? You can select multiple files
-                </span>
-              </div>
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full text-xs"
-              onClick={() =>
-                openImageSourcePicker({
-                  title: "Add menu image",
-                  fileNamePrefix: "menu-image",
-                  fallbackInputRef: menuImagesInputRef,
-                  onSelectFile: (file) => handleMenuImagesSelected(file ? [file] : []),
-                })
-              }
-            >
-              <Upload className="w-4 h-4 mr-1.5" />
-              Upload
-            </Button>
-            <input
-              id="menuImagesInput"
-              type="file"
-              multiple
-              accept={LOCAL_IMAGE_FILE_ACCEPT}
-              className="hidden"
-              ref={menuImagesInputRef}
-              onChange={(e) => {
-                const files = Array.from(e.target.files || [])
-                if (!files.length) return
-                debugLog('?? Menu images selected:', files.length, 'files')
-                handleMenuImagesSelected(files)
-                // Reset input to allow selecting same file again
-                e.target.value = ''
-              }}
-            />
-          </div>
 
-          {/* Menu image previews */}
-          {!!step2.menuImages.length && (
-            <div className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-3">
-              {step2.menuImages.map((file, idx) => {
-                // Handle both File objects and URL objects
-                let imageUrl = null
-                let imageName = `Image ${idx + 1}`
-
-                if (isUploadableFile(file)) {
-                  imageUrl = getPreviewImageUrl(file)
-                  imageName = file.name || imageName
-                } else if (file?.url) {
-                  // If it's an object with url property (from backend)
-                  imageUrl = file.url
-                  imageName = file.name || `Image ${idx + 1}`
-                } else if (typeof file === 'string') {
-                  // If it's a direct URL string
-                  imageUrl = file
-                }
-
-                return (
-                  <div
-                    key={idx}
-                    className="relative aspect-4/5 rounded-md overflow-hidden bg-gray-100"
-                  >
-                    <div className="absolute top-1 right-1 z-30">
-                      <button
-                        type="button"
-                        onClick={async (e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          await handleRemoveMenuImage(idx)
-                        }}
-                        className="bg-red-500 text-white rounded-full p-1 shadow-md hover:bg-red-600 transition-colors"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
-                    </div>
-                    {imageUrl ? (
-                      <img
-                        src={imageUrl}
-                        alt={`Menu ${idx + 1}`}
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-[11px] text-gray-500 px-2 text-center">
-                        Preview unavailable
-                      </div>
-                    )}
-                    <div className="absolute bottom-0 inset-x-0 bg-black/60 px-2 py-1">
-                      <p className="text-[10px] text-white truncate">
-                        {imageName}
-                      </p>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-        </div>
-
-        {/* Menu PDF */}
-        <div className="space-y-2">
-          <Label className="text-xs font-medium text-gray-700">Menu PDF <span className="text-red-500">*</span></Label>
-          <div className="mt-1 border border-dashed border-gray-300 rounded-md bg-gray-50/70 px-4 py-3 flex items-center justify-between flex-col gap-3">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-md bg-white flex items-center justify-center">
-                <FileText className="w-5 h-5 text-gray-700" />
-              </div>
-              <div className="flex flex-col">
-                <span className="text-xs font-medium text-gray-900">Upload menu PDF</span>
-                <span className="text-[11px] text-gray-500">PDF only, max 1 file</span>
-              </div>
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full text-xs"
-              onClick={() => menuPdfInputRef.current?.click()}
-            >
-              <Upload className="w-4 h-4 mr-1.5" />
-              Upload PDF
-            </Button>
-            <input
-              id="menuPdfInput"
-              type="file"
-              accept={LOCAL_PDF_FILE_ACCEPT}
-              className="hidden"
-              ref={menuPdfInputRef}
-              onChange={(e) => {
-                const file = e.target.files?.[0] || null
-                if (file) {
-                  handleMenuPdfSelected(file)
-                }
-                e.target.value = ""
-              }}
-            />
-          </div>
-          {step2.menuPdf && (
-            <div className="mt-2 flex items-center justify-between rounded-md border border-gray-200 bg-white px-3 py-2">
-              <div className="flex items-center gap-2">
-                <FileText className="w-4 h-4 text-gray-600" />
-                <span className="text-xs text-gray-700">
-                  {typeof step2.menuPdf === "object" ? step2.menuPdf.name || "Menu.pdf" : "Menu.pdf"}
-                </span>
-              </div>
-              <button
-                type="button"
-                onClick={handleRemoveMenuPdf}
-                className="text-xs text-red-600 hover:text-red-700"
-              >
-                Remove
-              </button>
-            </div>
-          )}
-        </div>
 
         {/* Profile image */}
         <div className="space-y-2">
@@ -2493,18 +2366,6 @@ export default function RestaurantOnboarding() {
               value={step2.openingTime || ""}
               onChange={(val) => {
                 const nextOpening = normalizeTimeValue(val) || ""
-                const openingMinutes = timeStringToMinutes(nextOpening)
-                const closingMinutes = timeStringToMinutes(step2.closingTime)
-                if (openingMinutes !== null && closingMinutes !== null) {
-                  if (openingMinutes === closingMinutes) {
-                    toast.error("Opening time and closing time cannot be same")
-                    return
-                  }
-                  if (closingMinutes < openingMinutes) {
-                    toast.error("Closing time cannot be less than opening time")
-                    return
-                  }
-                }
                 setStep2((prev) => ({ ...prev, openingTime: nextOpening }))
               }}
             />
@@ -2513,18 +2374,6 @@ export default function RestaurantOnboarding() {
               value={step2.closingTime || ""}
               onChange={(val) => {
                 const nextClosing = normalizeTimeValue(val) || ""
-                const openingMinutes = timeStringToMinutes(step2.openingTime)
-                const closingMinutes = timeStringToMinutes(nextClosing)
-                if (openingMinutes !== null && closingMinutes !== null) {
-                  if (openingMinutes === closingMinutes) {
-                    toast.error("Opening time and closing time cannot be same")
-                    return
-                  }
-                  if (closingMinutes < openingMinutes) {
-                    toast.error("Closing time cannot be less than opening time")
-                    return
-                  }
-                }
                 setStep2((prev) => ({ ...prev, closingTime: nextClosing }))
               }}
             />
@@ -2765,12 +2614,10 @@ export default function RestaurantOnboarding() {
           <Input
             value={step3.fssaiNumber || ""}
             onChange={(e) =>
-              setStep3({ ...step3, fssaiNumber: normalizeFssaiNumber(e.target.value) })
+              setStep3({ ...step3, fssaiNumber: e.target.value.replace(/\D/g, "").slice(0, 14) })
             }
             className="bg-white text-sm"
             placeholder="FSSAI number (14 digits)"
-            inputMode="numeric"
-            maxLength={14}
           />
           <div>
             <Label className="text-xs text-gray-700 mb-1 block">FSSAI expiry date</Label>
@@ -2891,8 +2738,7 @@ export default function RestaurantOnboarding() {
             value={step3.ifscCode || ""}
             onChange={(e) => setStep3({ ...step3, ifscCode: normalizeIFSC(e.target.value) })}
             className="bg-white text-sm"
-            placeholder="IFSC code (e.g., HDFC0001234)"
-            maxLength={11}
+            placeholder="IFSC code"
           />
           <Select
             value={step3.accountType || ""}
@@ -3025,7 +2871,7 @@ export default function RestaurantOnboarding() {
               disabled={saving || (step === 3 && !isEditing)}
               className={`text-sm bg-black text-white px-6 ${(step === 3 && !isEditing) ? "opacity-50 cursor-not-allowed" : ""}`}
             >
-              {step === 3 ? (saving ? "Saving..." : "Finish") : saving ? "Saving..." : "Continue"}
+              {step === 3 ? (saving ? "Uploading Documents..." : "Submit Profile") : saving ? "Saving..." : "Continue"}
             </Button>
           </div>
         </footer>

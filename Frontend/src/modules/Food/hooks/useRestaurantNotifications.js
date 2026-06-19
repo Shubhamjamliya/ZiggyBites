@@ -1,37 +1,16 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback, useContext } from 'react';
 import io from 'socket.io-client';
 import { API_BASE_URL } from '@food/api/config';
 import { restaurantAPI } from '@food/api';
-const alertSound = '/alert.mp3';
+import alertSound from '@food/assets/audio/alert.mp3';
 import { dispatchNotificationInboxRefresh } from '@food/hooks/useNotificationInbox';
+import { RestaurantNotificationContext } from '../context/RestaurantNotificationContext';
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
 
-const sharedNotificationState = {
-  newOrder: null,
-  newReservation: null,
-  isConnected: false,
-};
-
-const sharedNotificationSubscribers = new Set();
-
-const syncSharedNotificationState = (patch = {}) => {
-  Object.assign(sharedNotificationState, patch);
-  sharedNotificationSubscribers.forEach((listener) => {
-    try {
-      listener(sharedNotificationState);
-    } catch {
-      // Ignore subscriber failures so notification flow continues.
-    }
-  });
-};
-
-const resolveAudioSource = (source, cacheKey = 'restaurant-alert') => {
-  if (!source) return source;
-  if (!import.meta.env.DEV) return source;
-  const separator = source.includes('?') ? '&' : '?';
-  return `${source}${separator}devcache=${cacheKey}`;
+const resolveAudioSource = (source) => {
+  return source;
 }
 
 const supportsBrowserNotifications = () =>
@@ -54,82 +33,6 @@ const buildRestaurantOrderNotification = (orderData = {}) => {
     },
   };
 }
-
-const isSubscriptionStartedAlert = (payload = {}) =>
-  payload?.type === 'subscription_started' ||
-  (String(payload?.orderId || payload?.order_id || '').startsWith('SUB-') &&
-    !payload?.subscriptionUsage);
-
-const isSubscriptionMealOrder = (payload = {}) => {
-  if (isSubscriptionStartedAlert(payload)) return false;
-
-  const paymentMethod = String(
-    payload?.paymentMethod || payload?.payment?.method || '',
-  )
-    .toLowerCase()
-    .trim();
-
-  return Boolean(
-    payload?.subscriptionUsage?.subscriptionId ||
-      payload?.type === 'subscription_meal_sent' ||
-      paymentMethod === 'subscription' ||
-      String(payload?.restaurantNote || '')
-        .toLowerCase()
-        .includes('subscription schedule'),
-  );
-};
-
-const normalizeRestaurantAlertPayload = (payload = {}) => {
-  const normalized = {
-    ...payload,
-    orderMongoId:
-      payload?.orderMongoId || payload?._id || payload?.order_mongo_id || '',
-    orderId:
-      payload?.orderId || payload?.order_id || payload?._id || payload?.id || 'New',
-  };
-
-  const isSubscriptionAlert = isSubscriptionStartedAlert(normalized);
-
-  if (!isSubscriptionAlert) {
-    return normalized;
-  }
-
-  const mealName =
-    normalized?.dishName ||
-    normalized?.items?.[0]?.name ||
-    normalized?.planTitle ||
-    'Subscription meal';
-
-  return {
-    ...normalized,
-    isSubscriptionAlert: true,
-    restaurantNote:
-      normalized?.restaurantNote ||
-      `New subscription received${normalized?.startDate ? ` starting ${new Date(normalized.startDate).toLocaleDateString('en-IN')}` : ''}`,
-    items:
-      Array.isArray(normalized?.items) && normalized.items.length > 0
-        ? normalized.items
-        : [
-            {
-              name: mealName,
-              quantity: 1,
-              price: Number(normalized?.creditPerOrder || 0),
-              isVeg: true,
-            },
-          ],
-    total: Number(
-      normalized?.total ||
-        normalized?.pricing?.total ||
-        normalized?.creditPerOrder ||
-        0,
-    ),
-    paymentMethod:
-      normalized?.paymentMethod || normalized?.payment?.method || 'subscription',
-    createdAt: normalized?.createdAt || new Date().toISOString(),
-    sendCutlery:
-      normalized?.sendCutlery === false ? false : true,
-  };
-};
 
 const triggerWebViewNativeNotification = async (orderData = {}) => {
   if (typeof window === 'undefined') return false;
@@ -175,10 +78,35 @@ const triggerWebViewNativeNotification = async (orderData = {}) => {
  * @returns {object} - { newOrder, playSound, isConnected }
  */
 export const useRestaurantNotifications = () => {
+  const context = useContext(RestaurantNotificationContext);
+  if (context) return context;
+  
   const socketRef = useRef(null);
-  const [newOrder, setNewOrderState] = useState(sharedNotificationState.newOrder);
-  const [newReservation, setNewReservationState] = useState(sharedNotificationState.newReservation);
-  const [isConnected, setIsConnectedState] = useState(sharedNotificationState.isConnected);
+  const [newOrder, setNewOrder] = useState(null);
+  const [newReservation, setNewReservation] = useState(null);
+  const [pickupOtpReveal, setPickupOtpRevealState] = useState(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('restaurant_pickupOtpReveal');
+        return saved ? JSON.parse(saved) : null;
+      } catch (e) {
+        return null;
+      }
+    }
+    return null;
+  }); // { orderId, otp, message }
+
+  const setPickupOtpReveal = (data) => {
+    setPickupOtpRevealState(data);
+    if (typeof window !== 'undefined') {
+      if (data) {
+        localStorage.setItem('restaurant_pickupOtpReveal', JSON.stringify(data));
+      } else {
+        localStorage.removeItem('restaurant_pickupOtpReveal');
+      }
+    }
+  };
+  const [isConnected, setIsConnected] = useState(false);
   const audioRef = useRef(null);
   const activeOrderRef = useRef(null);
   const alertLoopTimerRef = useRef(null);
@@ -195,43 +123,6 @@ export const useRestaurantNotifications = () => {
   const ALERT_DEDUPE_MS = 15000;
   const BROWSER_NOTIFICATION_DEDUPE_MS = 20000;
   const NOTIFICATION_PERMISSION_ASKED_KEY = 'restaurant_notification_permission_asked';
-
-  const setNewOrder = (value) => {
-    const resolved =
-      typeof value === 'function' ? value(sharedNotificationState.newOrder) : value;
-    syncSharedNotificationState({ newOrder: resolved });
-  };
-
-  const setNewReservation = (value) => {
-    const resolved =
-      typeof value === 'function'
-        ? value(sharedNotificationState.newReservation)
-        : value;
-    syncSharedNotificationState({ newReservation: resolved });
-  };
-
-  const setIsConnected = (value) => {
-    const resolved =
-      typeof value === 'function'
-        ? value(sharedNotificationState.isConnected)
-        : value;
-    syncSharedNotificationState({ isConnected: resolved });
-  };
-
-  useEffect(() => {
-    const handleSharedStateChange = (state) => {
-      setNewOrderState(state.newOrder);
-      setNewReservationState(state.newReservation);
-      setIsConnectedState(state.isConnected);
-    };
-
-    sharedNotificationSubscribers.add(handleSharedStateChange);
-    handleSharedStateChange(sharedNotificationState);
-
-    return () => {
-      sharedNotificationSubscribers.delete(handleSharedStateChange);
-    };
-  }, []);
 
   const getOrderAlertKey = (orderData = {}) => (
     String(
@@ -287,7 +178,7 @@ export const useRestaurantNotifications = () => {
             requireInteraction: true,
             silent: false,
             vibrate: [200, 100, 200, 100, 300],
-            icon: '/favicon.ico',
+            icon: '/logo.png',
             data: notificationOptions.data,
           });
           return;
@@ -299,7 +190,7 @@ export const useRestaurantNotifications = () => {
         tag: notificationOptions.tag,
         requireInteraction: true,
         silent: false,
-        icon: '/favicon.ico',
+        icon: '/logo.png',
         data: notificationOptions.data,
       });
     } catch (error) {
@@ -424,8 +315,6 @@ export const useRestaurantNotifications = () => {
         // We alert only for "confirmed/new order waiting for review".
         const confirmed = (rows || [])
           .filter((o) => {
-            if (isSubscriptionMealOrder(o)) return false;
-
             const status = String(o?.status || "").toLowerCase();
             if (status !== "confirmed") return false;
 
@@ -447,8 +336,47 @@ export const useRestaurantNotifications = () => {
 
         if (confirmed.length > 0) {
           // Trigger alerts for newest confirmed orders (dedupe prevents spam).
+          const newest = confirmed[0];
+          setNewOrder(newest);
           confirmed.slice(0, 5).forEach((o) => handleIncomingOrderAlert(o, 'poll'));
         }
+
+        // --- NEW: Fallback for Pickup OTP Request if Socket failed ---
+        const currentOtpRevealStr = typeof window !== 'undefined' ? localStorage.getItem('restaurant_pickupOtpReveal') : null;
+        let currentOtpRevealObj = null;
+        if (currentOtpRevealStr) {
+           try { currentOtpRevealObj = JSON.parse(currentOtpRevealStr); } catch(e) {}
+        }
+
+        const otpRequests = rows.filter(o => {
+          const reqAt = o?.deliveryVerification?.pickupOtp?.requestedAt;
+          const isVerified = o?.deliveryVerification?.pickupOtp?.verified;
+          const pickupOtp = o?.pickupOtp;
+          
+          if (!reqAt || isVerified || !pickupOtp) return false;
+          
+          // Only show if requested within last 15 minutes
+          const requestedTime = new Date(reqAt).getTime();
+          const now = Date.now();
+          if (now - requestedTime > 15 * 60000) return false;
+          
+          // Don't show if we are already showing it
+          if (currentOtpRevealObj && currentOtpRevealObj.orderMongoId === o._id) return false;
+          
+          return true;
+        }).sort((a, b) => new Date(b.deliveryVerification.pickupOtp.requestedAt).getTime() - new Date(a.deliveryVerification.pickupOtp.requestedAt).getTime());
+
+        if (otpRequests.length > 0) {
+           const latestReq = otpRequests[0];
+           const payload = {
+              orderMongoId: latestReq._id.toString(),
+              orderId: latestReq.orderId || latestReq.order_id || latestReq._id.toString(),
+              otp: latestReq.pickupOtp,
+              message: 'Delivery partner is requesting the Pickup OTP. Please share this code with them.'
+           };
+           setPickupOtpReveal(payload);
+        }
+        // -------------------------------------------------------------
       } catch (error) {
         // Non-blocking: keep polling.
       }
@@ -501,6 +429,21 @@ export const useRestaurantNotifications = () => {
       if (document.visibilityState === 'visible') {
         // Stop any repeating alert loops once the user "sees" the page
         stopAlertLoop();
+        
+        // Force a REST fetch on foreground to catch any orders missed while in background
+        if (restaurantId) {
+          restaurantAPI.getOrders({ page: 1, limit: 10 }).then(response => {
+             const rows = response?.data?.data?.orders || response?.data?.data?.data?.orders || [];
+             const confirmed = (rows || []).filter(o => {
+                const status = String(o?.status || "").toLowerCase();
+                return status === "confirmed" && (!o.scheduledAt || new Date(o.scheduledAt).getTime() <= Date.now() + 30 * 60000);
+             }).sort((a, b) => new Date(b?.createdAt || 0).getTime() - new Date(a?.createdAt || 0).getTime());
+             
+             if (confirmed.length > 0) {
+                setNewOrder(confirmed[0]);
+             }
+          }).catch(() => {});
+        }
       } else if (document.visibilityState === 'hidden' && activeOrderRef.current) {
         // Trigger one-shot alert when tab is hidden to ensure user didn't miss it
         playNotificationSound(activeOrderRef.current);
@@ -512,7 +455,7 @@ export const useRestaurantNotifications = () => {
     return () => {
       document.removeEventListener('visibilitychange', onVisibilityChange);
     };
-  }, []);
+  }, [restaurantId]);
 
   useEffect(() => {
     if (!API_BASE_URL || !String(API_BASE_URL).trim()) {
@@ -779,12 +722,11 @@ export const useRestaurantNotifications = () => {
 
     // Listen for new order notifications
     socketRef.current.on('new_order', (orderData) => {
-      const normalizedOrder = normalizeRestaurantAlertPayload(orderData);
-
-      if (isSubscriptionMealOrder(normalizedOrder)) {
-        debugLog('Ignoring subscription meal order alert:', normalizedOrder.orderId);
-        return;
-      }
+      const normalizedOrder = {
+        ...orderData,
+        orderMongoId: orderData?.orderMongoId || orderData?._id || orderData?.order_mongo_id,
+        orderId: orderData?.orderId || orderData?.order_id || orderData?._id,
+      };
 
       // Filter scheduled orders here as well to prevent "red dot" from showing up too early
       if (normalizedOrder.scheduledAt) {
@@ -812,43 +754,18 @@ export const useRestaurantNotifications = () => {
     // Listen for sound notification event
     socketRef.current.on('play_notification_sound', (data) => {
       debugLog('?? Sound notification:', data);
-      const normalizedData = normalizeRestaurantAlertPayload(data);
-
-      if (isSubscriptionMealOrder(normalizedData)) {
-        debugLog('Ignoring subscription meal sound event:', normalizedData.orderId);
-        return;
-      }
-
-      setNewOrder(normalizedData);
+      const normalizedData = {
+        orderId: data?.orderId || data?.order_id,
+        orderMongoId: data?.orderMongoId || data?.order_mongo_id,
+        ...data
+      };
       // handleIncomingOrderAlert manages sound (socket source always rings) and background notifications
       handleIncomingOrderAlert(normalizedData, 'socket');
-    });
-
-    socketRef.current.on('subscription_started', (data) => {
-      const normalizedData = normalizeRestaurantAlertPayload(data);
-      setNewOrder(normalizedData);
     });
 
     // Listen for order status updates
     socketRef.current.on('order_status_update', (data) => {
       debugLog('?? Order status update:', data);
-      const payloadKey = getOrderAlertKey(data);
-      const activeKey = getOrderAlertKey(activeOrderRef.current || {});
-      const payloadStatus = String(
-        data?.orderStatus ||
-        data?.status ||
-        data?.dispatchStatus ||
-        data?.dispatch?.status ||
-        '',
-      ).toLowerCase().trim();
-      const isPendingStatus = ['created', 'confirmed', 'preparing', 'ready_for_pickup'].includes(payloadStatus);
-
-      if (payloadKey && activeKey && payloadKey === activeKey && !isPendingStatus) {
-        stopAlertLoop();
-        activeOrderRef.current = null;
-        setNewOrder(null);
-      }
-
       if (typeof window !== 'undefined') {
         window.dispatchEvent(
           new CustomEvent('restaurantOrderStatusUpdate', {
@@ -858,15 +775,22 @@ export const useRestaurantNotifications = () => {
       }
     });
 
+    // Listen for pickup OTP reveal (rider pressed "Request OTP" button)
+    socketRef.current.on('pickup_otp_reveal', (data) => {
+      debugLog('?? Pickup OTP reveal received:', data);
+      setPickupOtpReveal(data);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('restaurantPickupOtpReveal', { detail: data || {} })
+        );
+      }
+    });
+
     socketRef.current.on('admin_notification', (payload) => {
       debugLog('?? Admin broadcast received:', payload);
       dispatchNotificationInboxRefresh();
     });
 
-    // Load notification sound
-    audioRef.current = new Audio(resolveAudioSource(alertSound));
-    audioRef.current.preload = 'auto';
-    audioRef.current.volume = 1;
 
     return () => {
       stopAlertLoop();
@@ -881,104 +805,8 @@ export const useRestaurantNotifications = () => {
     };
   }, [restaurantId]);
 
-  // Track user interaction for autoplay policy
-  useEffect(() => {
-    const handleUserInteraction = async () => {
-      userInteractedRef.current = true;
-
-      if (!audioRef.current) {
-        audioRef.current = new Audio(resolveAudioSource(alertSound));
-        audioRef.current.preload = 'auto';
-        audioRef.current.volume = 1;
-      }
-
-      if (!audioUnlockAttemptedRef.current && audioRef.current) {
-        audioUnlockAttemptedRef.current = true;
-        try {
-          audioRef.current.muted = true;
-          await audioRef.current.play();
-          audioRef.current.pause();
-          audioRef.current.currentTime = 0;
-        } catch (error) {
-          audioUnlockAttemptedRef.current = false;
-          if (!error.message?.includes('user didn\'t interact') && !error.name?.includes('NotAllowedError')) {
-            debugWarn('Error unlocking notification sound:', error);
-          }
-        } finally {
-          // Ensure audio never remains muted after unlock attempts.
-          if (audioRef.current) {
-            audioRef.current.muted = false;
-          }
-        }
-      }
-
-      // Remove listeners after first interaction
-      document.removeEventListener('click', handleUserInteraction);
-      document.removeEventListener('touchstart', handleUserInteraction);
-      document.removeEventListener('keydown', handleUserInteraction);
-      window.removeEventListener('pointerdown', handleUserInteraction);
-    };
-    
-    // Listen for user interaction
-    document.addEventListener('click', handleUserInteraction, { once: true });
-    document.addEventListener('touchstart', handleUserInteraction, { once: true });
-    document.addEventListener('keydown', handleUserInteraction, { once: true });
-    window.addEventListener('pointerdown', handleUserInteraction, { once: true, passive: true });
-    
-    return () => {
-      document.removeEventListener('click', handleUserInteraction);
-      document.removeEventListener('touchstart', handleUserInteraction);
-      document.removeEventListener('keydown', handleUserInteraction);
-      window.removeEventListener('pointerdown', handleUserInteraction);
-    };
-  }, []);
-
-  const playNotificationSound = async (orderData = {}) => {
-    try {
-      const usedNativeBridge = await triggerWebViewNativeNotification(orderData);
-      if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
-        navigator.vibrate([200, 100, 200, 100, 300]);
-      }
-      if (usedNativeBridge) {
-        return;
-      }
-
-      const soundFile = resolveAudioSource(alertSound, `restaurant-alert-${Date.now()}`);
-      if (!audioRef.current) {
-        audioRef.current = new Audio(soundFile);
-        audioRef.current.preload = 'auto';
-      } else if (!audioRef.current.src.includes('alert.mp3')) {
-        audioRef.current.pause();
-        audioRef.current.src = soundFile;
-        audioRef.current.load();
-      }
-
-      if (audioRef.current) {
-        audioRef.current.muted = false;
-        audioRef.current.volume = 1;
-        audioRef.current.currentTime = 0;
-        audioRef.current.play().catch(error => {
-          try {
-            const fallbackAudio = new Audio(soundFile);
-            fallbackAudio.preload = 'auto';
-            fallbackAudio.volume = 1;
-            fallbackAudio.play().catch(() => {});
-          } catch (fallbackError) {
-            debugWarn('Fallback audio playback failed:', fallbackError);
-          }
-
-          if (!error.message?.includes('user didn\'t interact') && !error.name?.includes('NotAllowedError')) {
-            debugWarn('Error playing notification sound:', error);
-          }
-        });
-      }
-    } catch (error) {
-      // Don't log autoplay policy errors
-      if (!error.message?.includes('user didn\'t interact') && !error.name?.includes('NotAllowedError')) {
-        debugWarn('Error playing sound:', error);
-      }
-    }
-  };
+// Restaurant order alerts are visual-only. Sound, vibration, and native audio are disabled.
+  const playNotificationSound = async () => {};
 
   const clearNewOrder = () => {
     stopAlertLoop();
@@ -989,6 +817,8 @@ export const useRestaurantNotifications = () => {
   return {
     newOrder,
     newReservation,
+    pickupOtpReveal,
+    clearPickupOtpReveal: () => setPickupOtpReveal(null),
     clearNewOrder,
     clearNewReservation: () => {
       setNewReservation(null);

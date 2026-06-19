@@ -6,7 +6,6 @@ import { Input } from "@food/components/ui/input"
 import { Switch } from "@food/components/ui/switch"
 import { useLocation as useLocationHook } from "@food/hooks/useLocation"
 import { useCart } from "@food/context/CartContext"
-import { DEFAULT_APP_CUSTOMIZATION, loadAppCustomization } from "@food/utils/appCustomization"
 import { useLocationSelector, useSearchOverlay } from "./UserLayout"
 import { useProfile } from "@food/context/ProfileContext"
 import { FaLocationDot } from "react-icons/fa6"
@@ -24,7 +23,6 @@ export default function DesktopNavbar({ showLogo = true }) {
     const navigate = useNavigate()
     const { location: userLocation, loading: locationLoading } = useLocationHook()
     const { getCartCount } = useCart()
-    const [appCustomization, setAppCustomization] = useState(DEFAULT_APP_CUSTOMIZATION)
     const { openLocationSelector } = useLocationSelector()
     const { setSearchValue } = useSearchOverlay()
     const { vegMode, setVegMode } = useProfile()
@@ -33,20 +31,9 @@ export default function DesktopNavbar({ showLogo = true }) {
     const [companyName, setCompanyName] = useState(null)
     const [hasScrolledPastBanner, setHasScrolledPastBanner] = useState(false)
     const [under250PriceLimit, setUnder250PriceLimit] = useState(250)
+    const [showDining, setShowDining] = useState(true)
     const navRef = useRef(null)
     const cartCount = getCartCount()
-
-    useEffect(() => {
-        let mounted = true
-        loadAppCustomization()
-            .then((settings) => {
-                if (mounted) setAppCustomization(settings)
-            })
-            .catch(() => {})
-        return () => {
-            mounted = false
-        }
-    }, [])
 
 
     // Show area if available, otherwise show city
@@ -88,7 +75,6 @@ export default function DesktopNavbar({ showLogo = true }) {
 
     // Check active routes - support both /user/* and /* paths
     const isDining = location.pathname === "/food/user/dining" || location.pathname === "/food/dining"
-    const diningEnabled = appCustomization.diningFlowEnabled !== false
     const isUnder250 = location.pathname === "/food/user/under-250" || location.pathname === "/food/under-250"
     const isProfile = location.pathname.startsWith("/food/user/profile") || location.pathname.startsWith("/food/profile")
     const isDelivery = !isDining && !isUnder250 && !isProfile && (location.pathname === "/food/user" || location.pathname === "/food" || (location.pathname.startsWith("/food/user") && !location.pathname.includes("/dining") && !location.pathname.includes("/under-250") && !location.pathname.includes("/profile")))
@@ -185,12 +171,20 @@ export default function DesktopNavbar({ showLogo = true }) {
             .then((res) => {
                 if (cancelled) return
                 const settings = res?.data?.data
-                if (settings && typeof settings.under250PriceLimit === 'number') {
-                    setUnder250PriceLimit(settings.under250PriceLimit)
+                if (settings) {
+                    if (typeof settings.under250PriceLimit === 'number') {
+                        setUnder250PriceLimit(settings.under250PriceLimit)
+                    }
+                    if (typeof settings.showDining === 'boolean') {
+                        setShowDining(settings.showDining)
+                    }
                 }
             })
             .catch(() => {
-                if (!cancelled) setUnder250PriceLimit(250)
+                if (!cancelled) {
+                    setUnder250PriceLimit(250)
+                    setShowDining(true)
+                }
             })
         return () => { cancelled = true }
     }, [])
@@ -270,7 +264,7 @@ export default function DesktopNavbar({ showLogo = true }) {
                         <div className="flex-1 max-w-3xl mx-4 flex items-center gap-4">
                             {/* Search Bar */}
                             <div className="relative flex-1">
-                                <div className="relative bg-gray-100 dark:bg-[#2a2a2a] rounded-lg transition-all duration-300 focus-within:ring-2 focus-within:ring-[#7e3866] focus-within:bg-white dark:focus-within:bg-[#1a1a1a] border border-transparent focus-within:border-[#7e3866]/20">
+                                <div className="relative bg-gray-100 dark:bg-[#2a2a2a] rounded-lg transition-all duration-300 focus-within:ring-2 focus-within:ring-primary focus-within:bg-white dark:focus-within:bg-[#1a1a1a] border border-transparent focus-within:border-primary/20">
                                     <div className="flex items-center px-3 py-2">
                                         <Search className="h-4 w-4 text-gray-500 flex-shrink-0 mr-3" />
                                         <Input
@@ -331,22 +325,20 @@ export default function DesktopNavbar({ showLogo = true }) {
                             </Link>
 
                             {/* Cart Icon */}
-                            {appCustomization.normalOrderFlowEnabled !== false && (
-                                <Link to="/food/user/cart">
-                                    <Button
-                                        variant="ghost"
-                                        className="relative h-12 w-12 lg:h-14 lg:w-14 rounded-full p-0 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-                                        title="Cart"
-                                    >
-                                        <ShoppingCart className="!h-5 !w-5 lg:!h-6 lg:!w-6 text-gray-700 dark:text-gray-300" strokeWidth={2} />
-                                        {cartCount > 0 && (
-                                            <span className="absolute -top-1 -right-1 w-6 h-6 bg-red-500 rounded-full flex items-center justify-center ring-2 ring-white dark:ring-gray-800">
-                                                <span className="text-xs font-bold text-white">{cartCount > 99 ? "99+" : cartCount}</span>
-                                            </span>
-                                        )}
-                                    </Button>
-                                </Link>
-                            )}
+                            <Link to="/food/user/cart">
+                                <Button
+                                    variant="ghost"
+                                    className="relative h-12 w-12 lg:h-14 lg:w-14 rounded-full p-0 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                                    title="Cart"
+                                >
+                                    <ShoppingCart className="!h-5 !w-5 lg:!h-6 lg:!w-6 text-gray-700 dark:text-gray-300" strokeWidth={2} />
+                                    {cartCount > 0 && (
+                                        <span className="absolute -top-1 -right-1 w-6 h-6 bg-red-500 rounded-full flex items-center justify-center ring-2 ring-white dark:ring-gray-800">
+                                            <span className="text-xs font-bold text-white">{cartCount > 99 ? "99+" : cartCount}</span>
+                                        </span>
+                                    )}
+                                </Button>
+                            </Link>
                         </div>
                     </div>
                 </div>
@@ -360,17 +352,17 @@ export default function DesktopNavbar({ showLogo = true }) {
                         <div className="flex items-center space-x-24">
                             {/* Delivery Tab */}
                             <Link
-                                to="/"
+                                to="/food/user/"
                                 className={`flex flex-col items-center gap-1 px-2 py-1 transition-colors relative group ${isDelivery
-                                    ? "text-[#7e3866]"
-                                    : "text-gray-600 dark:text-gray-400 hover:text-[#7e3866]"
+                                    ? "text-primary"
+                                    : "text-gray-600 dark:text-gray-400 hover:text-primary"
                                     }`}
                             >
                                 <span className="text-sm font-bold tracking-wide uppercase">Delivery</span>
                                 {isDelivery && (
                                     <motion.div
                                         layoutId="navIndicator"
-                                        className="absolute -bottom-3 left-0 right-0 h-0.5 bg-[#7e3866]"
+                                        className="absolute -bottom-3 left-0 right-0 h-0.5 bg-primary"
                                         initial={{ opacity: 0 }}
                                         animate={{ opacity: 1 }}
                                         transition={{ duration: 0.3 }}
@@ -382,15 +374,15 @@ export default function DesktopNavbar({ showLogo = true }) {
                             <Link
                                 to="/food/user/under-250"
                                 className={`flex flex-col items-center gap-1 px-2 py-1 transition-colors relative group ${isUnder250
-                                    ? "text-[#7e3866]"
-                                    : "text-gray-600 dark:text-gray-400 hover:text-[#7e3866]"
+                                    ? "text-primary"
+                                    : "text-gray-600 dark:text-gray-400 hover:text-primary"
                                     }`}
                             >
                                 <span className="text-sm font-bold tracking-wide uppercase">Under ₹{under250PriceLimit}</span>
                                 {isUnder250 && (
                                     <motion.div
                                         layoutId="navIndicator"
-                                        className="absolute -bottom-3 left-0 right-0 h-0.5 bg-[#7e3866]"
+                                        className="absolute -bottom-3 left-0 right-0 h-0.5 bg-primary"
                                         initial={{ opacity: 0 }}
                                         animate={{ opacity: 1 }}
                                         transition={{ duration: 0.3 }}
@@ -398,19 +390,20 @@ export default function DesktopNavbar({ showLogo = true }) {
                                 )}
                             </Link>
 
-                            {diningEnabled && (
+                            {/* Dining Tab */}
+                            {showDining && (
                                 <Link
                                     to="/food/user/dining"
                                     className={`flex flex-col items-center gap-1 px-2 py-1 transition-colors relative group ${isDining
-                                        ? "text-[#7e3866]"
-                                        : "text-gray-600 dark:text-gray-400 hover:text-[#7e3866]"
+                                        ? "text-primary"
+                                        : "text-gray-600 dark:text-gray-400 hover:text-primary"
                                         }`}
                                 >
                                     <span className="text-sm font-bold tracking-wide uppercase">Dining</span>
                                     {isDining && (
                                         <motion.div
                                             layoutId="navIndicator"
-                                            className="absolute -bottom-3 left-0 right-0 h-0.5 bg-[#7e3866]"
+                                            className="absolute -bottom-3 left-0 right-0 h-0.5 bg-primary"
                                             initial={{ opacity: 0 }}
                                             animate={{ opacity: 1 }}
                                             transition={{ duration: 0.3 }}
@@ -423,15 +416,15 @@ export default function DesktopNavbar({ showLogo = true }) {
                             <Link
                                 to="/food/user/profile"
                                 className={`flex flex-col items-center gap-1 px-2 py-1 transition-colors relative group ${isProfile
-                                    ? "text-[#7e3866]"
-                                    : "text-gray-600 dark:text-gray-400 hover:text-[#7e3866]"
+                                    ? "text-primary"
+                                    : "text-gray-600 dark:text-gray-400 hover:text-primary"
                                     }`}
                             >
                                 <span className="text-sm font-bold tracking-wide uppercase">Profile</span>
                                 {isProfile && (
                                     <motion.div
                                         layoutId="navIndicator"
-                                        className="absolute -bottom-3 left-0 right-0 h-0.5 bg-[#7e3866]"
+                                        className="absolute -bottom-3 left-0 right-0 h-0.5 bg-primary"
                                         initial={{ opacity: 0 }}
                                         animate={{ opacity: 1 }}
                                         transition={{ duration: 0.3 }}

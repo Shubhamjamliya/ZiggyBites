@@ -141,7 +141,7 @@ const reverseGeocodeDirect = async (latitude, longitude) => {
             `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}&addressdetails=1`,
             { 
               signal: nomController.signal,
-              headers: { 'Accept-Language': 'en', 'User-Agent': 'ZiggyBites-App' }
+              headers: { 'Accept-Language': 'en', 'User-Agent': 'Indian Bites-App' }
             }
           )
           clearTimeout(nomTimeout)
@@ -1126,8 +1126,8 @@ export function useLocation() {
     // Otherwise, allow cached location for faster response
     return getPositionWithRetry({
       enableHighAccuracy: true,  // Use GPS for exact location (highest accuracy)
-      timeout: 15000,            // 15 seconds timeout (gives GPS more time to get accurate fix)
-      maximumAge: forceFresh ? 0 : 60000  // If forceFresh, get fresh location. Otherwise allow 1 minute cache
+      timeout: 5000,             // 5 seconds timeout (fails fast to network-based if GPS is weak)
+      maximumAge: forceFresh ? 0 : 300000 // 5 minutes cache (huge speedup if already fetched recently)
     })
   }
 
@@ -1532,11 +1532,36 @@ export function useLocation() {
           debugLog("?? Permissions API not available - Skipping auto-start");
         }
 
-        // If permission NOT granted, and we don't have a specific user request (this is page load),
+        const isLoggedIn = !!(localStorage.getItem('user_accessToken') || localStorage.getItem('accessToken'));
+
+        let intentionallySaved = false;
+        try {
+          // Check if user explicitly selected a saved location
+          const mode = localStorage.getItem("deliveryAddressMode");
+          if (mode === "saved") {
+            intentionallySaved = true;
+          } else if (mode === null) {
+            // If mode is not set, fallback to checking if there's a valid non-current location in localStorage
+            const stored = localStorage.getItem("userLocation");
+            if (stored) {
+              const loc = JSON.parse(stored);
+              if (loc && loc.formattedAddress && loc.formattedAddress !== "Select location" && loc.city !== "Current Location") {
+                intentionallySaved = true;
+              }
+            }
+          }
+        } catch (e) {}
+
+        let shouldAutoFetch = false;
+        const hasFetchedThisSession = sessionStorage.getItem("appSession_locationFetched");
+        
+        if (!intentionallySaved && !hasFetchedThisSession) {
+          shouldAutoFetch = true; // No saved location and first time this session -> Auto fetch
+        }
+
+        // If permission NOT granted, and we shouldn't auto-fetch,
         // we should SKIP automatic fetching/watching to allow the user to choose when to enable it.
-        // UNLESS we already have a valid initial location from localStorage/DB, in which case we might want to refresh?
-        // Actually, even then, we shouldn't prompt.
-        if (!permissionGranted) {
+        if (!permissionGranted && !shouldAutoFetch && hasInitialLocation) {
           // If we have an initial location, we are fine (it's displayed).
           // If we don't, we show "Select Location".
           // In either case, we avoid the PROMPT.
@@ -1545,15 +1570,18 @@ export function useLocation() {
           return;
         }
 
-        debugLog("?? Permission granted! Fetching/Watching location...", shouldForceRefresh ? "(FORCE REFRESH)" : "");
+        debugLog("?? Permission granted or auto-fetch required! Fetching/Watching location...", shouldForceRefresh ? "(FORCE REFRESH)" : "");
 
-        // Only fetch once on initial app open if we have no stored coordinates yet.
-        // Do not keep re-geocoding just because the address text is placeholder.
-        const shouldFetch = shouldForceRefresh || !hasInitialLocation
+        // Only fetch once on initial app open if we have no stored coordinates yet, or if auto fetch is required.
+        const shouldFetch = shouldForceRefresh || !hasInitialLocation || shouldAutoFetch;
 
         if (shouldFetch) {
-          debugLog("?? Fetching location - shouldForceRefresh:", shouldForceRefresh, "hasInitialLocation:", hasInitialLocation)
-          getLocation(true, shouldForceRefresh) // forceFresh = true if cached location is incomplete
+          const isForceFresh = shouldForceRefresh || shouldAutoFetch;
+          debugLog("?? Fetching location - shouldForceRefresh:", shouldForceRefresh, "hasInitialLocation:", hasInitialLocation, "shouldAutoFetch:", shouldAutoFetch)
+          
+          sessionStorage.setItem("appSession_locationFetched", "true");
+          
+          getLocation(true, isForceFresh) // forceFresh = true if cached location is incomplete or if auto-fetch is required
             .then((location) => {
               if (location &&
                 location.formattedAddress !== "Select location" &&
@@ -1569,6 +1597,10 @@ export function useLocation() {
                 // CRITICAL: Update state with fresh location so PageNavbar displays it
                 setLocation(location)
                 setPermissionGranted(true)
+                try {
+                  localStorage.setItem("deliveryAddressMode", "current")
+                  window.dispatchEvent(new CustomEvent("deliveryAddressModeUpdated"))
+                } catch {}
                 if (AUTO_START_LIVE_WATCH) startWatchingLocation()
               } else {
                 // Placeholder result means reverse-geocode failed or was unavailable.
@@ -1594,17 +1626,29 @@ export function useLocation() {
     // Always check permission state on startup.
     // This does NOT trigger browser prompt by itself; it only auto-fetches when permission is already granted.
     checkPermissionAndStart();
+    
+    // Listen for manual location updates from other components (like AddressSelectorPage)
+    const handleLocationUpdateEvent = (e) => {
+      if (e.detail?.location) {
+        debugLog("?? Received userLocationUpdated event, updating useLocation state:", e.detail.location);
+        setLocation(e.detail.location);
+        setPermissionGranted(true);
+        setLoading(false);
+      }
+    };
+    window.addEventListener("userLocationUpdated", handleLocationUpdateEvent);
 
     // Cleanup timeout and watcher
     return () => {
       clearTimeout(loadingTimeout)
       debugLog("?? Cleaning up location watcher")
       stopWatchingLocation()
+      window.removeEventListener("userLocationUpdated", handleLocationUpdateEvent)
     }
   }, [])
 
-  const requestLocation = async () => {
-    debugLog("?????? User requested location update - clearing cache and fetching fresh")
+  const requestLocation = async (updateDB = true, forceFresh = true) => {
+    debugLog("?????? User requested location update")
     setLoading(true)
     setError(null)
 
@@ -1614,14 +1658,14 @@ export function useLocation() {
         window.dispatchEvent(new CustomEvent("deliveryAddressModeUpdated"))
       } catch {}
 
-      // Clear cached location to force fresh fetch
-      localStorage.removeItem("userLocation")
-      debugLog("??? Cleared cached location from localStorage")
+      if (forceFresh) {
+        // Clear cached location to force fresh fetch
+        localStorage.removeItem("userLocation")
+        debugLog("??? Cleared cached location from localStorage")
+      }
 
       // Show loading, so pass showLoading = true
-      // forceFresh = true, updateDB = true, showLoading = true
-      // This ensures we get fresh GPS coordinates and reverse geocode
-      const location = await getLocation(true, true, true)
+      const location = await getLocation(updateDB, forceFresh, true)
 
       debugLog("??? Fresh location requested successfully:", location)
       debugLog("??? Complete Location details:", {

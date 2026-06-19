@@ -3,8 +3,8 @@ import { Suspense, lazy } from "react"
 import Loader from "@food/components/Loader"
 
 const Login = lazy(() => import("./pages/Login"))
-const Support = lazy(() => import("./pages/PublicSupport"))
 const FoodPreference = lazy(() => import("./pages/FoodPreference"))
+const Support = lazy(() => import("./pages/PublicSupport"))
 
 export default function AuthRoutes() {
   return (

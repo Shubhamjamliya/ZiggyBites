@@ -56,11 +56,9 @@ const normalizeCartData = (rawCart) => {
             : ""
 
       const normalizedRestaurantId =
-        item.restaurantMongoId ||
-        item.mongoRestaurantId ||
-        item.restaurant?._id ||
         item.restaurantId ||
         item.restaurant_id ||
+        item.restaurant?._id ||
         item.restaurant?.restaurantId ||
         null
 

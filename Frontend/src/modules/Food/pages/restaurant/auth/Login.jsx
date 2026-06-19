@@ -16,7 +16,7 @@ export default function RestaurantLogin() {
     const cached = getCachedSettings()
     return {
       logoUrl: cached?.restaurantLogo?.url || cached?.logo?.url || null,
-      companyName: normalizeKitchenAppName(cached?.companyName) || "ZiggyBites",
+      companyName: normalizeKitchenAppName(cached?.companyName) || "Indian Bites",
     }
   })
   const submitting = useRef(false)
@@ -28,7 +28,7 @@ export default function RestaurantLogin() {
       if (!settings || cancelled) return
       setBrand({
         logoUrl: settings.restaurantLogo?.url || settings.logo?.url || null,
-        companyName: normalizeKitchenAppName(settings.companyName) || "ZiggyBites",
+        companyName: normalizeKitchenAppName(settings.companyName) || "Indian Bites",
       })
     }
 
@@ -112,7 +112,7 @@ export default function RestaurantLogin() {
               )}
             </div>
             <h1 className="text-4xl font-black italic tracking-tight text-[#ff1f1f] drop-shadow-sm">
-              {brand.companyName || "ZiggyBites"}
+              {brand.companyName || "Indian Bites"}
             </h1>
             <div className="mx-auto mt-2 h-1 w-16 rounded-full bg-[#ff1f1f]" />
           </div>

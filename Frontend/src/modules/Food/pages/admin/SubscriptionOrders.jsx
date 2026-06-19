@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+﻿import { useEffect, useMemo, useState } from "react"
 import { Calendar, CheckCircle, Loader2, Package, RefreshCw } from "lucide-react"
 import { toast } from "sonner"
 import { adminAPI } from "@food/api"
@@ -257,3 +257,4 @@ function StatCard({ label, value, icon: Icon, color }) {
     </div>
   )
 }
+

@@ -42,7 +42,6 @@ export const loadRazorpayScript = () => {
  * @param {String} options.amount - Amount in paise
  * @param {String} options.currency - Currency code
  * @param {String} options.order_id - Razorpay order ID
- * @param {String} options.subscription_id - Razorpay subscription ID
  * @param {String} options.name - Company/App name
  * @param {String} options.description - Payment description
  * @param {String} options.prefill.name - Customer name
@@ -64,13 +63,9 @@ export const initRazorpayPayment = async (options) => {
 
     const razorpayOptions = {
       key: options.key,
-      ...(options.subscription_id
-        ? { subscription_id: options.subscription_id }
-        : {
-            amount: options.amount,
-            currency: options.currency || 'INR',
-            order_id: options.order_id
-          }),
+      amount: options.amount,
+      currency: options.currency || 'INR',
+      order_id: options.order_id,
       name: options.name || 'Appzeto Food',
       description: options.description || 'Order Payment',
       image: options.image || '/logo.png',
@@ -130,8 +125,7 @@ export const initRazorpayPayment = async (options) => {
     console.log('Razorpay options:', {
       key: razorpayOptions.key ? 'Present' : 'Missing',
       amount: razorpayOptions.amount,
-      order_id: razorpayOptions.order_id,
-      subscription_id: razorpayOptions.subscription_id
+      order_id: razorpayOptions.order_id
     });
 
     return razorpay;

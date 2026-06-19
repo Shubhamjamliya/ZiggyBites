@@ -4,8 +4,6 @@ import { useCart } from "@food/context/CartContext"
 import { isModuleAuthenticated } from "@food/utils/auth"
 import { useNavigate, useLocation } from "react-router-dom"
 import { toast } from "sonner"
-import { useEffect, useState } from "react"
-import { DEFAULT_APP_CUSTOMIZATION, loadAppCustomization } from "@food/utils/appCustomization"
 
 export default function AddToCartButton({ item, className = "" }) {
   const { addToCart, isInCart, getCartItem, updateQuantity } = useCart()
@@ -13,19 +11,6 @@ export default function AddToCartButton({ item, className = "" }) {
   const cartItem = getCartItem(item.id)
   const navigate = useNavigate()
   const location = useLocation()
-  const [appCustomization, setAppCustomization] = useState(DEFAULT_APP_CUSTOMIZATION)
-
-  useEffect(() => {
-    let mounted = true
-    loadAppCustomization()
-      .then((settings) => {
-        if (mounted) setAppCustomization(settings)
-      })
-      .catch(() => {})
-    return () => {
-      mounted = false
-    }
-  }, [])
 
   const handleAddToCart = (e) => {
     e.preventDefault()
@@ -37,73 +22,29 @@ export default function AddToCartButton({ item, className = "" }) {
       return
     }
 
-    if (appCustomization.normalOrderFlowEnabled === false) {
-      openMealSelection()
-      return
-    }
-
     addToCart(item)
-  }
-
-  const openMealSelection = () => {
-    const itemId = item.itemId || item.id || ""
-    const restaurantId =
-      item.mongoRestaurantId ||
-      item.restaurantMongoId ||
-      item.restaurantId ||
-      ""
-    const params = new URLSearchParams()
-
-    if (item.name) params.set("dish", item.name)
-    if (itemId) params.set("dishId", itemId)
-    if (item.restaurantName || item.restaurant) params.set("restaurant", item.restaurantName || item.restaurant)
-    if (restaurantId) params.set("restaurantId", restaurantId)
-    if (item.categoryName) params.set("category", item.categoryName)
-    if (Number.isFinite(Number(item.price))) params.set("price", String(item.price))
-
-    navigate(
-      {
-        pathname: "/food/user/choose-meal",
-        search: params.toString() ? `?${params.toString()}` : "",
-      },
-      { state: { dish: { ...item, itemId, restaurantId } } },
-    )
   }
 
   const handleIncrease = (e) => {
     e.preventDefault()
     e.stopPropagation()
-    if (appCustomization.normalOrderFlowEnabled === false) return
     updateQuantity(item.id, (cartItem?.quantity || 0) + 1)
   }
 
   const handleDecrease = (e) => {
     e.preventDefault()
     e.stopPropagation()
-    if (appCustomization.normalOrderFlowEnabled === false) return
     updateQuantity(item.id, (cartItem?.quantity || 0) - 1)
-  }
-
-  if (appCustomization.normalOrderFlowEnabled === false) {
-    return (
-      <Button
-        size="sm"
-        onClick={handleAddToCart}
-        className={`bg-[#7e3866] hover:bg-[#55254b] text-white font-bold shadow-md transition-all active:scale-95 ${className}`}
-      >
-        Add
-      </Button>
-    )
   }
 
   if (inCart) {
     return (
       <div className={`flex items-center gap-2 ${className}`} onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}>
-        <div className="flex items-center gap-1 bg-[#7e3866] text-white rounded-md shadow-sm">
+        <div className="flex items-center gap-1 bg-primary text-white rounded-md shadow-sm">
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-6 text-white hover:bg-[#55254b] hover:text-white"
+            className="h-8 w-6 text-white hover:bg-secondary hover:text-white"
             onClick={handleDecrease}
           >
             <Minus className="h-4 w-4" />
@@ -114,7 +55,7 @@ export default function AddToCartButton({ item, className = "" }) {
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-6 text-white hover:bg-[#55254b] hover:text-white"
+            className="h-8 w-6 text-white hover:bg-secondary hover:text-white"
             onClick={handleIncrease}
           >
             <Plus className="h-4 w-4" />
@@ -128,7 +69,7 @@ export default function AddToCartButton({ item, className = "" }) {
     <Button
       size="sm"
       onClick={handleAddToCart}
-      className="bg-[#7e3866] hover:bg-[#55254b] text-white font-bold shadow-md transition-all active:scale-95"
+      className="bg-primary hover:bg-secondary text-white font-bold shadow-md transition-all active:scale-95"
     >
       Add to Cart
     </Button>

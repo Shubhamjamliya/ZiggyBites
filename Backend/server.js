@@ -8,9 +8,11 @@ import { initSocket } from './src/config/socket.js';
 import { initializeQueues, closeBullMQConnection } from './src/queues/index.js';
 import { expireExpiredOffers } from './src/modules/food/admin/services/admin.service.js';
 import { syncExpiredFssaiNotifications } from './src/modules/food/restaurant/services/fssaiExpiry.service.js';
-import { logger, setLoggerEnabled } from './src/utils/logger.js';
+import { syncSubscriptionScheduleReminders } from './src/modules/food/subscription/services/subscription.service.js';
+
+import { logger } from './src/utils/logger.js';
 import { initializeFirebaseRealtime } from './src/config/firebase.js';
-import { getAppCustomizationSettings } from './src/modules/food/shared/appCustomization.service.js';
+import { loadEnvFromDb } from './src/config/envLoader.js';
 
 const SHUTDOWN_TIMEOUT_MS = 10000;
 let server = null;
@@ -53,12 +55,8 @@ const startServer = async () => {
         // 1. Connect to Database (MongoDB)
         await connectDB();
 
-        try {
-            const settings = await getAppCustomizationSettings();
-            setLoggerEnabled(settings.loggingEnabled !== false);
-        } catch (err) {
-            logger.error(`Logger settings bootstrap failed: ${err.message}`);
-        }
+        // 1.5 Load Environment Variables from Database overrides
+        await loadEnvFromDb();
 
         // 2. Create HTTP server from Express app
         const httpServer = http.createServer(app);
@@ -74,6 +72,7 @@ const startServer = async () => {
         try {
             const { recoverStuckOrders } = await import('./src/modules/food/orders/services/order.service.js');
             await recoverStuckOrders();
+            setInterval(recoverStuckOrders, 5 * 60 * 1000); // Run watchdog every 5 minutes
         } catch (err) {
             logger.error(`Watchdog startup error: ${err.message}`);
         }
@@ -118,14 +117,13 @@ const startServer = async () => {
 
         const runSubscriptionReminders = async () => {
             try {
-                const { syncSubscriptionScheduleReminders } = await import('./src/modules/food/subscription/services/subscription.service.js');
                 await syncSubscriptionScheduleReminders();
             } catch (err) {
                 logger.error(`Subscription reminder sync error: ${err.message}`);
             }
         };
         runSubscriptionReminders();
-        subscriptionReminderInterval = setInterval(runSubscriptionReminders, 10 * 60 * 1000);
+        subscriptionReminderInterval = setInterval(runSubscriptionReminders, 60 * 1000);
 
         process.on('SIGINT', () => gracefulShutdown('SIGINT'));
         process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));

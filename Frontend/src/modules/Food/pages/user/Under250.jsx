@@ -1,9 +1,10 @@
 import { Link, useNavigate } from "react-router-dom"
 import { useState, useMemo, useCallback, useEffect, useRef } from "react"
-import { Star, Clock, MapPin, ArrowDownUp, Timer, ArrowRight, ChevronDown, Bookmark, Share2, Plus, Minus, X, UtensilsCrossed } from "lucide-react"
+import { Star, Clock, MapPin, ArrowDownUp, Timer, ArrowRight, ChevronDown, Bookmark, Share2, Plus, Minus, X, UtensilsCrossed, ArrowLeft, Search } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import { toast } from "sonner"
 import AnimatedPage from "@food/components/user/AnimatedPage"
+import MenuScanAnimation from "@food/components/user/MenuScanAnimation"
 import { Card, CardContent } from "@food/components/ui/card"
 import { Button } from "@food/components/ui/button"
 import { useLocationSelector } from "@food/components/user/UserLayout"
@@ -19,7 +20,7 @@ import { restaurantAPI, adminAPI } from "@food/api"
 import { isModuleAuthenticated } from "@food/utils/auth"
 import { flattenMenuItems, getMenuFromResponse } from "@food/utils/menuItems"
 import { calculateDistance, formatDistance } from "@food/utils/common"
-import { DEFAULT_APP_CUSTOMIZATION, loadAppCustomization } from "@food/utils/appCustomization"
+import { getRestaurantAvailabilityStatus } from "@food/utils/restaurantAvailability"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -60,14 +61,252 @@ const readUnder250Filters = () => {
   }
 }
 
+const ScrollAwareAddToCartAnimation = () => {
+  const [viewCartButtonBottom, setViewCartButtonBottom] = useState("bottom-[92px]")
+  const lastScrollY = useRef(0)
+
+  useEffect(() => {
+    let scrollTimeout = null;
+    const handleScroll = () => {
+      if (scrollTimeout) return;
+      scrollTimeout = setTimeout(() => {
+        const currentScrollY = window.scrollY
+        const scrollDifference = Math.abs(currentScrollY - lastScrollY.current)
+
+        if (scrollDifference >= 5) {
+          if (currentScrollY > lastScrollY.current) {
+            setViewCartButtonBottom("bottom-[72px]")
+          } else if (currentScrollY < lastScrollY.current) {
+            setViewCartButtonBottom("bottom-[92px]")
+          }
+          lastScrollY.current = currentScrollY
+        }
+        scrollTimeout = null;
+      }, 50);
+    }
+
+    window.addEventListener("scroll", handleScroll, { passive: true })
+    return () => {
+      window.removeEventListener("scroll", handleScroll)
+      if (scrollTimeout) clearTimeout(scrollTimeout)
+    }
+  }, [])
+
+  return <AddToCartAnimation dynamicBottom={viewCartButtonBottom} />
+}
+
+const HorizontalMenuScroller = ({ restaurant, quantities, isClosed, handleItemClick, RUPEE_SYMBOL }) => {
+  const [visibleCount, setVisibleCount] = useState(8);
+  const observerTarget = useRef(null);
+
+  useEffect(() => {
+    if (visibleCount >= restaurant.menuItems.length) return;
+
+    const observer = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting) {
+        setVisibleCount((prev) => Math.min(prev + 8, restaurant.menuItems.length));
+      }
+    }, { rootMargin: "200px", threshold: 0.1 });
+
+    const currentTarget = observerTarget.current;
+    if (currentTarget) observer.observe(currentTarget);
+
+    return () => {
+      if (currentTarget) observer.unobserve(currentTarget);
+      observer.disconnect();
+    };
+  }, [visibleCount, restaurant.menuItems.length]);
+
+  const visibleItems = restaurant.menuItems.slice(0, visibleCount);
+
+  return (
+    <div
+      className="flex md:grid gap-3 sm:gap-4 md:gap-5 lg:gap-6 overflow-x-auto md:overflow-x-visible overflow-y-visible scrollbar-hide scroll-smooth pb-2 md:pb-0 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+      style={{
+        scrollbarWidth: "none",
+        msOverflowStyle: "none",
+        touchAction: "pan-x pan-y pinch-zoom",
+        overflowY: "hidden",
+      }}
+    >
+      {visibleItems.map((item, itemIndex) => {
+        const quantity = quantities[item.id] || 0
+        return (
+          <motion.div
+            key={item.id}
+            className="flex-shrink-0 w-[140px] sm:w-[160px] md:w-[180px] bg-transparent cursor-pointer relative"
+            onClick={() => !isClosed && handleItemClick(item, restaurant)}
+            whileHover={{ scale: 1.02 }}
+          >
+            {/* Item Image */}
+            <div className="relative w-full aspect-square rounded-2xl overflow-hidden mb-3">
+              <motion.div
+                className="absolute inset-0"
+                whileHover={{ scale: 1.1 }}
+                transition={{ duration: 0.5, ease: "easeOut" }}
+              >
+                <OptimizedImage
+                  src={item.image}
+                  alt={item.name}
+                  className="w-full h-full"
+                  objectFit="cover"
+                  sizes="(max-width: 640px) 200px, (max-width: 768px) 220px, 100vw"
+                  placeholder="blur"
+                  priority={itemIndex < 4}
+                />
+              </motion.div>
+              {/* Gradient Overlay on Hover */}
+              <motion.div
+                className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent"
+                initial={{ opacity: 0 }}
+                whileHover={{ opacity: 1 }}
+                transition={{ duration: 0.3 }}
+              />
+              {isClosed && (
+                <div className="absolute inset-0 bg-black/40 flex items-center justify-center z-20">
+                  <div className="bg-black/80 px-3 py-1.5 rounded-lg border border-white/20">
+                    <span className="text-white font-black uppercase tracking-widest text-xs">Closed</span>
+                  </div>
+                </div>
+              )}
+              {/* Veg indicator moved below */}
+            </div>
+
+            {/* Item Details */}
+            <div className="flex flex-col">
+              <div className="flex items-center gap-1 md:gap-1.5 mb-1">
+                {item.isVeg ? (
+                  <div className="flex-shrink-0 h-3.5 w-3.5 md:h-4 md:w-4 rounded border border-green-600 flex items-center justify-center">
+                    <div className="h-2 w-2 md:h-2 md:w-2 rounded-full bg-green-600" />
+                  </div>
+                ) : (
+                  <div className="flex-shrink-0 h-3.5 w-3.5 md:h-4 md:w-4 rounded border border-red-600 flex items-center justify-center">
+                    <div className="h-2 w-2 md:h-2 md:w-2 rounded-full bg-red-600" />
+                  </div>
+                )}
+                <span className="text-sm md:text-base font-semibold text-gray-900 dark:text-white truncate">
+                  {item.name}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <div>
+                  {(() => {
+                    let discountPercentage = restaurant?.discount || 0;
+                    const specificItemDiscount = (restaurant?.itemDiscounts || []).find(d => String(d.itemId) === String(item.id || item._id));
+                    if (specificItemDiscount) {
+                      discountPercentage = specificItemDiscount.discountValue || 0;
+                    } else {
+                      const matchingRule = (restaurant?.discountRules || []).find(rule => {
+                        const val = Number(rule.conditionValue);
+                        if (rule.conditionType === 'PRICE_ABOVE' && item.price > val) return true;
+                        if (rule.conditionType === 'PRICE_BELOW' && item.price < val) return true;
+                        return false;
+                      });
+                      if (matchingRule) discountPercentage = matchingRule.discountValue || 0;
+                    }
+
+                    if (discountPercentage > 0) {
+                      return (
+                        <div className="flex flex-col gap-0.5">
+                          <div className="flex items-center gap-2">
+                            <p className="text-base md:text-lg lg:text-xl xl:text-2xl font-bold text-gray-900 dark:text-white">
+                              {RUPEE_SYMBOL}{Math.round(item.price * (1 - discountPercentage / 100))}
+                            </p>
+                            <p className="text-xs md:text-sm text-gray-500 line-through">
+                              {RUPEE_SYMBOL}{Math.round(item.price)}
+                            </p>
+                          </div>
+                          <div className="inline-flex">
+                            <span className="text-[10px] font-bold text-green-600 bg-green-50 border border-green-200 px-1 py-0.5 rounded uppercase">
+                              {discountPercentage}% OFF
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    }
+                    return (
+                      <p className="text-base md:text-lg lg:text-xl xl:text-2xl font-bold text-gray-900 dark:text-white">
+                        {RUPEE_SYMBOL}{Math.round(item.price)}
+                      </p>
+                    );
+                  })()}
+                  {item.bestPrice && (
+                    <p className="text-xs md:text-sm lg:text-base text-gray-500 dark:text-gray-400">Best price</p>
+                  )}
+                </div>
+                {isClosed ? (
+                  <Button
+                    variant={"ghost"}
+                    size="sm"
+                    disabled={true}
+                    className="rounded-xl h-8 sm:h-9 md:h-10 px-4 sm:px-6 md:px-8 text-[12px] sm:text-[14px] md:text-[16px] font-bold uppercase tracking-wide bg-gray-200 dark:bg-gray-800 text-gray-500 cursor-not-allowed shadow-none"
+                  >
+                    CLOSED
+                  </Button>
+                ) : quantity > 0 ? (
+                  <Link to="/user/cart" onClick={(e) => e.stopPropagation()}>
+                    <Button
+                      variant={"outline"}
+                      size="sm"
+                      className="rounded-xl h-8 sm:h-9 px-4 sm:px-5 text-[12px] sm:text-[14px] font-bold uppercase tracking-wide transition-all duration-300 active:scale-95 flex items-center gap-1 border-primary text-primary hover:bg-primary/5"
+                    >
+                      VIEW CART
+                    </Button>
+                  </Link>
+                ) : (
+                  <Button
+                    variant={"outline"}
+                    size="sm"
+                    className="rounded-xl h-8 sm:h-9 md:h-10 px-6 sm:px-8 text-[14px] sm:text-[15px] font-bold uppercase transition-all duration-300 active:scale-95 flex items-center justify-center bg-white dark:bg-black border-primary text-primary hover:bg-primary/5 shadow-sm"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleItemClick(item, restaurant)
+                    }}
+                  >
+                    ADD
+                  </Button>
+                )}
+              </div>
+            </div>
+          </motion.div>
+        )
+      })}
+
+      {/* Infinite Scroll Trigger for Horizontal List */}
+      {visibleCount < restaurant.menuItems.length && (
+        <div ref={observerTarget} className="flex-shrink-0 w-16 md:w-full h-32 sm:h-36 md:h-40 lg:h-48 xl:h-52 flex items-center justify-center">
+           <div className="w-6 h-6 rounded-full border-[3px] border-gray-200 border-t-primary animate-spin" />
+        </div>
+      )}
+    </div>
+  );
+};
+
+const pageCache = {
+  zoneId: null,
+  categories: null,
+  bannerImages: null,
+  under250Restaurants: null,
+  allRawRestaurants: null,
+  visibleRestaurantCount: 0,
+  hasMore: true,
+  fetchedIds: null,
+};
 
 export default function Under250() {
   const initialFiltersRef = useRef(readUnder250Filters())
   const { location } = useLocation()
   const { zoneId, zoneStatus, isInService, isOutOfService } = useZone(location)
+  // Initialize state from cache if zoneId matches
+  const isCacheValid = pageCache.zoneId === zoneId;
+  // Always show scan animation on page load, even if cached, because user likes the animation
+  const [showScanAnimation, setShowScanAnimation] = useState(true)
   const navigate = useNavigate()
   const { addToCart, updateQuantity, removeFromCart, getCartItem, cart } = useCart()
+  const [showSearch, setShowSearch] = useState(false)
+  const [searchQuery, setSearchQuery] = useState("")
   const [activeCategory, setActiveCategory] = useState(initialFiltersRef.current.activeCategory)
+  const [isSwitchingCategory, setIsSwitchingCategory] = useState(false)
   const [showSortPopup, setShowSortPopup] = useState(false)
   const [selectedSort, setSelectedSort] = useState(initialFiltersRef.current.selectedSort)
   const [draftSelectedSort, setDraftSelectedSort] = useState(initialFiltersRef.current.selectedSort)
@@ -78,23 +317,26 @@ export default function Under250() {
   const [showShareOptions, setShowShareOptions] = useState(false)
   const [quantities, setQuantities] = useState({})
   const [bookmarkedItems, setBookmarkedItems] = useState(new Set())
-  const [viewCartButtonBottom, setViewCartButtonBottom] = useState("bottom-[92px]")
-  const lastScrollY = useRef(0)
   const scrollLockYRef = useRef(0)
   const itemDetailContentRef = useRef(null)
   const itemDetailGestureRef = useRef({
     startY: 0,
     dragging: false,
   })
-  const [categories, setCategories] = useState([])
-  const [bannerImages, setBannerImages] = useState([])
-  const [loadingBanner, setLoadingBanner] = useState(true)
+  const [categories, setCategories] = useState(() => isCacheValid ? (pageCache.categories || []) : [])
+  const [loadingCategories, setLoadingCategories] = useState(() => !(isCacheValid && pageCache.categories))
+  const [bannerImages, setBannerImages] = useState(() => isCacheValid ? (pageCache.bannerImages || []) : [])
+  const [loadingBanner, setLoadingBanner] = useState(() => !(isCacheValid && pageCache.bannerImages))
   const [currentBannerIndex, setCurrentBannerIndex] = useState(0)
-  const [under250Restaurants, setUnder250Restaurants] = useState([])
-  const [loadingRestaurants, setLoadingRestaurants] = useState(true)
-  const [hasScrolledPastBanner, setHasScrolledPastBanner] = useState(false)
+  const [under250Restaurants, setUnder250Restaurants] = useState(() => isCacheValid ? (pageCache.under250Restaurants || []) : [])
+  const [loadingRestaurants, setLoadingRestaurants] = useState(() => !(isCacheValid && pageCache.allRawRestaurants))
   const [under250PriceLimit, setUnder250PriceLimit] = useState(250)
-  const [appCustomization, setAppCustomization] = useState(DEFAULT_APP_CUSTOMIZATION)
+  const [allRawRestaurants, setAllRawRestaurants] = useState(() => isCacheValid ? (pageCache.allRawRestaurants || []) : [])
+  const [visibleRestaurantCount, setVisibleRestaurantCount] = useState(() => isCacheValid ? (pageCache.visibleRestaurantCount || 0) : 0)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [hasMore, setHasMore] = useState(() => isCacheValid ? (pageCache.hasMore !== undefined ? pageCache.hasMore : true) : true)
+  const observerTarget = useRef(null)
+  const fetchedIdsRef = useRef(isCacheValid && pageCache.fetchedIds ? new Set(pageCache.fetchedIds) : new Set())
   const bannerShellRef = useRef(null)
   const stickyHeaderRef = useRef(null)
   const autoSlideIntervalRef = useRef(null)
@@ -103,6 +345,32 @@ export default function Under250() {
   const touchEndXRef = useRef(0)
   const touchEndYRef = useRef(0)
   const isBannerSwipingRef = useRef(false)
+
+  const [isHeaderVisible, setIsHeaderVisible] = useState(true)
+  const lastScrollYRef = useRef(0)
+
+  useEffect(() => {
+    let scrollTimeout = null
+    const handleScroll = () => {
+      if (scrollTimeout) return
+      scrollTimeout = setTimeout(() => {
+        const currentScrollY = window.scrollY
+        if (currentScrollY > lastScrollYRef.current && currentScrollY > 100) {
+          setIsHeaderVisible(false)
+        } else if (currentScrollY < lastScrollYRef.current) {
+          setIsHeaderVisible(true)
+        }
+        lastScrollYRef.current = currentScrollY
+        scrollTimeout = null
+      }, 50)
+    }
+
+    window.addEventListener("scroll", handleScroll, { passive: true })
+    return () => {
+      window.removeEventListener("scroll", handleScroll)
+      if (scrollTimeout) clearTimeout(scrollTimeout)
+    }
+  }, [])
 
   const sortOptions = [
     { id: null, label: 'Relevance' },
@@ -142,6 +410,15 @@ export default function Under250() {
     return 999
   }
 
+  const handleCategorySwitch = useCallback((categoryId) => {
+    setIsSwitchingCategory(true)
+    setActiveCategory(categoryId)
+    // Small artificial delay to show skeleton and allow images to load gracefully
+    setTimeout(() => {
+      setIsSwitchingCategory(false)
+    }, 400)
+  }, [])
+
   // Helper function to parse distance (e.g., "0.4 km" -> 0.4)
   const parseDistance = (distance) => {
     if (typeof distance === "number" && Number.isFinite(distance)) return distance
@@ -160,6 +437,26 @@ export default function Under250() {
   // Sort and filter restaurants based on selected sort and filters
   const sortedAndFilteredRestaurants = useMemo(() => {
     let filtered = under250Restaurants.map(r => ({ ...r, menuItems: [...(r.menuItems || [])] }))
+
+    // Apply search filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase().trim()
+      filtered = filtered.map(restaurant => {
+        const matchRestaurant = restaurant.name.toLowerCase().includes(query)
+        const matchingDishes = restaurant.menuItems.filter(item => 
+          item.name.toLowerCase().includes(query) ||
+          (item.description && item.description.toLowerCase().includes(query)) ||
+          (item.category && item.category.toLowerCase().includes(query))
+        )
+
+        if (matchRestaurant) {
+          return restaurant
+        } else if (matchingDishes.length > 0) {
+          return { ...restaurant, menuItems: matchingDishes }
+        }
+        return null
+      }).filter(Boolean)
+    }
 
     // Apply category filter
     if (activeCategory) {
@@ -229,13 +526,18 @@ export default function Under250() {
     }
 
     return filtered
-  }, [under250Restaurants, selectedSort, under30MinsFilter, activeCategory, categories])
+  }, [under250Restaurants, selectedSort, under30MinsFilter, activeCategory, categories, searchQuery])
 
   // Fetch under-50 banner from public API
   useEffect(() => {
+    if (pageCache.zoneId === zoneId && pageCache.bannerImages?.length > 0) {
+      setBannerImages(pageCache.bannerImages);
+      setLoadingBanner(false);
+      return;
+    }
     let cancelled = false
     setLoadingBanner(true)
-    api.get('/food/hero-banners/under-250/public')
+    api.get('/food/hero-banners/under-250/public', { params: { zoneId } })
       .then((res) => {
         if (cancelled) return
         const data = res?.data?.data
@@ -244,6 +546,8 @@ export default function Under250() {
           .map((banner) => (typeof banner?.imageUrl === "string" ? banner.imageUrl.trim() : ""))
           .filter(Boolean)
         setBannerImages(images)
+        pageCache.bannerImages = images
+        pageCache.zoneId = zoneId
       })
       .catch(() => {
         if (!cancelled) setBannerImages([])
@@ -252,7 +556,7 @@ export default function Under250() {
         if (!cancelled) setLoadingBanner(false)
       })
     return () => { cancelled = true }
-  }, [])
+  }, [zoneId])
 
   // Fetch landing settings to get dynamic price limit
   useEffect(() => {
@@ -355,25 +659,89 @@ export default function Under250() {
     isBannerSwipingRef.current = false
   }, [bannerImages.length, resetBannerAutoSlide])
 
-  // Fetch restaurants with dishes under ₹250 from backend
+  // 1. Fetch initial raw restaurant list
   useEffect(() => {
-    const fetchRestaurantsUnder250 = async () => {
+    if (pageCache.zoneId === zoneId && pageCache.allRawRestaurants?.length > 0) {
+      setAllRawRestaurants(pageCache.allRawRestaurants);
+      setVisibleRestaurantCount(pageCache.visibleRestaurantCount || 5);
+      setUnder250Restaurants(pageCache.under250Restaurants || []);
+      fetchedIdsRef.current = new Set(pageCache.fetchedIds);
+      setHasMore(pageCache.hasMore !== undefined ? pageCache.hasMore : true);
+      setLoadingRestaurants(false);
+      return;
+    }
+    let cancelled = false;
+    const fetchRestaurantsList = async () => {
       try {
         setLoadingRestaurants(true)
-        const response = await restaurantAPI.getRestaurants(zoneId ? { zoneId } : {})
+        const response = await restaurantAPI.getRestaurants(zoneId ? { zoneId } : {}, { noCache: true })
         const restaurantsRaw = Array.isArray(response?.data?.data?.restaurants)
           ? response.data.data.restaurants
           : []
+        
+        if (!cancelled) {
+          setAllRawRestaurants(restaurantsRaw)
+          setVisibleRestaurantCount(5) // Load first 5 immediately
+          setUnder250Restaurants([]) // Reset
+          fetchedIdsRef.current.clear()
+          setHasMore(restaurantsRaw.length > 0)
+          
+          pageCache.allRawRestaurants = restaurantsRaw;
+          pageCache.visibleRestaurantCount = 5;
+          pageCache.under250Restaurants = [];
+          pageCache.fetchedIds = new Set();
+          pageCache.hasMore = restaurantsRaw.length > 0;
+          pageCache.zoneId = zoneId;
+        }
+      } catch (error) {
+        debugError('Error fetching restaurants list:', error)
+        if (!cancelled) setAllRawRestaurants([])
+      } finally {
+        if (!cancelled) setLoadingRestaurants(false)
+      }
+    }
+    
+    fetchRestaurantsList()
+    return () => { cancelled = true }
+  }, [zoneId, isOutOfService])
+
+  // 2. Fetch menus for the current chunk when visible count increases
+  useEffect(() => {
+    if (allRawRestaurants.length === 0 || visibleRestaurantCount === 0) return;
+    
+    let cancelled = false;
+    
+    const fetchMenusForChunk = async () => {
+      try {
+        const targetSlice = allRawRestaurants.slice(0, visibleRestaurantCount)
+        
+        const newRestaurantsToFetch = targetSlice.filter(r => {
+          const rId = String(r?.restaurantId || r?._id)
+          return rId && !fetchedIdsRef.current.has(rId)
+        })
+
+        if (newRestaurantsToFetch.length === 0) {
+          if (!cancelled) {
+            setHasMore(visibleRestaurantCount < allRawRestaurants.length)
+            setLoadingMore(false)
+          }
+          return;
+        }
+
+        if (!cancelled) {
+          setLoadingMore(true)
+        }
+
         const userLat = Number(location?.latitude)
         const userLng = Number(location?.longitude)
-
-        const restaurantsWithUnder250Dishes = await Promise.all(
-          restaurantsRaw.map(async (restaurant, index) => {
+        
+        const newRestaurantsWithUnder250Dishes = await Promise.all(
+          newRestaurantsToFetch.map(async (restaurant) => {
             const restaurantId = restaurant?.restaurantId || restaurant?._id
             if (!restaurantId) return null
 
             try {
-              const menuResponse = await restaurantAPI.getMenuByRestaurantId(restaurantId)
+              const menuResponse = await restaurantAPI.getMenuByRestaurantId(restaurantId, { noCache: true })
               const menu = getMenuFromResponse(menuResponse)
               const menuItems = flattenMenuItems(menu)
                 .filter((item) => Number(item?.price || 0) <= under250PriceLimit && item?.isAvailable !== false)
@@ -440,7 +808,17 @@ export default function Under250() {
                   (deliveryMinutes ? `${deliveryMinutes} mins` : "30 mins"),
                 distance: distanceInKm !== null ? formatDistance(distanceInKm) : fallbackDistance,
                 distanceInKm,
-                originalIndex: index,
+                discount: restaurant?.discount || 0,
+                itemDiscounts: Array.isArray(restaurant?.itemDiscounts) ? restaurant.itemDiscounts : [],
+                discountRules: Array.isArray(restaurant?.discountRules) ? restaurant.discountRules : [],
+                isActive: restaurant?.isActive !== false,
+                isAcceptingOrders: restaurant?.isAcceptingOrders !== false,
+                openDays: Array.isArray(restaurant?.openDays) ? restaurant.openDays : [],
+                outletTimings: restaurant?.outletTimings || null,
+                deliveryTimings: restaurant?.deliveryTimings || null,
+                openingTime: restaurant?.openingTime || restaurant?.deliveryTimings?.openingTime || null,
+                closingTime: restaurant?.closingTime || restaurant?.deliveryTimings?.closingTime || null,
+                originalIndex: allRawRestaurants.findIndex(r => String(r?.restaurantId || r?._id) === String(restaurantId)),
                 menuItems,
               }
             } catch {
@@ -449,24 +827,77 @@ export default function Under250() {
           })
         )
 
-        setUnder250Restaurants(restaurantsWithUnder250Dishes.filter(Boolean))
+        if (!cancelled) {
+          const validNewRestaurants = newRestaurantsWithUnder250Dishes.filter(Boolean)
+          
+          // Mark IDs as fetched ONLY after successful completion (not before async call)
+          // This prevents React StrictMode double-mount from skipping restaurants
+          newRestaurantsToFetch.forEach(r => {
+             fetchedIdsRef.current.add(String(r?.restaurantId || r?._id))
+          })
+          
+          setUnder250Restaurants(prev => {
+             const updated = [...prev, ...validNewRestaurants];
+             pageCache.under250Restaurants = updated;
+             return updated;
+          })
+          setHasMore(visibleRestaurantCount < allRawRestaurants.length)
+          pageCache.visibleRestaurantCount = visibleRestaurantCount;
+          pageCache.hasMore = visibleRestaurantCount < allRawRestaurants.length;
+          pageCache.fetchedIds = new Set(fetchedIdsRef.current);
+          pageCache.zoneId = zoneId;
+        }
       } catch (error) {
-        debugError('Error fetching restaurants under 250:', error)
-        setUnder250Restaurants([])
+        debugError("Error fetching menu chunks:", error)
       } finally {
-        setLoadingRestaurants(false)
+        if (!cancelled) setLoadingMore(false)
       }
     }
 
-    fetchRestaurantsUnder250()
-  }, [zoneId, isOutOfService, location?.latitude, location?.longitude, under250PriceLimit])
+    fetchMenusForChunk()
+    
+    return () => { cancelled = true }
+  }, [allRawRestaurants, visibleRestaurantCount, location?.latitude, location?.longitude, under250PriceLimit])
+
+  // 3. Intersection Observer for Infinite Scroll
+  useEffect(() => {
+    if (!hasMore || loadingMore || loadingRestaurants || isSwitchingCategory) return;
+
+    const currentObserverTarget = observerTarget.current;
+    
+    const observer = new IntersectionObserver(
+      entries => {
+        if (entries[0].isIntersecting) {
+          setVisibleRestaurantCount(prev => prev + 5)
+        }
+      },
+      { threshold: 0.1, rootMargin: "200px" } // trigger before user hits absolute bottom
+    )
+
+    if (currentObserverTarget) {
+      observer.observe(currentObserverTarget)
+    }
+
+    return () => {
+      if (currentObserverTarget) {
+         observer.unobserve(currentObserverTarget)
+      }
+      observer.disconnect()
+    }
+  }, [hasMore, loadingMore, loadingRestaurants, isSwitchingCategory])
 
   // Fetch categories from backend (no static fallback list)
   useEffect(() => {
+    if (pageCache.zoneId === zoneId && pageCache.categories?.length > 0) {
+      setCategories(pageCache.categories);
+      setLoadingCategories(false);
+      return;
+    }
     let cancelled = false
 
     const fetchCategories = async () => {
       try {
+        setLoadingCategories(true)
         const response = await adminAPI.getPublicCategories(zoneId ? { zoneId } : {})
         const categoriesRaw = Array.isArray(response?.data?.data?.categories)
           ? response.data.data.categories
@@ -492,10 +923,14 @@ export default function Under250() {
 
         if (!cancelled) {
           setCategories(mappedCategories)
+          pageCache.categories = mappedCategories
+          pageCache.zoneId = zoneId
         }
       } catch (error) {
         debugError("Error fetching under-250 categories:", error)
         if (!cancelled) setCategories([])
+      } finally {
+        if (!cancelled) setLoadingCategories(false)
       }
     }
 
@@ -573,104 +1008,12 @@ export default function Under250() {
     )
   }, [selectedSort, activeCategory, under30MinsFilter])
 
-  // Scroll detection for view cart button positioning
-  useEffect(() => {
-    const handleScroll = () => {
-      const currentScrollY = window.scrollY
-      const scrollDifference = Math.abs(currentScrollY - lastScrollY.current)
-
-      // Only update if scroll difference is significant (avoid flickering)
-      if (scrollDifference < 5) {
-        return
-      }
-
-      // Scroll down -> bottom-[72px], Scroll up -> bottom-[92px]
-      if (currentScrollY > lastScrollY.current) {
-        // Scrolling down
-        setViewCartButtonBottom("bottom-[72px]")
-      } else if (currentScrollY < lastScrollY.current) {
-        // Scrolling up
-        setViewCartButtonBottom("bottom-[92px]")
-      }
-
-      lastScrollY.current = currentScrollY
-    }
-
-    window.addEventListener("scroll", handleScroll, { passive: true })
-    return () => window.removeEventListener("scroll", handleScroll)
-  }, [])
-
-  useEffect(() => {
-    let mounted = true
-    loadAppCustomization()
-      .then((settings) => {
-        if (mounted) setAppCustomization(settings)
-      })
-      .catch(() => {})
-    return () => {
-      mounted = false
-    }
-  }, [])
-
-  const openMealSelection = (item, restaurantName = null) => {
-    const itemId = item.itemId || item.id || ""
-    const restaurantId = item.mongoRestaurantId || item.restaurantMongoId || item.restaurantId || ""
-    const restaurant = restaurantName || item.restaurant || ""
-    const dish = { ...item, itemId, restaurantId, restaurantName: restaurant }
-    const params = new URLSearchParams()
-
-    if (item.name) params.set("dish", item.name)
-    if (itemId) params.set("dishId", itemId)
-    if (restaurant) params.set("restaurant", restaurant)
-    if (restaurantId) params.set("restaurantId", restaurantId)
-    if (item.categoryName) params.set("category", item.categoryName)
-    if (Number.isFinite(Number(item.price))) params.set("price", String(item.price))
-
-    navigate(
-      {
-        pathname: "/food/user/choose-meal",
-        search: params.toString() ? `?${params.toString()}` : "",
-      },
-      { state: { dish } },
-    )
-  }
-
-  useEffect(() => {
-    const handleBannerScroll = () => {
-      const bannerShell = bannerShellRef.current
-      const stickyHeader = stickyHeaderRef.current
-
-      if (!bannerShell) {
-        setHasScrolledPastBanner(false)
-        return
-      }
-
-      const bannerRect = bannerShell.getBoundingClientRect()
-      const stickyHeight = stickyHeader?.getBoundingClientRect().height || 0
-      setHasScrolledPastBanner(bannerRect.bottom <= stickyHeight)
-    }
-
-    handleBannerScroll()
-    window.addEventListener("scroll", handleBannerScroll, { passive: true })
-    window.addEventListener("resize", handleBannerScroll)
-
-    return () => {
-      window.removeEventListener("scroll", handleBannerScroll)
-      window.removeEventListener("resize", handleBannerScroll)
-    }
-  }, [])
-
   // Helper function to update item quantity in bothlocal state and cart
   const updateItemQuantity = (item, newQuantity, event = null, restaurantName = null) => {
     // Check authentication
     if (!isModuleAuthenticated('user')) {
       toast.error("Please login to add items to cart")
       navigate('/user/auth/login', { state: { from: location.pathname } })
-      return
-    }
-
-    if (appCustomization.normalOrderFlowEnabled === false) {
-      openMealSelection(item, restaurantName)
       return
     }
 
@@ -689,17 +1032,41 @@ export default function Under250() {
     // Find restaurant name from the item or use provided parameter
     const restaurant = restaurantName || item.restaurant || "Under 250"
 
+    // Find restaurant to get its discount
+    const restaurantObj = under250Restaurants.find(r => 
+      r.menuItems?.some(m => m.id === item.id)
+    );
+    
+    // Evaluate Item-Specific and Smart Rules Discounts
+    let discountPercentage = restaurantObj?.discount || 0;
+    const specificItemDiscount = (restaurantObj?.itemDiscounts || []).find(d => String(d.itemId) === String(item.id || item._id));
+    if (specificItemDiscount) {
+      discountPercentage = specificItemDiscount.discountValue || 0;
+    } else {
+      const matchingRule = (restaurantObj?.discountRules || []).find(rule => {
+        const val = Number(rule.conditionValue);
+        if (rule.conditionType === 'PRICE_ABOVE' && item.price > val) return true;
+        if (rule.conditionType === 'PRICE_BELOW' && item.price < val) return true;
+        return false;
+      });
+      if (matchingRule) discountPercentage = matchingRule.discountValue || 0;
+    }
+    
+    const finalPrice = discountPercentage > 0 ? Math.round(item.price * (1 - discountPercentage / 100)) : item.price;
+
     // Prepare cart item with all required properties
     const cartItem = {
       id: item.id,
       name: item.name,
-      price: item.price,
+      price: finalPrice, // Use discounted price
       image: item.image,
       restaurant: restaurant,
       description: item.description || "",
       originalPrice: item.originalPrice || item.price,
       priceOnOtherPlatforms: item.priceOnOtherPlatforms || null, // Include platform pricing for savings display
       otherPlatformGst: item.otherPlatformGst ?? null,
+      isVeg: item.isVeg,
+      foodType: item.foodType,
     }
 
     // Get source position for animation from event target
@@ -833,7 +1200,7 @@ export default function Under250() {
 
     const itemId = selectedItem.id || selectedItem._id
     const restaurantSlug = selectedItem.restaurantSlug || selectedItem.slug || ""
-    const shareUrl = restaurantSlug
+    const shareUrl = selectedItem.restaurantSlug
       ? `${window.location.origin}/user/restaurants/${restaurantSlug}${itemId ? `?dish=${encodeURIComponent(itemId)}` : ""}`
       : window.location.href
     const shareText = `Check out ${selectedItem.name || "this dish"} from ${selectedItem.restaurant || "Under 250"}`
@@ -893,30 +1260,87 @@ export default function Under250() {
   const shouldShowGrayscale = isOutOfService
 
   return (
-
     <div className={`relative min-h-screen bg-white dark:bg-[#0a0a0a] ${shouldShowGrayscale ? 'grayscale opacity-75' : ''}`}>
-      <div
-        ref={stickyHeaderRef}
-        className={`fixed top-0 left-0 right-0 z-40 w-full md:hidden transition-all duration-300 ${hasScrolledPastBanner
-          ? "bg-white/95 backdrop-blur-sm shadow-sm border-b border-gray-200"
-          : "bg-transparent"
-          }`}
-      >
-        <div className="relative z-50 pt-2 sm:pt-3 pb-2">
-          <PageNavbar textColor="black" zIndex={20} showProfile={true} showLogo={false} />
-        </div>
-      </div>
+      {/* ── Menu Scan Intro Animation ── */}
+      {showScanAnimation && (
+        <MenuScanAnimation
+          duration={2200}
+          onComplete={() => setShowScanAnimation(false)}
+        />
+      )}
+      
+      {/* Header removed */}
 
       {/* Banner Section */}
       <div
         ref={bannerShellRef}
         data-banner-shell="true"
-        className="relative w-full overflow-hidden h-[clamp(240px,42vw,520px)] md:-mt-40"
+        className="relative w-full h-[clamp(240px,42vw,520px)] md:h-[clamp(300px,42vw,520px)] md:-mt-40"
       >
+        {/* Floating Back Button */}
+        <button 
+          onClick={() => navigate(-1)} 
+          className="absolute top-4 left-4 md:top-48 md:left-8 z-40 w-10 h-10 rounded-full bg-black/30 backdrop-blur-md flex items-center justify-center text-white border border-white/20 shadow-lg transition-transform active:scale-95"
+        >
+          <ArrowLeft className="w-5 h-5" />
+        </button>
+
+        {/* Floating Search Button */}
+        <button 
+          onClick={() => setShowSearch(true)} 
+          className="absolute top-4 right-4 md:top-48 md:right-8 z-40 w-10 h-10 rounded-full bg-black/30 backdrop-blur-md flex items-center justify-center text-white border border-white/20 shadow-lg transition-transform active:scale-95"
+        >
+          <Search className="w-5 h-5" />
+        </button>
+
+        {/* Floating Search Bar */}
+        <AnimatePresence>
+          {showSearch && (
+            <motion.div
+              initial={{ y: -100, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: -100, opacity: 0 }}
+              transition={{ type: "spring", damping: 25, stiffness: 300 }}
+              className="absolute top-0 left-0 right-0 z-50 bg-white dark:bg-black p-3 sm:p-4 shadow-md border-b border-gray-100 dark:border-gray-800"
+            >
+              <div className="flex items-center gap-2 max-w-7xl mx-auto">
+                <button 
+                  onClick={() => {
+                    setShowSearch(false)
+                    setSearchQuery("")
+                  }}
+                  className="p-2 -ml-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                >
+                  <ArrowLeft className="w-6 h-6" />
+                </button>
+                <div className="flex-1 relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <input
+                    autoFocus
+                    type="text"
+                    placeholder="Search dishes or restaurants..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full pl-9 pr-10 py-2.5 bg-gray-100 dark:bg-gray-900 border border-transparent focus:border-primary/30 rounded-xl outline-none text-sm md:text-base text-gray-900 dark:text-white placeholder:text-gray-400 transition-colors"
+                  />
+                  {searchQuery && (
+                    <button 
+                      onClick={() => setSearchQuery("")}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-1 bg-white dark:bg-gray-800 rounded-full shadow-sm"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* Banner Image */}
         {bannerImages.length > 0 && (
           <div
-            className="absolute inset-0 z-0 overflow-hidden"
+            className="w-full h-full relative z-0 overflow-hidden rounded-b-[2rem] md:rounded-b-none"
             onTouchStart={handleBannerTouchStart}
             onTouchMove={handleBannerTouchMove}
             onTouchEnd={handleBannerTouchEnd}
@@ -960,16 +1384,17 @@ export default function Under250() {
           </div>
         )}
         {bannerImages.length === 0 && !loadingBanner && (
-          <div className="absolute top-0 left-0 right-0 bottom-0 z-0 bg-gradient-to-br from-[#fcf4f9] to-[#f5e8f1] dark:from-[#3c0f3d] dark:to-[#55254b] overflow-hidden" />
+          <div className="w-full h-full relative z-0 bg-gradient-to-br from-[#fcf4f9] to-[#f5e8f1] dark:from-[#3c0f3d] dark:to-secondary overflow-hidden rounded-b-[2rem] md:rounded-b-none" />
         )}
       </div>
 
       {/* Content Section */}
-      <div className="relative max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 xl:px-12 space-y-0 pt-2 sm:pt-3 md:pt-4 lg:pt-6 pb-6 md:pb-8 lg:pb-10">
+      <div className="relative max-w-7xl mx-auto space-y-0 pb-6 md:pb-8 lg:pb-10">
 
-        <section className="space-y-1 sm:space-y-1.5">
+        <div className={`sticky z-30 transition-all duration-300 bg-white/95 dark:bg-[#0a0a0a]/95 backdrop-blur-xl shadow-sm border-b border-gray-100 dark:border-gray-800 top-0 pt-2 sm:pt-3 md:pt-4 px-3 sm:px-4 md:px-6 lg:px-8 xl:px-12`}>
+          <section className="space-y-1 sm:space-y-1.5">
           <div
-            className="flex gap-3 sm:gap-4 md:gap-5 lg:gap-6 overflow-x-auto md:overflow-x-visible overflow-y-visible scrollbar-hide scroll-smooth px-2 sm:px-3 py-2 sm:py-3 md:py-4"
+            className="flex gap-3 sm:gap-4 md:gap-5 lg:gap-6 overflow-x-auto md:overflow-x-visible overflow-y-visible scrollbar-hide scroll-smooth px-2 sm:px-3 pt-1 pb-1 sm:pt-2 sm:pb-2 md:pt-3 md:pb-3"
             style={{
               scrollbarWidth: "none",
               msOverflowStyle: "none",
@@ -978,54 +1403,63 @@ export default function Under250() {
             }}
           >
             {/* All Button */}
-            <div className="flex-shrink-0 cursor-pointer" onClick={() => setActiveCategory(null)}>
+            <div className="flex-shrink-0 cursor-pointer" onClick={() => handleCategorySwitch(null)}>
               <motion.div
-                className="flex flex-col items-center gap-2 w-[62px] sm:w-24 md:w-28"
-                whileHover={{ scale: 1.1, y: -4 }}
+                className={`flex flex-col items-center justify-center gap-1 w-[76px] h-[76px] sm:w-[88px] sm:h-[88px] md:w-[96px] md:h-[96px] rounded-[1rem] transition-all border ${!activeCategory ? 'bg-primary border-primary text-white shadow-md' : 'bg-white border-gray-100 text-gray-600 dark:bg-[#1a1a1a] dark:border-gray-800 dark:text-gray-300'}`}
+                whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
-                transition={{ type: "spring", stiffness: 300, damping: 20 }}
               >
-                <div className={`w-14 h-14 sm:w-20 sm:h-20 md:w-24 md:h-24 rounded-full overflow-hidden shadow-md transition-all flex items-center justify-center bg-white ${!activeCategory ? 'ring-2 ring-[#7e3866] ring-offset-2' : ''}`}>
-                   <div className={`w-full h-full flex items-center justify-center ${!activeCategory ? 'bg-[#7e3866]/10 text-[#7e3866]' : 'bg-gray-50 text-gray-400'}`}>
-                      <UtensilsCrossed className="w-6 h-6 sm:w-10 sm:h-10 md:w-12 md:h-12" />
-                   </div>
+                <div className={`flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 ${!activeCategory ? 'text-white' : 'text-gray-400'}`}>
+                  <UtensilsCrossed className="w-7 h-7 sm:w-8 sm:h-8 md:w-9 md:h-9" />
                 </div>
-                <span className={`text-xs sm:text-sm md:text-base font-semibold text-gray-800 dark:text-gray-200 text-center pb-1 ${!activeCategory ? 'text-[#7e3866]' : ''}`}>
+                <span className={`text-[10px] sm:text-[11px] md:text-xs font-semibold text-center leading-tight ${!activeCategory ? 'text-white' : ''}`}>
                   All
                 </span>
               </motion.div>
             </div>
-            {categories.map((category, index) => {
-              const isActive = activeCategory === category.id
-              return (
-                <div key={category.id} className="flex-shrink-0 cursor-pointer" onClick={() => setActiveCategory(isActive ? null : category.id)}>
-                    <motion.div
-                      className="flex flex-col items-center gap-2 w-[62px] sm:w-24 md:w-28"
-                      whileHover={{ scale: 1.1, y: -4 }}
-                      whileTap={{ scale: 0.95 }}
-                      transition={{ type: "spring", stiffness: 300, damping: 20 }}
-                    >
-                      <div className={`w-14 h-14 sm:w-20 sm:h-20 md:w-24 md:h-24 rounded-full overflow-hidden shadow-md transition-all ${isActive ? 'ring-2 ring-[#7e3866] ring-offset-2' : ''}`}>
-                        <OptimizedImage
-                          src={category.image}
-                          alt={category.name}
-                          className="w-full h-full bg-white rounded-full"
-                          objectFit="cover"
-                          sizes="(max-width: 640px) 62px, (max-width: 768px) 96px, 112px"
-                          placeholder="blur"
-                        />
-                      </div>
-                      <span className={`text-xs sm:text-sm md:text-base font-semibold text-gray-800 dark:text-gray-200 text-center pb-1 ${isActive ? 'text-[#7e3866]' : ''}`}>
-                        {category.name.length > 7 ? `${category.name.slice(0, 7)}...` : category.name}
-                      </span>
-                    </motion.div>
+            {loadingCategories ? (
+              Array.from({ length: 6 }).map((_, i) => (
+                <div key={`skel-cat-${i}`} className="flex-shrink-0">
+                  <div className="flex flex-col items-center justify-center gap-1 w-[76px] h-[76px] sm:w-[88px] sm:h-[88px] md:w-[96px] md:h-[96px] rounded-[1rem] border border-gray-100 dark:border-gray-800 bg-white dark:bg-[#1a1a1a]">
+                    <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gray-200 dark:bg-gray-700 rounded-full animate-pulse"></div>
+                    <div className="h-3 w-10 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
+                  </div>
                 </div>
-              )
-            })}
+              ))
+            ) : (
+              categories.map((category, index) => {
+                const isActive = activeCategory === category.id
+                return (
+                  <div key={category.id} className="flex-shrink-0 cursor-pointer" onClick={() => handleCategorySwitch(isActive ? null : category.id)}>
+                      <motion.div
+                        className={`flex flex-col items-center justify-center gap-1 w-[76px] h-[76px] sm:w-[88px] sm:h-[88px] md:w-[96px] md:h-[96px] rounded-[1rem] transition-all border ${isActive ? 'bg-primary border-primary text-white shadow-md' : 'bg-white border-gray-100 text-gray-600 dark:bg-[#1a1a1a] dark:border-gray-800 dark:text-gray-300'}`}
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                      >
+                        <div className="w-10 h-10 sm:w-11 sm:h-11 md:w-12 md:h-12 rounded-full overflow-hidden mb-0.5 flex-shrink-0 flex items-center justify-center bg-white shadow-sm border border-gray-50">
+                          <OptimizedImage
+                            src={category.image}
+                            alt={category.name}
+                            className="w-full h-full object-cover scale-[1.15]"
+                            sizes="(max-width: 640px) 40px, (max-width: 768px) 44px, 48px"
+                            placeholder="blur"
+                          />
+                        </div>
+                        <span className={`text-[10px] sm:text-[11px] md:text-xs font-semibold text-center leading-tight px-1 ${isActive ? 'text-white' : ''}`}>
+                          {category.name.length > 9 ? `${category.name.slice(0, 9)}..` : category.name}
+                        </span>
+                      </motion.div>
+                  </div>
+                )
+              })
+            )}
           </div>
         </section>
+        </div>
 
-        <section className="py-2 sm:py-3 md:py-4">
+        {/* Filters Section (Not Sticky) */}
+        <div className="px-3 sm:px-4 md:px-6 lg:px-8 xl:px-12 pt-1 md:pt-2">
+          <section className="py-2 sm:py-3 md:py-4">
           <div className="flex items-center gap-2 md:gap-3">
             <Button
               variant="outline"
@@ -1042,7 +1476,7 @@ export default function Under250() {
               variant="outline"
               onClick={() => setUnder30MinsFilter(!under30MinsFilter)}
               className={`h-8 sm:h-9 md:h-10 px-3 sm:px-4 md:px-5 rounded-md flex items-center gap-1.5 whitespace-nowrap flex-shrink-0 font-medium transition-all text-sm md:text-base ${under30MinsFilter
-                ? 'bg-[#7e3866] text-white border border-[#7e3866] hover:bg-[#55254b]'
+                ? 'bg-primary text-white border border-primary hover:bg-secondary'
                 : 'bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300'
                 }`}
             >
@@ -1050,13 +1484,44 @@ export default function Under250() {
               <span className="text-xs sm:text-sm md:text-base font-medium">Under 30 mins</span>
             </Button>
           </div>
-        </section>
-
+          </section>
+        </div>
 
         {/* Restaurant Menu Sections */}
-        {loadingRestaurants ? (
-          <div className="flex justify-center items-center py-12">
-            <div className="text-gray-500 dark:text-gray-400">Loading restaurants...</div>
+        <div className="px-3 sm:px-4 md:px-6 lg:px-8 xl:px-12 pt-4">
+        {loadingRestaurants || isSwitchingCategory ? (
+          <div className="space-y-8 sm:space-y-10 md:space-y-12">
+            {Array.from({ length: 3 }).map((_, rIndex) => (
+              <section key={`skel-rest-${rIndex}`} className="pt-4 sm:pt-6 md:pt-8 lg:pt-10">
+                {/* Skeleton Restaurant Header */}
+                <div className="flex items-start justify-between mb-3 md:mb-4 lg:mb-6">
+                  <div className="flex-1 space-y-3">
+                    <div className="h-6 sm:h-8 w-48 sm:w-64 bg-orange-100 dark:bg-orange-900/30 rounded-md animate-pulse shadow-[0_0_15px_rgba(249,115,22,0.15)]"></div>
+                    <div className="flex items-center gap-3">
+                      <div className="h-4 w-20 bg-orange-100 dark:bg-orange-900/30 rounded animate-pulse shadow-[0_0_10px_rgba(249,115,22,0.1)]"></div>
+                      <div className="h-4 w-24 bg-orange-100 dark:bg-orange-900/30 rounded animate-pulse shadow-[0_0_10px_rgba(249,115,22,0.1)]"></div>
+                      <div className="h-4 w-16 bg-orange-100 dark:bg-orange-900/30 rounded animate-pulse shadow-[0_0_10px_rgba(249,115,22,0.1)]"></div>
+                    </div>
+                  </div>
+                </div>
+                {/* Skeleton Menu Items Horizontal Scroll */}
+                <div className="flex md:grid gap-3 sm:gap-4 md:gap-5 lg:gap-6 overflow-hidden md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                  {Array.from({ length: 4 }).map((_, iIndex) => (
+                    <div key={`skel-item-${rIndex}-${iIndex}`} className="flex-shrink-0 w-[200px] sm:w-[220px] md:w-full bg-white dark:bg-[#1a1a1a] rounded-lg md:rounded-xl border border-orange-100 dark:border-orange-900/20 overflow-hidden relative shadow-[0_4px_20px_rgba(249,115,22,0.08)]">
+                      <div className="w-full h-32 sm:h-36 md:h-40 lg:h-48 xl:h-52 bg-orange-50 dark:bg-orange-900/20 animate-pulse"></div>
+                      <div className="p-3 md:p-4 space-y-3">
+                        <div className="h-5 w-3/4 bg-orange-100 dark:bg-orange-900/30 rounded animate-pulse"></div>
+                        <div className="h-5 w-1/4 bg-orange-100 dark:bg-orange-900/30 rounded animate-pulse mt-2"></div>
+                        <div className="flex justify-between items-center mt-4">
+                          <div className="h-6 w-1/3 bg-orange-100 dark:bg-orange-900/30 rounded animate-pulse"></div>
+                          <div className="h-8 w-20 bg-orange-200 dark:bg-orange-800/40 rounded-full animate-pulse"></div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            ))}
           </div>
         ) : sortedAndFilteredRestaurants.length === 0 ? (
           <div className="flex justify-center items-center py-12">
@@ -1069,170 +1534,72 @@ export default function Under250() {
         ) : (
           sortedAndFilteredRestaurants.map((restaurant) => {
             const restaurantSlug = restaurant.slug || restaurant.name.toLowerCase().replace(/\s+/g, "-")
+            const availability = getRestaurantAvailabilityStatus(restaurant)
+            const isClosed = !availability.isOpen
+
             return (
-              <section key={restaurant.id} className="pt-4 sm:pt-6 md:pt-8 lg:pt-10">
+              <section key={restaurant.id} className={`p-4 md:p-5 lg:p-6 mb-6 md:mb-8 rounded-2xl bg-slate-50 dark:bg-[#1a1a1a] ${isClosed ? 'opacity-70 grayscale' : ''}`}>
                 {/* Restaurant Header */}
-                <div className="flex items-start justify-between mb-3 md:mb-4 lg:mb-6">
+                <div className="flex items-start justify-between mb-4 md:mb-5">
                   <div className="flex-1">
-                    <h3 className="text-lg sm:text-xl md:text-2xl lg:text-3xl xl:text-4xl font-bold text-gray-900 dark:text-white mb-1 md:mb-2">
+                    <h3 className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mb-1.5">
                       {restaurant.name}
                     </h3>
-                    <div className="flex items-center gap-2 md:gap-4 mt-1.5 flex-wrap">
-                      <div className="flex items-center gap-1.5 text-xs md:text-sm font-semibold text-gray-500 dark:text-gray-400">
-                        <Clock className="h-3.5 w-3.5 md:h-4 md:w-4" strokeWidth={2.5} />
+                    <div className="flex items-center gap-1.5 md:gap-2 flex-wrap">
+                      <div className="flex items-center gap-1 text-sm md:text-base font-bold text-gray-700 dark:text-gray-300">
+                        <div className="w-5 h-5 rounded-full bg-green-600 flex items-center justify-center">
+                           <Star className="h-3 w-3 fill-white text-white" />
+                        </div>
+                        <span>{restaurant.rating} {restaurant.totalRatings > 0 ? `(${restaurant.totalRatings >= 1000 ? `${(restaurant.totalRatings / 1000).toFixed(1)}K+` : restaurant.totalRatings}+)` : ''}</span>
+                      </div>
+                      <span className="text-gray-500 dark:text-gray-400 text-sm md:text-base">•</span>
+                      {restaurant.distance && (
+                        <>
+                          <div className="flex items-center text-sm md:text-base font-semibold text-gray-700 dark:text-gray-300">
+                            <span>{restaurant.distance}</span>
+                          </div>
+                          <span className="text-gray-500 dark:text-gray-400 text-sm md:text-base">•</span>
+                        </>
+                      )}
+                      <div className="flex items-center text-sm md:text-base font-semibold text-gray-700 dark:text-gray-300">
                         <span>{restaurant.deliveryTime}</span>
                       </div>
-                      <div className="w-[1px] h-3 bg-gray-200 dark:bg-gray-800 hidden xs:block"></div>
-                      <div className="flex items-center gap-1.5 text-xs md:text-sm font-semibold text-gray-500 dark:text-gray-400">
-                        <MapPin className="h-3.5 w-3.5 md:h-4 md:w-4" strokeWidth={2.5} />
-                        <span>{restaurant.distance}</span>
-                      </div>
-                      <div className="flex items-center gap-1 px-2 py-0.5 md:px-2.5 md:py-1 bg-[#267e3e] text-white rounded-md">
-                        <Star className="h-3 w-3 md:h-3.5 md:w-3.5 fill-white text-white" />
-                        <span className="text-[10px] md:text-xs font-black">{restaurant.rating}</span>
-                      </div>
-                      <div className="h-4 w-[1px] bg-gray-200 dark:bg-gray-800"></div>
-                      <span className="text-[10px] md:text-xs font-bold text-gray-400 dark:text-gray-500">
-                        {restaurant.totalRatings > 0 ? `${restaurant.totalRatings >= 1000 ? `${(restaurant.totalRatings / 1000).toFixed(1)}K` : restaurant.totalRatings}+ Ratings` : 'New'}
-                      </span>
                     </div>
                   </div>
+                  
+                  {/* View Items Link */}
+                  <Link to={`/user/restaurants/${restaurantSlug}?under250=true`} className="flex-shrink-0 mt-1">
+                    <span className="text-primary font-bold text-sm md:text-base flex items-center hover:underline">
+                      View Items <ArrowRight className="h-4 w-4 ml-0.5" />
+                    </span>
+                  </Link>
                 </div>
 
                 {/* Menu Items Horizontal Scroll */}
                 {restaurant.menuItems && restaurant.menuItems.length > 0 && (
-                  <div className="space-y-2 md:space-y-3 lg:space-y-4">
-                    <div
-                      className="flex md:grid gap-3 sm:gap-4 md:gap-5 lg:gap-6 overflow-x-auto md:overflow-x-visible overflow-y-visible scrollbar-hide scroll-smooth pb-2 md:pb-0 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
-                      style={{
-                        scrollbarWidth: "none",
-                        msOverflowStyle: "none",
-                        touchAction: "pan-x pan-y pinch-zoom",
-                        overflowY: "hidden",
-                      }}
-                    >
-                      {restaurant.menuItems.map((item, itemIndex) => {
-                        const quantity = quantities[item.id] || 0
-                        return (
-                          <motion.div
-                            key={item.id}
-                            className="flex-shrink-0 w-[200px] sm:w-[220px] md:w-full bg-white dark:bg-[#1a1a1a] rounded-lg md:rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden cursor-pointer"
-                            onClick={() => handleItemClick(item, restaurant)}
-                            initial={{ opacity: 0, y: 20 }}
-                            whileInView={{ opacity: 1, y: 0 }}
-                            viewport={{ once: true, margin: "-50px" }}
-                            transition={{ duration: 0.4, delay: itemIndex * 0.05 }}
-                            whileHover={{ y: -8, scale: 1.02 }}
-                            style={{ boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)" }}
-                          >
-                            {/* Item Image */}
-                            <div className="relative w-full h-32 sm:h-36 md:h-40 lg:h-48 xl:h-52 overflow-hidden">
-                              <motion.div
-                                className="absolute inset-0"
-                                whileHover={{ scale: 1.1 }}
-                                transition={{ duration: 0.5, ease: "easeOut" }}
-                              >
-                                <OptimizedImage
-                                  src={item.image}
-                                  alt={item.name}
-                                  className="w-full h-full"
-                                  objectFit="cover"
-                                  sizes="(max-width: 640px) 200px, (max-width: 768px) 220px, 100vw"
-                                  placeholder="blur"
-                                  priority={itemIndex < 4}
-                                />
-                              </motion.div>
-                              {/* Gradient Overlay on Hover */}
-                              <motion.div
-                                className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent"
-                                initial={{ opacity: 0 }}
-                                whileHover={{ opacity: 1 }}
-                                transition={{ duration: 0.3 }}
-                              />
-                              {/* Veg Indicator */}
-                              {item.isVeg && (
-                                <motion.div
-                                  className="absolute top-2 left-2 md:top-3 md:left-3 h-4 w-4 md:h-5 md:w-5 lg:h-6 lg:w-6 rounded border-2 border-green-600 bg-white flex items-center justify-center z-10"
-                                  whileHover={{ scale: 1.2, rotate: 5 }}
-                                  transition={{ duration: 0.2 }}
-                                >
-                                  <div className="h-2 w-2 md:h-2.5 md:w-2.5 lg:h-3 lg:w-3 rounded-full bg-green-600" />
-                                </motion.div>
-                              )}
-                            </div>
-
-                            {/* Item Details */}
-                            <div className="p-3 md:p-4 lg:p-5">
-                              <div className="flex items-center gap-1 md:gap-2 mb-1 md:mb-2 lg:mb-3">
-                                {item.isVeg && (
-                                  <div className="h-3 w-3 md:h-4 md:w-4 lg:h-5 lg:w-5 rounded border border-green-600 bg-green-50 dark:bg-green-900/20 flex items-center justify-center">
-                                    <div className="h-1.5 w-1.5 md:h-2 md:w-2 lg:h-2.5 lg:w-2.5 rounded-full bg-green-600" />
-                                  </div>
-                                )}
-                                <span className="text-sm md:text-base lg:text-lg font-semibold text-gray-900 dark:text-white">
-                                  1 x {item.name}
-                                </span>
-                              </div>
-                              <div className="flex items-center justify-between">
-                                <div>
-                                  <p className="text-base md:text-lg lg:text-xl xl:text-2xl font-bold text-gray-900 dark:text-white">
-                                    {RUPEE_SYMBOL}{Math.round(item.price)}
-                                  </p>
-                                  {item.bestPrice && (
-                                    <p className="text-xs md:text-sm lg:text-base text-gray-500 dark:text-gray-400">Best price</p>
-                                  )}
-                                </div>
-                                {quantity > 0 ? (
-                                  <Link to="/user/cart" onClick={(e) => e.stopPropagation()}>
-                                    <Button
-                                      variant={"ghost"}
-                                      size="sm"
-                                      className="bg-[#7e3866] text-white hover:bg-[#55254b] h-7 md:h-8 lg:h-9 px-3 md:px-4 lg:px-5 text-xs md:text-sm lg:text-base font-bold shadow-md transition-all active:scale-95"
-                                    >
-                                      View cart
-                                    </Button>
-                                  </Link>
-                                ) : (
-                                  <Button
-                                    variant={"ghost"}
-                                    size="sm"
-                                    disabled={shouldShowGrayscale}
-                                    className={`h-7 md:h-8 lg:h-9 px-3 md:px-4 lg:px-5 text-xs md:text-sm lg:text-base font-bold shadow-md transition-all active:scale-95 ${shouldShowGrayscale
-                                      ? 'bg-gray-100 dark:bg-gray-800 text-gray-400 border-gray-300 dark:border-gray-700 cursor-not-allowed opacity-50'
-                                      : 'bg-[#7e3866] text-white hover:bg-[#55254b]'
-                                      }`}
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      if (!shouldShowGrayscale) {
-                                        handleItemClick(item, restaurant)
-                                      }
-                                    }}
-                                  >
-                                    Add
-                                  </Button>
-                                )}
-                              </div>
-                            </div>
-                          </motion.div>
-                        )
-                      })}
-                    </div>
-
-                    {/* View Full Menu Button */}
-                    <Link className="flex justify-center mt-2 md:mt-3 lg:mt-4" to={`/user/restaurants/${restaurantSlug}?under250=true`}>
-                      <Button
-                        variant="outline"
-                        className="w-min align-center text-center rounded-lg md:rounded-xl mx-auto bg-gray-50 dark:bg-[#1a1a1a] hover:bg-gray-100 dark:hover:bg-gray-800 dark:text-white text-gray-700 border-gray-200 dark:border-gray-800 h-9 md:h-10 lg:h-11 px-4 md:px-6 lg:px-8 text-sm md:text-base lg:text-lg"
-                      >
-                        View full menu <ArrowRight className="h-4 w-4 md:h-5 md:w-5 lg:h-6 lg:w-6 ml-2 text-gray-700 dark:text-gray-300" />
-                      </Button>
-                    </Link>
+                  <div className="mt-4">
+                    <HorizontalMenuScroller 
+                      restaurant={restaurant}
+                      quantities={quantities}
+                      isClosed={isClosed}
+                      handleItemClick={handleItemClick}
+                      RUPEE_SYMBOL={RUPEE_SYMBOL}
+                    />
                   </div>
                 )}
               </section>
             )
           }))}
+        </div>
       </div>
+
+      {/* Infinite Scroll Elements */}
+      {loadingMore && (
+        <div className="py-8 flex justify-center items-center w-full">
+          <div className="w-8 h-8 rounded-full border-[3px] border-gray-200 border-t-primary animate-spin" />
+        </div>
+      )}
+      <div ref={observerTarget} className="h-4 w-full" />
 
       {/* Sort Popup - Bottom Sheet */}
       <AnimatePresence>
@@ -1270,7 +1637,7 @@ export default function Under250() {
                 <h2 className="text-lg md:text-xl lg:text-2xl font-bold text-gray-900 dark:text-white">Sort By</h2>
                 <button
                   onClick={handleClearAll}
-                  className="text-[#7e3866] dark:text-[#b18da5] font-medium text-sm md:text-base"
+                  className="text-primary dark:text-[#b18da5] font-medium text-sm md:text-base"
                 >
                   Clear all
                 </button>
@@ -1284,11 +1651,11 @@ export default function Under250() {
                       key={option.id || 'relevance'}
                       onClick={() => setDraftSelectedSort(option.id)}
                       className={`px-4 md:px-5 lg:px-6 py-3 md:py-4 rounded-xl border text-left transition-colors ${draftSelectedSort === option.id
-                        ? 'border-[#7e3866] bg-[#fdfafc] dark:bg-[#7e3866]/20'
-                        : 'border-gray-200 dark:border-gray-800 hover:border-[#7e3866]'
+                        ? 'border-primary bg-[#fdfafc] dark:bg-primary/20'
+                        : 'border-gray-200 dark:border-gray-800 hover:border-primary'
                         }`}
                     >
-                      <span className={`text-sm md:text-base lg:text-lg font-medium ${draftSelectedSort === option.id ? 'text-[#7e3866] dark:text-[#b18da5]' : 'text-gray-700 dark:text-gray-300'}`}>
+                      <span className={`text-sm md:text-base lg:text-lg font-medium ${draftSelectedSort === option.id ? 'text-primary dark:text-[#b18da5]' : 'text-gray-700 dark:text-gray-300'}`}>
                         {option.label}
                       </span>
                     </button>
@@ -1306,7 +1673,7 @@ export default function Under250() {
                 </button>
                 <button
                   onClick={handleApply}
-                  className="flex-1 py-3 md:py-4 font-semibold rounded-xl transition-colors text-sm md:text-base bg-[#7e3866] text-white hover:bg-[#55254b]"
+                  className="flex-1 py-3 md:py-4 font-semibold rounded-xl transition-colors text-sm md:text-base bg-primary text-white hover:bg-secondary"
                 >
                   Apply
                 </button>
@@ -1451,7 +1818,7 @@ export default function Under250() {
                 {selectedItem.customisable && (
                   <div className="flex items-center gap-2 mb-4">
                     <div className="flex-1 h-0.5 bg-gray-200 rounded-full overflow-hidden">
-                      <div className="h-full bg-[#7e3866]" style={{ width: '50%' }} />
+                      <div className="h-full bg-primary" style={{ width: '50%' }} />
                     </div>
                     <span className="text-xs text-gray-600 dark:text-gray-400 font-medium whitespace-nowrap">
                       highly reordered
@@ -1517,7 +1884,7 @@ export default function Under250() {
                   <Button
                     className={`flex-1 h-[44px] md:h-[50px] lg:h-[56px] rounded-lg md:rounded-xl font-semibold flex items-center justify-center gap-2 text-sm md:text-base lg:text-lg ${shouldShowGrayscale
                       ? 'bg-gray-300 dark:bg-gray-700 text-gray-500 dark:text-gray-600 cursor-not-allowed opacity-50'
-                      : 'bg-[#7e3866] hover:bg-[#55254b] dark:bg-[#7e3866] dark:hover:bg-[#55254b] text-white'
+                      : 'bg-primary hover:bg-secondary dark:bg-primary dark:hover:bg-secondary text-white'
                       }`}
                     onClick={(e) => {
                       if (!shouldShowGrayscale) {
@@ -1529,14 +1896,40 @@ export default function Under250() {
                   >
                     <span>Add item</span>
                     <div className="flex items-center gap-1 md:gap-2">
-                      {selectedItem.originalPrice && selectedItem.originalPrice > selectedItem.price && (
-                        <span className="text-sm md:text-base lg:text-lg line-through text-red-200">
-                          {RUPEE_SYMBOL}{Math.round(selectedItem.originalPrice)}
-                        </span>
-                      )}
-                      <span className="text-base md:text-lg lg:text-xl font-bold">
-                        {RUPEE_SYMBOL}{Math.round(selectedItem.price)}
-                      </span>
+                      {/* Check if we have a restaurant discount for the selected item */}
+                      {(() => {
+                        const restaurant = under250Restaurants.find(r => 
+                          r.menuItems?.some(m => m.id === selectedItem.id)
+                        );
+                        if (restaurant?.discount > 0) {
+                          return (
+                            <>
+                              <span className="text-sm md:text-base lg:text-lg line-through text-red-200">
+                                {RUPEE_SYMBOL}{Math.round(selectedItem.price)}
+                              </span>
+                              <span className="text-base md:text-lg lg:text-xl font-bold">
+                                {RUPEE_SYMBOL}{Math.round(selectedItem.price * (1 - restaurant.discount / 100))}
+                              </span>
+                            </>
+                          );
+                        } else if (selectedItem.originalPrice && selectedItem.originalPrice > selectedItem.price) {
+                          return (
+                            <>
+                              <span className="text-sm md:text-base lg:text-lg line-through text-red-200">
+                                {RUPEE_SYMBOL}{Math.round(selectedItem.originalPrice)}
+                              </span>
+                              <span className="text-base md:text-lg lg:text-xl font-bold">
+                                {RUPEE_SYMBOL}{Math.round(selectedItem.price)}
+                              </span>
+                            </>
+                          );
+                        }
+                        return (
+                          <span className="text-base md:text-lg lg:text-xl font-bold">
+                            {RUPEE_SYMBOL}{Math.round(selectedItem.price)}
+                          </span>
+                        );
+                      })()}
                     </div>
                   </Button>
                 </div>
@@ -1587,7 +1980,7 @@ export default function Under250() {
                   <button
                     key={option.id}
                     onClick={() => handleShareOption(option.id)}
-                    className="rounded-2xl border border-gray-200 dark:border-gray-700 px-4 py-3 text-sm font-medium text-gray-800 dark:text-gray-200 hover:border-[#7e3866] hover:text-[#7e3866] transition-colors"
+                    className="rounded-2xl border border-gray-200 dark:border-gray-700 px-4 py-3 text-sm font-medium text-gray-800 dark:text-gray-200 hover:border-primary hover:text-primary transition-colors"
                   >
                     {option.label}
                   </button>
@@ -1599,7 +1992,7 @@ export default function Under250() {
       </AnimatePresence>
 
       {/* Add to Cart Animation */}
-      <AddToCartAnimation dynamicBottom={viewCartButtonBottom} />
+      <ScrollAwareAddToCartAnimation />
     </div>
   )
 }

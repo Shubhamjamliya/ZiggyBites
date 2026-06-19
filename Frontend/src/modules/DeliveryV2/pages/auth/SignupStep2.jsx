@@ -16,6 +16,91 @@ const createEmptyUploadedDocs = () => ({
   drivingLicensePhoto: null
 })
 
+// IndexedDB helpers for persistent file storage
+const DELIVERY_FILES_DB = "DeliverySignupFiles"
+const FILES_STORE = "files"
+
+const openDeliveryFilesDB = () => {
+  return new Promise((resolve, reject) => {
+    try {
+      const request = indexedDB.open(DELIVERY_FILES_DB, 1)
+      request.onupgradeneeded = (e) => {
+        const db = e.target.result
+        if (!db.objectStoreNames.contains(FILES_STORE)) {
+          db.createObjectStore(FILES_STORE)
+        }
+      }
+      request.onsuccess = (e) => resolve(e.target.result)
+      request.onerror = (e) => reject(e.target.error)
+    } catch (err) {
+      reject(err)
+    }
+  })
+}
+
+const saveFileToDB = async (key, file) => {
+  if (!file) return
+  try {
+    const db = await openDeliveryFilesDB()
+    const tx = db.transaction(FILES_STORE, "readwrite")
+    tx.objectStore(FILES_STORE).put(file, key)
+    await new Promise((resolve, reject) => {
+      tx.oncomplete = () => resolve(true)
+      tx.onerror = () => reject(tx.error || new Error("IndexedDB write transaction failed"))
+      tx.onabort = () => reject(tx.error || new Error("IndexedDB write transaction aborted"))
+    })
+  } catch (err) {
+    debugError("IndexedDB save failed:", err)
+  }
+}
+
+const getFileFromDB = async (key) => {
+  try {
+    const db = await openDeliveryFilesDB()
+    const tx = db.transaction(FILES_STORE, "readonly")
+    const request = tx.objectStore(FILES_STORE).get(key)
+    return new Promise((resolve) => {
+      request.onsuccess = () => {
+        resolve(request.result || null)
+      }
+      request.onerror = () => resolve(null)
+    })
+  } catch (err) {
+    debugError("IndexedDB load failed:", err)
+    return null
+  }
+}
+
+const deleteFileFromDB = async (key) => {
+  try {
+    const db = await openDeliveryFilesDB()
+    const tx = db.transaction(FILES_STORE, "readwrite")
+    tx.objectStore(FILES_STORE).delete(key)
+    await new Promise((resolve, reject) => {
+      tx.oncomplete = () => resolve(true)
+      tx.onerror = () => reject(tx.error || new Error("IndexedDB delete transaction failed"))
+      tx.onabort = () => reject(tx.error || new Error("IndexedDB delete transaction aborted"))
+    })
+  } catch (err) {
+    debugError("IndexedDB delete failed:", err)
+  }
+}
+
+const clearAllFilesFromDB = async () => {
+  try {
+    const db = await openDeliveryFilesDB()
+    const tx = db.transaction(FILES_STORE, "readwrite")
+    tx.objectStore(FILES_STORE).clear()
+    await new Promise((resolve, reject) => {
+      tx.oncomplete = () => resolve(true)
+      tx.onerror = () => reject(tx.error || new Error("IndexedDB clear transaction failed"))
+      tx.onabort = () => reject(tx.error || new Error("IndexedDB clear transaction aborted"))
+    })
+  } catch (err) {
+    debugError("IndexedDB clear failed:", err)
+  }
+}
+
 const sanitizeUploadedDocValue = (value) => {
   if (!value) return null
 
@@ -40,6 +125,36 @@ const sanitizeUploadedDocs = (docs) => ({
   panPhoto: sanitizeUploadedDocValue(docs?.panPhoto),
   drivingLicensePhoto: sanitizeUploadedDocValue(docs?.drivingLicensePhoto)
 })
+
+const compressImageToWebP = (file, maxWidth = 1024, quality = 0.8) => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.readAsDataURL(file)
+    reader.onload = (event) => {
+      const img = new Image()
+      img.src = event.target.result
+      img.onload = () => {
+        const canvas = document.createElement("canvas")
+        let width = img.width
+        let height = img.height
+
+        if (width > maxWidth) {
+          height = Math.round((height * maxWidth) / width)
+          width = maxWidth
+        }
+
+        canvas.width = width
+        canvas.height = height
+        const ctx = canvas.getContext("2d")
+        ctx.drawImage(img, 0, 0, width, height)
+        const dataUrl = canvas.toDataURL("image/webp", quality)
+        resolve(dataUrl)
+      }
+      img.onerror = (error) => reject(error)
+    }
+    reader.onerror = (error) => reject(error)
+  })
+}
 
 const getFriendlyRegistrationError = (error) => {
   const rawMessage =
@@ -91,7 +206,7 @@ export default function SignupStep2() {
     drivingLicensePhoto: null
   })
   const [uploadedDocs, setUploadedDocs] = useState(() => {
-    const saved = sessionStorage.getItem("deliverySignupDocs")
+    const saved = localStorage.getItem("deliverySignupDocs")
     if (saved) {
       try {
         return sanitizeUploadedDocs(JSON.parse(saved))
@@ -101,33 +216,49 @@ export default function SignupStep2() {
     }
     return createEmptyUploadedDocs()
   })
-  const [activePicker, setActivePicker] = useState(null) // { docType: string, title: string, ref: any }
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [uploading, setUploading] = useState({})
+  const [isSuccess, setIsSuccess] = useState(false)
 
+  // Hydrate files from IndexedDB on load
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: "auto" })
     document.documentElement.scrollTop = 0
     document.body.scrollTop = 0
+    
+    const loadFiles = async () => {
+      const [prof, aadhar, pan, dl] = await Promise.all([
+        getFileFromDB("profilePhoto"),
+        getFileFromDB("aadharPhoto"),
+        getFileFromDB("panPhoto"),
+        getFileFromDB("drivingLicensePhoto")
+      ])
+      
+      setDocuments(prev => ({
+        ...prev,
+        ...(prof && { profilePhoto: prof }),
+        ...(aadhar && { aadharPhoto: aadhar }),
+        ...(pan && { panPhoto: pan }),
+        ...(dl && { drivingLicensePhoto: dl })
+      }))
+
+      setUploadedDocs(prev => ({
+        ...prev,
+        ...(prof && { profilePhoto: { file: true } }),
+        ...(aadhar && { aadharPhoto: { file: true } }),
+        ...(pan && { panPhoto: { file: true } }),
+        ...(dl && { drivingLicensePhoto: { file: true } })
+      }))
+    }
+    loadFiles()
   }, [])
 
-  // Save uploaded docs to session storage whenever they change
+  // Save uploaded docs metadata to session storage whenever they change
   useEffect(() => {
-    sessionStorage.setItem("deliverySignupDocs", JSON.stringify(uploadedDocs))
+    localStorage.setItem("deliverySignupDocs", JSON.stringify(uploadedDocs))
   }, [uploadedDocs])
 
-  useEffect(() => {
-    return () => {
-      Object.values(documents).forEach((file) => {
-        if (file instanceof File) {
-          const previewUrl = file.previewUrl || file._previewUrl
-          if (previewUrl) {
-            URL.revokeObjectURL(previewUrl)
-          }
-        }
-      })
-    }
-  }, [documents])
+  // Removed incorrect URL.revokeObjectURL cleanup that was breaking image previews
 
   const getPreviewSrc = (docType) => {
     const uploaded = uploadedDocs[docType]
@@ -135,9 +266,19 @@ export default function SignupStep2() {
     if (uploaded?.url) return uploaded.url
 
     const localFile = documents[docType]
-    if (localFile instanceof File) {
+    if (typeof localFile === "string" && localFile.startsWith("data:")) {
+      return localFile
+    }
+    if (localFile) {
       if (!localFile._previewUrl) {
-        localFile._previewUrl = URL.createObjectURL(localFile)
+        try {
+          const blob = (localFile instanceof Blob || localFile instanceof File) 
+            ? localFile 
+            : new Blob([localFile], { type: localFile.type || "image/webp" })
+          localFile._previewUrl = URL.createObjectURL(blob)
+        } catch (e) {
+          return null
+        }
       }
       return localFile._previewUrl
     }
@@ -155,14 +296,19 @@ export default function SignupStep2() {
       toast.error("Please select an image file")
       return
     }
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error("Image size should be less than 5MB")
-      return
-    }
 
-    setDocuments((prev) => ({ ...prev, [docType]: file }))
-    setUploadedDocs((prev) => ({ ...prev, [docType]: { file: true } }))
-    toast.success(`${docType.replace(/([A-Z])/g, " $1").trim()} selected`)
+    try {
+      // Compress to WebP (max width 1024px, 80% quality)
+      const compressedDataUrl = await compressImageToWebP(file, 1024, 0.8)
+
+      setDocuments((prev) => ({ ...prev, [docType]: compressedDataUrl }))
+      setUploadedDocs((prev) => ({ ...prev, [docType]: { file: true } }))
+      await saveFileToDB(docType, compressedDataUrl)
+      toast.success(`${docType.replace(/([A-Z])/g, " $1").trim()} selected`)
+    } catch (error) {
+      debugError("Image compression failed:", error)
+      toast.error("Failed to process image. Please try another one.")
+    }
   }
 
   const handleTakeCameraPhoto = (docType, label) => {
@@ -176,7 +322,7 @@ export default function SignupStep2() {
     fileInputRefs.current[docType]?.click()
   }
 
-  const handleRemove = (docType) => {
+  const handleRemove = async (docType) => {
     setDocuments(prev => ({
       ...prev,
       [docType]: null
@@ -185,17 +331,13 @@ export default function SignupStep2() {
       ...prev,
       [docType]: null
     }))
+    await deleteFileFromDB(docType)
   }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
 
-    if (!documents.profilePhoto || !documents.aadharPhoto || !documents.panPhoto || !documents.drivingLicensePhoto) {
-      toast.error("Please upload all required documents")
-      return
-    }
-
-    const raw = sessionStorage.getItem("deliverySignupDetails")
+    const raw = localStorage.getItem("deliverySignupDetails")
     if (!raw) {
       toast.error("Session expired. Please start from Create Account.")
       navigate("/food/delivery/signup", { replace: true })
@@ -229,10 +371,28 @@ export default function SignupStep2() {
     }
     if (details.panNumber) formData.append("panNumber", details.panNumber)
     if (details.aadharNumber) formData.append("aadharNumber", details.aadharNumber)
-    formData.append("profilePhoto", documents.profilePhoto)
-    formData.append("aadharPhoto", documents.aadharPhoto)
-    formData.append("panPhoto", documents.panPhoto)
-    formData.append("drivingLicensePhoto", documents.drivingLicensePhoto)
+
+    const appendFileToForm = (formData, key, fileData, filename) => {
+      if (!fileData) return;
+      if (typeof fileData === 'string' && fileData.startsWith('data:')) {
+        const arr = fileData.split(',');
+        const mime = arr[0].match(/:(.*?);/)[1];
+        const bstr = atob(arr[1]);
+        let n = bstr.length;
+        const u8arr = new Uint8Array(n);
+        while (n--) {
+          u8arr[n] = bstr.charCodeAt(n);
+        }
+        formData.append(key, new File([u8arr], filename, { type: mime }));
+      } else {
+        formData.append(key, fileData);
+      }
+    };
+
+    appendFileToForm(formData, "profilePhoto", documents.profilePhoto, "profile.webp");
+    appendFileToForm(formData, "aadharPhoto", documents.aadharPhoto, "aadhar.webp");
+    appendFileToForm(formData, "panPhoto", documents.panPhoto, "pan.webp");
+    appendFileToForm(formData, "drivingLicensePhoto", documents.drivingLicensePhoto, "dl.webp");
 
     // Try to get FCM token before registering
     let fcmToken = null;
@@ -264,7 +424,7 @@ export default function SignupStep2() {
       formData.append("platform", platform);
     }
 
-    const isCompleteProfile = sessionStorage.getItem("deliveryNeedsRegistration") === "true"
+    const isCompleteProfile = localStorage.getItem("deliveryNeedsRegistration") === "true"
 
     setIsSubmitting(true)
 
@@ -276,16 +436,11 @@ export default function SignupStep2() {
         : await deliveryAPI.completeProfile(formData)
 
       if (response?.data?.success) {
-        sessionStorage.removeItem("deliverySignupDetails")
-        sessionStorage.removeItem("deliverySignupDocs")
-        if (isCompleteProfile) {
-          sessionStorage.removeItem("deliveryNeedsRegistration")
-          toast.success("Registration successful. Please login with OTP.")
-          setTimeout(() => navigate("/food/delivery/login", { replace: true }), 1500)
-        } else {
-          toast.success("Profile submitted. Waiting for admin approval.")
-          setTimeout(() => navigate("/food/delivery", { replace: true }), 1500)
-        }
+        localStorage.removeItem("deliverySignupDetails")
+        localStorage.removeItem("deliverySignupDocs")
+        await clearAllFilesFromDB()
+        localStorage.removeItem("deliveryNeedsRegistration")
+        setIsSuccess(true)
       }
     } catch (error) {
       debugError("Error submitting registration:", error)
@@ -299,6 +454,7 @@ export default function SignupStep2() {
   const DocumentUpload = ({ docType, label, required = true }) => {
     const uploaded = uploadedDocs[docType]
     const isUploading = uploading[docType]
+    const src = getPreviewSrc(docType)
 
     return (
       <div className="bg-white rounded-lg p-4 border border-gray-200">
@@ -308,11 +464,17 @@ export default function SignupStep2() {
 
         {uploaded ? (
           <div className="relative">
-            <img
-              src={getPreviewSrc(docType)}
-              alt={label}
-              className="w-full h-48 object-cover rounded-lg"
-            />
+            {src ? (
+              <img
+                src={src}
+                alt={label}
+                className="w-full h-48 object-cover rounded-lg"
+              />
+            ) : (
+              <div className="w-full h-48 bg-gray-100 rounded-lg flex items-center justify-center">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500"></div>
+              </div>
+            )}
             <button
               type="button"
               onClick={() => handleRemove(docType)}
@@ -388,6 +550,28 @@ export default function SignupStep2() {
     )
   }
 
+  if (isSuccess) {
+    return (
+      <div className="min-h-screen bg-gray-100 flex flex-col items-center justify-center p-6">
+        <div className="bg-white rounded-3xl p-8 max-w-sm w-full text-center shadow-xl border border-gray-100">
+          <div className="w-20 h-20 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-6 shadow-inner">
+            <Check className="w-10 h-10 text-amber-500" />
+          </div>
+          <h2 className="text-2xl font-black text-gray-900 mb-3 tracking-tight">Profile Under Review</h2>
+          <p className="text-gray-500 font-medium leading-relaxed mb-8">
+            Your profile has been submitted successfully. It is currently under review by the admin. We will notify you once your request is approved.
+          </p>
+          <button
+            onClick={() => navigate("/food/delivery/login", { replace: true })}
+            className="w-full py-4 bg-gray-900 text-white rounded-xl font-bold text-base hover:bg-black transition-all active:scale-95 shadow-lg shadow-gray-900/20"
+          >
+            Back to Login
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-gray-100">
       {/* Header */}
@@ -409,16 +593,16 @@ export default function SignupStep2() {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <DocumentUpload docType="profilePhoto" label="Profile Photo" required={true} />
-          <DocumentUpload docType="aadharPhoto" label="Aadhar Card Photo" required={true} />
-          <DocumentUpload docType="panPhoto" label="PAN Card Photo" required={true} />
-          <DocumentUpload docType="drivingLicensePhoto" label="Driving License Photo" required={true} />
+          <DocumentUpload docType="profilePhoto" label="Profile Photo" required={false} />
+          <DocumentUpload docType="aadharPhoto" label="Aadhar Card Photo" required={false} />
+          <DocumentUpload docType="panPhoto" label="PAN Card Photo" required={false} />
+          <DocumentUpload docType="drivingLicensePhoto" label="Driving License Photo" required={false} />
 
           {/* Submit Button */}
           <button
             type="submit"
-            disabled={isSubmitting || !uploadedDocs.profilePhoto || !uploadedDocs.aadharPhoto || !uploadedDocs.panPhoto || !uploadedDocs.drivingLicensePhoto}
-            className={`w-full py-4 rounded-lg font-bold text-white text-base transition-colors mt-6 ${isSubmitting || !uploadedDocs.profilePhoto || !uploadedDocs.aadharPhoto || !uploadedDocs.panPhoto || !uploadedDocs.drivingLicensePhoto
+            disabled={isSubmitting}
+            className={`w-full py-4 rounded-lg font-bold text-white text-base transition-colors mt-6 ${isSubmitting
               ? "bg-gray-400 cursor-not-allowed"
               : "bg-[#00B761] hover:bg-[#00A055]"
               }`}

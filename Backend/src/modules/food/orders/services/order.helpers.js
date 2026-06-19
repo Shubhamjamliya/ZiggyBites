@@ -36,15 +36,21 @@ export function generateFourDigitDeliveryOtp() {
 export function sanitizeOrderForExternal(orderDoc) {
   const o = orderDoc?.toObject ? orderDoc.toObject() : { ...(orderDoc || {}) };
   delete o.deliveryOtp;
+  delete o.pickupOtp;
   const dv = o.deliveryVerification;
-  if (dv && dv.dropOtp != null) {
-    const d = dv.dropOtp;
+  if (dv) {
+    const d = dv.dropOtp || {};
+    const p = dv.pickupOtp || {};
     o.deliveryVerification = {
       ...dv,
       dropOtp: {
         required: Boolean(d.required),
         verified: Boolean(d.verified),
       },
+      pickupOtp: {
+        required: Boolean(p.required !== false),
+        verified: Boolean(p.verified),
+      }
     };
   }
   o.orderMongoId = (o._id || orderDoc?._id || "").toString();
@@ -71,19 +77,17 @@ export function emitDeliveryDropOtpToUser(order, plainOtp) {
 
 export async function notifyOwnersSafely(targets, payload) {
   try {
-    return await sendNotificationToOwners(targets, payload);
+    await sendNotificationToOwners(targets, payload);
   } catch (error) {
     logger.warn(`FCM notification failed: ${error?.message || error}`);
-    return [];
   }
 }
 
 export async function notifyOwnerSafely(target, payload) {
   try {
-    return await sendNotificationToOwner({ ...target, payload });
+    await sendNotificationToOwner({ ...target, payload });
   } catch (error) {
     logger.warn(`FCM notification failed: ${error?.message || error}`);
-    return null;
   }
 }
 
@@ -222,6 +226,7 @@ export function buildDeliverySocketPayload(orderDoc, restaurantDoc = null) {
     userPhone: order?.customerPhone || order?.deliveryAddress?.phone || order?.userId?.phone || "",
     note: order?.note || "",
     riderEarning: order?.riderEarning || 0,
+    deliveryBonusAmount: order?.deliveryBonusAmount || 0,
     earnings: order?.riderEarning || order?.pricing?.deliveryFee || 0,
     deliveryFee: order?.pricing?.deliveryFee || 0,
     deliveryFleet: order?.deliveryFleet,
@@ -285,6 +290,7 @@ export const STATUS_PRIORITY = {
   cancelled_by_user: 100,
   cancelled_by_restaurant: 100,
   cancelled_by_admin: 100,
+  dead: 100,
 };
 
 /**

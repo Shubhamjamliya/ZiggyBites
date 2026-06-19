@@ -14,6 +14,11 @@ import('./modules/Food/utils/businessSettings.js')
   .then(({ loadBusinessSettings }) => loadBusinessSettings())
   .catch(() => { /* Silently fail — settings load when admin authenticates */ })
 
+// Apply dynamic theme configuration
+import('./modules/Food/utils/themeSettings.js')
+  .then(({ applyDynamicTheme }) => applyDynamicTheme())
+  .catch(() => { /* Silently fail */ })
+
 // Apply saved theme
 const savedTheme = localStorage.getItem('appTheme') || 'light'
 if (savedTheme === 'dark') {
@@ -78,7 +83,17 @@ bootstrapNativeHashRoute()
 
 const originalError = console.error
 console.error = (...args) => {
-  const errorStr = args.join(' ')
+  // Safe join to prevent "Cannot convert object to primitive value" error
+  const errorStr = args.map(arg => {
+    try {
+      if (arg === null) return 'null';
+      if (arg === undefined) return 'undefined';
+      if (typeof arg === 'symbol') return arg.toString();
+      return typeof arg === 'object' ? JSON.stringify(arg) : String(arg);
+    } catch (e) {
+      return String(arg);
+    }
+  }).join(' ');
 
   if (typeof args[0] === 'string' && (
     args[0].includes('chrome-extension://') ||
@@ -86,6 +101,7 @@ console.error = (...args) => {
     args[0].includes('_$onReInit') ||
     args[0].includes('_$bindListeners')
   )) return
+
 
   if (
     errorStr.includes('Timeout expired') ||
@@ -121,6 +137,22 @@ window.addEventListener('unhandledrejection', (event) => {
   const error = event.reason || event
   const errorMsg = error?.message || String(error) || ''
   const errorName = error?.name || ''
+  
+  if (
+    errorMsg.includes('Failed to fetch dynamically imported module') ||
+    errorMsg.includes('Importing a module script failed')
+  ) {
+    event.preventDefault()
+    const reloadKey = 'vite_preload_error_reload_count'
+    const reloadCount = parseInt(sessionStorage.getItem(reloadKey) || '0', 10)
+    
+    if (reloadCount < 2) {
+      sessionStorage.setItem(reloadKey, String(reloadCount + 1))
+      window.location.reload()
+    }
+    return
+  }
+
   if (
     errorMsg.includes('Timeout expired') ||
     errorMsg.includes('User denied Geolocation') ||
@@ -131,6 +163,18 @@ window.addEventListener('unhandledrejection', (event) => {
     return
   }
 })
+
+window.addEventListener('vite:preloadError', (event) => {
+  event.preventDefault()
+  const reloadKey = 'vite_preload_error_reload_count'
+  const reloadCount = parseInt(sessionStorage.getItem(reloadKey) || '0', 10)
+  
+  if (reloadCount < 2) {
+    sessionStorage.setItem(reloadKey, String(reloadCount + 1))
+    window.location.reload()
+  }
+})
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 

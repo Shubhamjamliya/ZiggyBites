@@ -323,9 +323,8 @@ function BreakdownRow({ label, value, strong = false, positive = false }) {
         {label}
       </span>
       <span
-        className={`${strong ? "font-bold text-gray-900 dark:text-white" : "font-semibold"} ${
-          positive ? "text-green-600" : "text-gray-900 dark:text-white"
-        } text-sm`}
+        className={`${strong ? "font-bold text-gray-900 dark:text-white" : "font-semibold"} ${positive ? "text-green-600" : "text-gray-900 dark:text-white"
+          } text-sm`}
       >
         {value}
       </span>

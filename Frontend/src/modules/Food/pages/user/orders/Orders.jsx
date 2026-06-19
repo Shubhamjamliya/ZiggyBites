@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react"
 import { Link, useNavigate } from "react-router-dom"
-import { ArrowLeft, Search, MoreVertical, ChevronRight, Star, RotateCcw, AlertCircle, Loader2, Clock, X, Share2, MessageCircle, Send, Copy, Mail, MessagesSquare, Link2 } from "lucide-react"
+import { ArrowLeft, Search, MoreVertical, ChevronRight, Star, RotateCcw, AlertCircle, Loader2, Clock, X, Share2, MessageCircle, Send, Copy, Mail, MessagesSquare, Link2, Phone } from "lucide-react"
 import { orderAPI } from "@food/api"
 import { useCart } from "@food/context/CartContext"
 import { toast } from "sonner"
@@ -16,6 +16,7 @@ export default function Orders() {
   const [orders, setOrders] = useState([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
+  const [activeTab, setActiveTab] = useState('today') // 'today' or 'past'
   const [ratingModal, setRatingModal] = useState({ open: false, order: null })
   const [activeMenuOrderId, setActiveMenuOrderId] = useState(null)
   const [showShareModal, setShowShareModal] = useState(false)
@@ -90,6 +91,7 @@ export default function Orders() {
     if (status === 'out_for_delivery' || status === 'outForDelivery') return 'outForDelivery'
     if (status === 'ready' || status === 'preparing') return 'preparing'
     if (String(status).toLowerCase().includes('cancel')) return 'cancelled'
+    if (status === 'dead') return 'dead'
     return status || 'confirmed'
   }
 
@@ -261,7 +263,8 @@ export default function Orders() {
               backendStatus === 'cancelled' ||
               backendStatus === 'cancelled_by_user' ||
               backendStatus === 'cancelled_by_restaurant' ||
-              backendStatus === 'cancelled_by_admin'
+              backendStatus === 'cancelled_by_admin' ||
+              backendStatus === 'dead'
             const cancellationReason = order.cancellationReason || ''
             // Check cancelledBy field first, then fallback to cancellation reason pattern
             const isRestaurantCancelled = isCancelled && (
@@ -269,6 +272,7 @@ export default function Orders() {
               /rejected by restaurant|restaurant rejected|restaurant cancelled|restaurant is too busy|item not available|outside delivery area|kitchen closing|technical issue|order not accepted within time limit|restaurant did not respond/i.test(cancellationReason)
             )
             const isUserCancelled = isCancelled && order.cancelledBy === 'user'
+            const isDead = backendStatus === 'dead'
 
             // Get original status from backend before transformation
             const originalStatus = backendStatus
@@ -316,6 +320,7 @@ export default function Orders() {
               cancellationReason: cancellationReason,
               isRestaurantCancelled: isRestaurantCancelled,
               isUserCancelled: isUserCancelled,
+              isDead: isDead,
               cancelledBy: order.cancelledBy,
               eta: order.eta || { min: order.estimatedDeliveryTime || 30, max: order.estimatedDeliveryTime || 30 },
               estimatedDeliveryTime: order.estimatedDeliveryTime || 30,
@@ -389,10 +394,31 @@ export default function Orders() {
     return `${day} ${month}, ${displayHours}:${minutes}${ampm}`
   }
 
-  // Filter orders based on search query
-  const filteredOrders = orders.filter(order => {
-    if (!searchQuery.trim()) return true
+  // Filter orders based on search query and active tab
+  const isToday = (dateString) => {
+    if (!dateString) return false
+    const date = new Date(dateString)
+    const today = new Date()
+    return date.getDate() === today.getDate() &&
+      date.getMonth() === today.getMonth() &&
+      date.getFullYear() === today.getFullYear()
+  }
 
+  const filteredOrders = orders.filter(order => {
+    // 1. Tab filtering
+    const orderIsToday = isToday(order.createdAt)
+    const isActiveStatus = ['preparing', 'outForDelivery', 'confirmed'].includes(order.status)
+    
+    if (activeTab === 'today') {
+      // "Today" tab shows orders from today, or any active order from a previous date (rare but possible)
+      if (!orderIsToday && !isActiveStatus) return false
+    } else {
+      // "Past" tab shows everything else
+      if (orderIsToday || isActiveStatus) return false
+    }
+
+    // 2. Search filtering
+    if (!searchQuery.trim()) return true
     const query = searchQuery.toLowerCase()
     const restaurantMatch = order.restaurant?.toLowerCase().includes(query)
     const itemsMatch = order.items.some(item =>
@@ -660,7 +686,7 @@ Order again from this restaurant in the ${companyName} app.`
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-[#0a0a0a] pb-10">
+      <div className="min-h-screen bg-gray-50 dark:bg-[#0a0a0a] pb-24">
         <div className="bg-white dark:bg-[#121212] p-4 flex items-center shadow-sm sticky top-0 z-10 border-b dark:border-gray-800">
           <Link to="/user">
             <ArrowLeft className="w-6 h-6 text-gray-700 dark:text-gray-300 cursor-pointer" />
@@ -668,7 +694,7 @@ Order again from this restaurant in the ${companyName} app.`
           <h1 className="ml-4 text-xl font-semibold text-gray-800 dark:text-gray-100">Your Orders</h1>
         </div>
         <div className="flex items-center justify-center py-20">
-          <Loader2 className="w-8 h-8 text-[#7e3866] animate-spin" />
+          <Loader2 className="w-8 h-8 text-primary animate-spin" />
         </div>
       </div>
     )
@@ -676,7 +702,7 @@ Order again from this restaurant in the ${companyName} app.`
 
   if (orders.length === 0) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-[#0a0a0a] pb-10">
+      <div className="min-h-screen bg-gray-50 dark:bg-[#0a0a0a] pb-24">
         <div className="bg-white dark:bg-[#121212] p-4 flex items-center shadow-sm sticky top-0 z-10 border-b dark:border-gray-800">
           <Link to="/user">
             <ArrowLeft className="w-6 h-6 text-gray-700 dark:text-gray-300 cursor-pointer" />
@@ -686,7 +712,7 @@ Order again from this restaurant in the ${companyName} app.`
         <div className="px-4 py-8 text-center text-gray-600 dark:text-gray-400">
           <p>You haven't placed any orders yet</p>
           <Link to="/user">
-            <button className="mt-4 text-[#7e3866] font-medium">Start Ordering</button>
+            <button className="mt-4 text-primary font-medium">Start Ordering</button>
           </Link>
         </div>
       </div>
@@ -694,7 +720,7 @@ Order again from this restaurant in the ${companyName} app.`
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-[#0a0a0a] pb-10 font-sans">
+    <div className="min-h-screen bg-gray-50 dark:bg-[#0a0a0a] pb-24 font-sans">
       {/* Header */}
       <div className="bg-white dark:bg-[#121212] p-4 flex items-center shadow-sm sticky top-0 z-10 border-b dark:border-gray-800">
         <Link to="/user">
@@ -706,7 +732,7 @@ Order again from this restaurant in the ${companyName} app.`
       {/* Search Bar */}
       <div className="p-4 bg-white dark:bg-[#121212] mt-1 border-b dark:border-gray-800">
         <div className="flex items-center bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-gray-800 rounded-lg px-3 py-2 shadow-sm">
-          <Search className="w-5 h-5 text-[#7e3866]" />
+          <Search className="w-5 h-5 text-primary" />
           <input
             type="text"
             placeholder="Search by restaurant or dish"
@@ -715,6 +741,28 @@ Order again from this restaurant in the ${companyName} app.`
             className="flex-1 ml-3 bg-transparent outline-none text-gray-600 dark:text-gray-300 placeholder-gray-400"
           />
         </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="bg-white dark:bg-[#121212] px-4 pt-3 flex gap-6 border-b dark:border-gray-800 sticky top-[60px] z-10 shadow-sm">
+        <button 
+          onClick={() => setActiveTab('today')}
+          className={`pb-3 text-[15px] font-semibold transition-colors relative ${activeTab === 'today' ? 'text-primary' : 'text-gray-500 hover:text-gray-800 dark:hover:text-gray-300'}`}
+        >
+          Today's Orders
+          {activeTab === 'today' && (
+            <div className="absolute bottom-0 left-0 right-0 h-[3px] bg-primary rounded-t-md" />
+          )}
+        </button>
+        <button 
+          onClick={() => setActiveTab('past')}
+          className={`pb-3 text-[15px] font-semibold transition-colors relative ${activeTab === 'past' ? 'text-primary' : 'text-gray-500 hover:text-gray-800 dark:hover:text-gray-300'}`}
+        >
+          Order History
+          {activeTab === 'past' && (
+            <div className="absolute bottom-0 left-0 right-0 h-[3px] bg-primary rounded-t-md" />
+          )}
+        </button>
       </div>
 
       {/* Orders List */}
@@ -735,7 +783,7 @@ Order again from this restaurant in the ${companyName} app.`
 
             // Payment failed only for online payments (razorpay) that actually failed
             // Don't show payment failed for COD/wallet or cancelled orders
-            const isCancelled = order.status === 'cancelled' || order.status === 'restaurant_cancelled'
+            const isCancelled = order.status === 'cancelled' || order.status === 'restaurant_cancelled' || order.status === 'dead' || order.isDead
             const paymentFailed = !isCodOrWallet &&
               !isCancelled &&
               (order.payment?.status === 'failed')
@@ -743,6 +791,7 @@ Order again from this restaurant in the ${companyName} app.`
             const isDelivered = order.status === 'delivered'
             const isRestaurantCancelled = order.isRestaurantCancelled || order.status === 'restaurant_cancelled'
             const isUserCancelled = order.isUserCancelled || (isCancelled && order.cancelledBy === 'user')
+            const isDead = order.isDead || order.status === 'dead'
             // Prefer food image from first item; fallback to restaurant image, then generic food photo
             const firstItemImage = order.items?.[0]?.image
             const restaurantImage = firstItemImage
@@ -781,7 +830,7 @@ Order again from this restaurant in the ${companyName} app.`
                       )}
                       {order.restaurantId && (
                         <Link to={`/user/restaurants/${order.restaurantId}`}>
-                          <button className="text-xs text-[#7e3866] font-medium flex items-center mt-1 hover:text-[#55254b]">
+                          <button className="text-xs text-primary font-medium flex items-center mt-1 hover:text-secondary">
                             View menu <span className="ml-0.5">&gt;</span>
                           </button>
                         </Link>
@@ -963,13 +1012,16 @@ Order again from this restaurant in the ${companyName} app.`
                     {isUserCancelled && (
                       <p className="text-xs font-medium text-gray-500 mt-1">Cancelled by you</p>
                     )}
-                    {isCancelled && !isRestaurantCancelled && !isUserCancelled && (
+                    {isDead && (
+                      <p className="text-xs font-medium text-red-500 mt-1">Delivery Failed</p>
+                    )}
+                    {isCancelled && !isRestaurantCancelled && !isUserCancelled && !isDead && (
                       <p className="text-xs font-medium text-gray-500 mt-1">Cancelled</p>
                     )}
                   </div>
                   <div className="flex items-center ml-4">
                     <Link to={(isDelivered || isCancelled) ? `/user/orders/${order.id}/details` : `/user/orders/${order.id}`}>
-                      <button className="text-xs text-[#7e3866] font-medium hover:text-[#55254b] flex items-center gap-1">
+                      <button className="text-xs text-primary font-medium hover:text-secondary flex items-center gap-1">
                         View Details
                         <ChevronRight className="w-4 h-4" />
                       </button>
@@ -995,6 +1047,25 @@ Order again from this restaurant in the ${companyName} app.`
                         <p className="text-xs text-red-600 dark:text-red-400 font-medium ml-7 mb-1">Reason: {order.cancellationReason}</p>
                       )}
                       <p className="text-xs text-gray-600 dark:text-gray-400 ml-7">Refund will be processed in 24-48 hours</p>
+                    </div>
+                  ) : isDead ? (
+                    <div className="flex flex-col gap-2 w-full pr-4">
+                      <div className="flex items-center gap-2">
+                        <div className="bg-red-100 dark:bg-red-900/30 p-1 rounded-full">
+                          <AlertCircle className="w-4 h-4 text-red-500 dark:text-red-400" />
+                        </div>
+                        <span className="text-xs font-semibold text-red-500 dark:text-red-400">Order Delivery Failed</span>
+                      </div>
+                      <p className="text-[10px] sm:text-xs text-gray-600 dark:text-gray-400 ml-7 leading-tight">
+                        We apologize, but your order could not be completed.
+                      </p>
+                      <a 
+                        href="tel:+919755633147" 
+                        className="ml-7 inline-flex items-center gap-1.5 w-fit bg-red-50 dark:bg-red-900/10 text-red-600 dark:text-red-400 text-[10px] sm:text-xs font-medium py-1.5 px-3 rounded-md border border-red-100 dark:border-red-900/30 hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors"
+                      >
+                        <Phone className="w-3 h-3" />
+                        Support / Refund
+                      </a>
                     </div>
                   ) : paymentFailed ? (
                     <div className="flex items-center gap-2">
@@ -1023,7 +1094,7 @@ Order again from this restaurant in the ${companyName} app.`
                       <button
                         type="button"
                         onClick={() => handleOpenRating(order)}
-                        className="text-xs text-[#7e3866] font-medium mt-0.5 flex items-center"
+                        className="text-xs text-primary font-medium mt-0.5 flex items-center"
                       >
                         Rate restaurant & delivery <span className="ml-0.5">&gt;</span>
                       </button>
@@ -1033,7 +1104,7 @@ Order again from this restaurant in the ${companyName} app.`
                       <p className="text-xs text-gray-500">{order.status === 'preparing' ? 'Preparing' : order.status === 'outForDelivery' ? 'Out for delivery' : order.status === 'confirmed' ? 'Order confirmed' : ''}</p>
                       {/* Countdown Timer */}
                       {countdowns[order.id] && countdowns[order.id] > 0 && (
-                        <div className="flex items-center gap-1 mt-1 text-xs text-[#7e3866] font-medium">
+                        <div className="flex items-center gap-1 mt-1 text-xs text-primary font-medium">
                           <Clock size={12} />
                           <span>{countdowns[order.id]} min{countdowns[order.id] !== 1 ? 's' : ''} remaining</span>
                         </div>
@@ -1045,7 +1116,7 @@ Order again from this restaurant in the ${companyName} app.`
                   {isDelivered && !paymentFailed && (
                     <button
                       onClick={() => handleReorder(order)}
-                      className="bg-[#7e3866] hover:bg-[#55254b] text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-1 shadow-sm transition-colors"
+                      className="bg-primary hover:bg-secondary text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-1 shadow-sm transition-colors"
                     >
                       <RotateCcw className="w-3.5 h-3.5" />
                       Reorder
@@ -1060,7 +1131,7 @@ Order again from this restaurant in the ${companyName} app.`
 
        {/* Footer Branding */}
       <div className="flex justify-center mt-8 mb-4">
-        <h1 className="text-4xl font-black text-gray-200 dark:text-gray-800 tracking-tighter italic uppercase">ziggybites</h1>
+        <h1 className="text-4xl font-black text-gray-200 dark:text-gray-800 tracking-tighter italic uppercase">indianbites</h1>
       </div>
 
       {/* Rating & Feedback Modal */}
@@ -1068,7 +1139,7 @@ Order again from this restaurant in the ${companyName} app.`
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4 animate-in fade-in duration-200">
           <div className="w-full max-w-md rounded-3xl bg-white dark:bg-[#121212] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300 border dark:border-gray-800">
             {/* Header with gradient */}
-            <div className="bg-gradient-to-r from-[#7e3866] to-[#55254b] px-6 py-5">
+            <div className="bg-gradient-to-r from-primary to-secondary px-6 py-5">
               <div className="flex items-center justify-between mb-2">
                 <h2 className="text-xl font-bold text-white flex items-center gap-2">
                   <Star className="w-5 h-5 fill-white" />
@@ -1114,7 +1185,7 @@ Order again from this restaurant in the ${companyName} app.`
                   rows={2}
                   value={restaurantFeedbackText}
                   onChange={(e) => setRestaurantFeedbackText(e.target.value)}
-                  className="w-full rounded-xl border-2 border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1a1a1a] px-4 py-2 text-sm text-gray-800 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#7e3866] focus:border-[#7e3866] resize-none transition-all"
+                  className="w-full rounded-xl border-2 border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1a1a1a] px-4 py-2 text-sm text-gray-800 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary resize-none transition-all"
                   placeholder="Restaurant feedback (optional)"
                 />
               </div>
@@ -1148,7 +1219,7 @@ Order again from this restaurant in the ${companyName} app.`
                     rows={2}
                     value={deliveryFeedbackText}
                     onChange={(e) => setDeliveryFeedbackText(e.target.value)}
-                    className="w-full rounded-xl border-2 border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1a1a1a] px-4 py-2 text-sm text-gray-800 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#7e3866] focus:border-[#7e3866] resize-none transition-all"
+                    className="w-full rounded-xl border-2 border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1a1a1a] px-4 py-2 text-sm text-gray-800 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary resize-none transition-all"
                     placeholder="Delivery partner feedback (optional)"
                   />
                 </div>
@@ -1159,7 +1230,7 @@ Order again from this restaurant in the ${companyName} app.`
                 type="button"
                 disabled={ratingSubmitDisabled}
                 onClick={handleSubmitRating}
-                className="w-full rounded-xl bg-gradient-to-r from-[#7e3866] to-[#55254b] text-white text-base font-bold py-3.5 hover:from-[#55254b] hover:to-[#C44409] disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-[#7e3866]/30 flex items-center justify-center gap-2"
+                className="w-full rounded-xl bg-gradient-to-r from-primary to-secondary text-white text-base font-bold py-3.5 hover:from-secondary hover:to-[#C44409] disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-primary/30 flex items-center justify-center gap-2"
               >
                 {submittingRating ? (
                   <>
@@ -1205,7 +1276,7 @@ Order again from this restaurant in the ${companyName} app.`
                 <button
                   type="button"
                   onClick={handleSystemShareFromModal}
-                  className="w-full rounded-2xl bg-[#7e3866] px-4 py-3 text-sm font-semibold text-white flex items-center justify-center gap-2 hover:bg-[#55254b] transition-colors"
+                  className="w-full rounded-2xl bg-primary px-4 py-3 text-sm font-semibold text-white flex items-center justify-center gap-2 hover:bg-secondary transition-colors"
                 >
                   <Share2 className="w-4 h-4" />
                   Share via apps

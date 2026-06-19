@@ -46,6 +46,32 @@ export const PocketV2 = () => {
   const [depositAmount, setDepositAmount] = useState("");
   const [depositing, setDepositing] = useState(false);
 
+  // Handle back button for deposit popup
+  const popupStatePushed = useRef(false);
+
+  useEffect(() => {
+    if (showDepositPopup && !popupStatePushed.current) {
+      window.history.pushState({ popupOpen: true }, '');
+      popupStatePushed.current = true;
+    } else if (!showDepositPopup && popupStatePushed.current) {
+      popupStatePushed.current = false;
+      if (window.history.state?.popupOpen) {
+        window.history.back();
+      }
+    }
+  }, [showDepositPopup]);
+
+  useEffect(() => {
+    const handlePopState = (e) => {
+      if (popupStatePushed.current) {
+        popupStatePushed.current = false;
+        setShowDepositPopup(false);
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -65,19 +91,16 @@ export const PocketV2 = () => {
           activeAddonsRes?.data?.activeOffer ||
           null;
         
-        const bankDetails = profile?.documents?.bankDetails;
-        const isFilled = !!(bankDetails?.accountNumber);
-
         setWalletState({
-          totalBalance: Number(wallet.pocketBalance) || 0,
-          cashInHand: Number(wallet.cashInHand) || 0,
-          availableCashLimit: Number(wallet.availableCashLimit) || 0,
-          totalCashLimit: Number(wallet.totalCashLimit) || 0,
-          weeklyEarnings: Number(summary.totalEarnings) || 0,
-          weeklyOrders: Number(summary.totalOrders) || 0,
-          payoutAmount: Number(wallet.lastPayout?.amount || wallet.totalWithdrawn || 0),
-          payoutPeriod: wallet.lastPayout ? new Date(wallet.lastPayout.date).toLocaleDateString() : 'No recent payout',
-          bankDetailsFilled: isFilled
+          totalBalance: Number(wallet?.pocketBalance ?? wallet?.totalBalance ?? 0) || 0,
+          cashInHand: Number(wallet?.cashInHand ?? 0) || 0,
+          availableCashLimit: Number(wallet?.availableCashLimit ?? 0) || 0,
+          totalCashLimit: Number(wallet?.totalCashLimit ?? 0) || 0,
+          weeklyEarnings: Number(summary?.totalEarnings ?? 0) || 0,
+          weeklyOrders: Number(summary?.totalOrders ?? 0) || 0,
+          payoutAmount: Number(wallet?.lastPayout?.amount ?? wallet?.totalWithdrawn ?? 0) || 0,
+          payoutPeriod: 'Current Week',
+          bankDetailsFilled: Boolean(profile?.documents?.bankDetails?.accountNumber)
         });
 
         setActiveOffer({
@@ -191,7 +214,7 @@ export const PocketV2 = () => {
 
   if (loading) return (
     <div className="min-h-screen bg-[#f6e9dc] flex flex-col items-center justify-center font-poppins">
-       <div className="w-10 h-10 border-4 border-[#ff8100] border-t-transparent rounded-full animate-spin mb-4" />
+       <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin mb-4" />
        <p className="text-xs font-semibold text-gray-500">Loading Pocket...</p>
     </div>
   );
@@ -199,6 +222,13 @@ export const PocketV2 = () => {
   return (
     <div className="min-h-screen bg-[#f6e9dc] pb-32 font-poppins">
        
+       {/* Top Header */}
+       <div className="w-full safe-top sticky top-0 z-50 shadow-sm" style={{ backgroundColor: 'var(--dv-primary)' }}>
+         <div className="flex items-center justify-center px-4 py-4">
+            <h1 className="text-lg font-black text-white uppercase tracking-wider">Pocket details</h1>
+         </div>
+       </div>
+
        {/* 1. BANK DETAILS BANNER */}
        {!walletState.bankDetailsFilled && (
          <div className="bg-yellow-400 px-4 py-3 flex items-center gap-3 border-b border-yellow-500/20">
@@ -227,7 +257,7 @@ export const PocketV2 = () => {
           >
              <p className="text-gray-500 text-[11px] font-bold uppercase tracking-widest mb-2">Earnings: {getCurrentWeekRange()}</p>
              <h2 className="text-4xl font-black text-black tracking-tighter">
-                ₹{walletState.weeklyEarnings.toFixed(0)}
+                ₹{Number(walletState.weeklyEarnings || 0).toFixed(0)}
              </h2>
           </div>
 
@@ -309,7 +339,7 @@ export const PocketV2 = () => {
                    </div>
                 </div>
                 <div className="flex items-center gap-2">
-                   <span className="text-base font-black text-black">₹{walletState.totalBalance.toFixed(2)}</span>
+                   <span className="text-base font-black text-black">₹{Number(walletState.totalBalance || 0).toFixed(2)}</span>
                    <ChevronRight className="w-4 h-4 text-gray-300" />
                 </div>
              </button>
@@ -328,7 +358,7 @@ export const PocketV2 = () => {
                    </div>
                 </div>
                 <div className="flex items-center gap-2">
-                   <span className="text-base font-black text-black">₹{walletState.availableCashLimit.toFixed(2)}</span>
+                   <span className="text-base font-black text-black">₹{Number(walletState.availableCashLimit || 0).toFixed(2)}</span>
                    <ChevronRight className="w-4 h-4 text-gray-300" />
                 </div>
              </button>
@@ -336,7 +366,7 @@ export const PocketV2 = () => {
              <div className="p-5">
                 <button 
                    onClick={() => setShowDepositPopup(true)}
-                   className="w-full py-4 bg-[#ff8100] hover:bg-orange-600 text-white rounded-xl font-bold text-sm shadow-lg shadow-orange-500/20 active:scale-95 transition-all"
+                   className="w-full py-4 bg-primary hover:bg-orange-600 text-white rounded-xl font-bold text-sm shadow-lg shadow-orange-500/20 active:scale-95 transition-all"
                 >
                    Deposit Cash
                 </button>
@@ -351,12 +381,12 @@ export const PocketV2 = () => {
                       <IndianRupee className="w-5 h-5" />
                    </div>
                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Last Payout</p>
-                   <p className="text-xl font-black text-black leading-none mb-1">₹{walletState.payoutAmount}</p>
+                   <p className="text-xl font-black text-black leading-none mb-1">₹{Number(walletState.payoutAmount || 0).toFixed(2)}</p>
                    <p className="text-[9px] text-gray-400 font-bold uppercase tracking-tight">Prev Week Info</p>
                 </div>
 
                 <div onClick={() => navigate('/food/delivery/pocket/limit-settlement')} className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 active:bg-gray-50 flex flex-col justify-between">
-                   <div className="w-10 h-10 bg-orange-50 rounded-xl flex items-center justify-center text-[#ff8100] mb-4 border border-orange-100">
+                   <div className="w-10 h-10 bg-orange-50 rounded-xl flex items-center justify-center text-primary mb-4 border border-orange-100">
                       <Receipt className="w-5 h-5" />
                    </div>
                    <p className="text-sm font-bold text-gray-800 leading-tight">Limit Settlement</p>
@@ -390,7 +420,7 @@ export const PocketV2 = () => {
                    <div className="w-16 h-1.5 bg-gray-100 rounded-full mx-auto mb-8" />
                    
                    <div className="text-center mb-8">
-                      <div className="w-20 h-20 bg-orange-50 rounded-3xl flex items-center justify-center mx-auto mb-4 border border-orange-100 text-[#ff8100]">
+                      <div className="w-20 h-20 bg-orange-50 rounded-3xl flex items-center justify-center mx-auto mb-4 border border-orange-100 text-primary">
                          <IndianRupee className="w-10 h-10" />
                       </div>
                       <h3 className="text-2xl font-black text-black mb-1">Deposit Cash</h3>
@@ -400,14 +430,14 @@ export const PocketV2 = () => {
                    <div className="bg-gray-50 rounded-2xl p-6 mb-8 border border-gray-100">
                       <div className="flex justify-between items-center mb-4">
                          <span className="text-xs font-bold text-gray-400 uppercase">Cash in your hand</span>
-                         <span className="text-base font-black text-black">₹{walletState.cashInHand}</span>
+                         <span className="text-base font-black text-black">₹{Number(walletState.cashInHand || 0).toFixed(2)}</span>
                       </div>
                       <div className="relative">
                          <IndianRupee className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                          <input 
                             type="number" value={depositAmount} onChange={(e) => setDepositAmount(e.target.value)}
                             placeholder="Enter amount to deposit"
-                            className="w-full bg-white border border-gray-200 rounded-xl py-4 pl-12 pr-4 text-xl font-bold focus:border-[#ff8100] focus:ring-4 focus:ring-orange-500/10 outline-none transition-all"
+                            className="w-full bg-white border border-gray-200 rounded-xl py-4 pl-12 pr-4 text-xl font-bold focus:border-primary focus:ring-4 focus:ring-orange-500/10 outline-none transition-all"
                          />
                       </div>
                       <p className="text-[10px] font-bold text-gray-400 mt-3 text-center uppercase tracking-tight">Minimum deposit ₹1 • Instant limit update</p>
@@ -417,7 +447,7 @@ export const PocketV2 = () => {
                       <button 
                          onClick={handleDeposit}
                          disabled={depositing}
-                         className="w-full py-5 bg-[#ff8100] text-white rounded-2xl font-black text-sm shadow-xl shadow-orange-500/20 active:scale-95 transition-all flex items-center justify-center gap-3 disabled:bg-gray-300 disabled:shadow-none"
+                         className="w-full py-5 bg-primary text-white rounded-2xl font-black text-sm shadow-xl shadow-orange-500/20 active:scale-95 transition-all flex items-center justify-center gap-3 disabled:bg-gray-300 disabled:shadow-none"
                       >
                          {depositing ? <Loader2 className="w-5 h-5 animate-spin" /> : <ShieldCheck className="w-5 h-5" />}
                          {depositing ? 'Securely Processing...' : 'Proceed to Pay'}

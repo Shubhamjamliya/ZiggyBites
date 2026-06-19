@@ -4,9 +4,9 @@ import { ValidationError } from '../../../../core/auth/errors.js';
 import mongoose from 'mongoose';
 import { FoodZone } from '../../admin/models/zone.model.js';
 import { FoodOffer } from '../../admin/models/offer.model.js';
-import { FoodItem } from '../../admin/models/food.model.js';
 import { FoodDiningRestaurant } from '../../dining/models/diningRestaurant.model.js';
-import { getFoodDisplayPrice, serializeFoodVariants } from '../../admin/services/foodVariant.service.js';
+import Promocode from '../../../../models/Promocode.js';
+import { upsertOutletTimingsForRestaurant } from './outletTimings.service.js';
 
 const normalizeName = (value) =>
     String(value || '')
@@ -321,9 +321,7 @@ export const registerRestaurant = async (payload, files) => {
         });
     }
 
-    if (!menuPdf) {
-        throw new ValidationError('Menu PDF is required');
-    }
+
 
     const normalizedOpeningTime = normalizeRestaurantTime(openingTime);
     const normalizedClosingTime = normalizeRestaurantTime(closingTime);
@@ -332,9 +330,6 @@ export const registerRestaurant = async (payload, files) => {
     if (openingMinutes !== null && closingMinutes !== null) {
         if (openingMinutes === closingMinutes) {
             throw new ValidationError('Opening time and closing time cannot be same');
-        }
-        if (closingMinutes < openingMinutes) {
-            throw new ValidationError('Closing time cannot be less than opening time');
         }
     }
     const estimatedDeliveryTimeText = String(estimatedDeliveryTime || '').trim();
@@ -416,6 +411,25 @@ export const registerRestaurant = async (payload, files) => {
         });
 
         try {
+            const outletTimingsToSave = {};
+            const daysArr = Array.isArray(openDays) ? openDays : [];
+            const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+            
+            for (const day of DAY_NAMES) {
+                const abbr = day.substring(0, 3);
+                const isOpen = daysArr.includes(day) || daysArr.includes(abbr);
+                outletTimingsToSave[day] = {
+                    isOpen,
+                    openingTime: isOpen ? (normalizedOpeningTime || '09:00') : '',
+                    closingTime: isOpen ? (normalizedClosingTime || '22:00') : ''
+                };
+            }
+            await upsertOutletTimingsForRestaurant(restaurant._id, outletTimingsToSave);
+        } catch (e) {
+            console.error('Failed to create outlet timings for new restaurant:', e);
+        }
+
+        try {
             const { notifyAdminsSafely } = await import('../../../../core/notifications/firebase.service.js');
             void notifyAdminsSafely({
                 title: 'New Restaurant Registration 🏪',
@@ -446,6 +460,7 @@ export const getCurrentRestaurantProfile = async (restaurantId) => {
         .select(
             [
                 'restaurantName',
+                'zoneId',
                 'cuisines',
                 'location',
                 'addressLine1',
@@ -465,6 +480,17 @@ export const getCurrentRestaurantProfile = async (restaurantId) => {
                 'accountType',
                 'upiId',
                 'upiQrImage',
+                'panNumber',
+                'nameOnPan',
+                'panImage',
+                'gstRegistered',
+                'gstNumber',
+                'gstLegalName',
+                'gstAddress',
+                'gstImage',
+                'fssaiNumber',
+                'fssaiExpiry',
+                'fssaiImage',
                 'pureVegRestaurant',
                 'profileImage',
                 'coverImages',
@@ -500,6 +526,7 @@ export const updateRestaurantAcceptingOrders = async (restaurantId, isAcceptingO
             runValidators: true,
             projection: [
                 'restaurantName',
+                'zoneId',
                 'cuisines',
                 'location',
                 'addressLine1',
@@ -519,6 +546,17 @@ export const updateRestaurantAcceptingOrders = async (restaurantId, isAcceptingO
                 'accountType',
                 'upiId',
                 'upiQrImage',
+                'panNumber',
+                'nameOnPan',
+                'panImage',
+                'gstRegistered',
+                'gstNumber',
+                'gstLegalName',
+                'gstAddress',
+                'gstImage',
+                'fssaiNumber',
+                'fssaiExpiry',
+                'fssaiImage',
                 'pureVegRestaurant',
                 'profileImage',
                 'coverImages',
@@ -652,7 +690,7 @@ export const updateRestaurantProfile = async (restaurantId, body = {}) => {
     }
 
     const currentRestaurant = await FoodRestaurant.findById(restaurantId)
-        .select('restaurantName restaurantNameNormalized ownerPhone ownerPhoneDigits ownerPhoneLast10 primaryContactNumber status')
+        .select('restaurantName restaurantNameNormalized ownerPhone ownerPhoneDigits ownerPhoneLast10 primaryContactNumber status zoneId')
         .lean();
 
     if (!currentRestaurant) {
@@ -741,9 +779,14 @@ export const updateRestaurantProfile = async (restaurantId, body = {}) => {
 
     if (body.zoneId !== undefined) {
         const zoneId = String(body.zoneId || '').trim();
-        update.zoneId = zoneId && mongoose.Types.ObjectId.isValid(zoneId)
+        const newZoneId = zoneId && mongoose.Types.ObjectId.isValid(zoneId)
             ? new mongoose.Types.ObjectId(zoneId)
             : undefined;
+            
+        if (String(newZoneId) !== String(currentRestaurant.zoneId)) {
+            update.zoneId = newZoneId;
+            update.previousZoneId = currentRestaurant.zoneId;
+        }
     }
 
     // Bank + UPI fields (Explore -> Update Bank Details page)
@@ -856,9 +899,6 @@ export const updateRestaurantProfile = async (restaurantId, body = {}) => {
     if (openingMinutes !== null && closingMinutes !== null) {
         if (openingMinutes === closingMinutes) {
             throw new ValidationError('Opening time and closing time cannot be same');
-        }
-        if (closingMinutes < openingMinutes) {
-            throw new ValidationError('Closing time cannot be less than opening time');
         }
     }
 
@@ -1038,7 +1078,8 @@ export const updateRestaurantProfile = async (restaurantId, body = {}) => {
                     'upiQrImage',
                     'estimatedDeliveryTime',
                     'estimatedDeliveryTimeMinutes',
-                    'zoneId'
+                    'zoneId',
+                    'previousZoneId'
                 ].join(' ')
             }
         ).lean();
@@ -1256,13 +1297,18 @@ export const listApprovedRestaurants = async (query = {}) => {
         const raw = String(query.search).trim().slice(0, 80);
         const term = escapeRegex(raw);
         if (term.length >= 2) {
-            filter.$or = [
-                { restaurantName: { $regex: term, $options: 'i' } },
-                { area: { $regex: term, $options: 'i' } },
-                { city: { $regex: term, $options: 'i' } },
-                { 'location.area': { $regex: term, $options: 'i' } },
-                { 'location.city': { $regex: term, $options: 'i' } },
-                { cuisines: { $in: [new RegExp(term, 'i')] } }
+            filter.$and = [
+                ...(filter.$and || []),
+                {
+                    $or: [
+                        { restaurantName: { $regex: term, $options: 'i' } },
+                        { area: { $regex: term, $options: 'i' } },
+                        { city: { $regex: term, $options: 'i' } },
+                        { 'location.area': { $regex: term, $options: 'i' } },
+                        { 'location.city': { $regex: term, $options: 'i' } },
+                        { cuisines: { $in: [new RegExp(term, 'i')] } }
+                    ]
+                }
             ];
         }
     }
@@ -1270,13 +1316,13 @@ export const listApprovedRestaurants = async (query = {}) => {
     // Optional zone polygon filter (when restaurant.zoneId is not set yet).
     const zoneIdRaw = String(query.zoneId || '').trim();
     if (zoneIdRaw && mongoose.Types.ObjectId.isValid(zoneIdRaw)) {
-        // Try fast path (precomputed restaurant.zoneId).
-        filter.$or = [{ zoneId: new mongoose.Types.ObjectId(zoneIdRaw) }];
+        const zoneOr = [{ zoneId: new mongoose.Types.ObjectId(zoneIdRaw) }];
         const zoneDoc = await FoodZone.findOne({ _id: zoneIdRaw, isActive: true }).lean();
         const polygon = zoneToPolygon(zoneDoc);
         if (polygon) {
-            filter.$or.push({ location: { $geoWithin: { $geometry: polygon } } });
+            zoneOr.push({ location: { $geoWithin: { $geometry: polygon } } });
         }
+        filter.$and = [...(filter.$and || []), { $or: zoneOr }];
     }
 
     const lat = toFiniteNumber(query.lat);
@@ -1307,7 +1353,14 @@ export const listApprovedRestaurants = async (query = {}) => {
         location: 1,
         openingTime: 1,
         closingTime: 1,
-        openDays: 1
+        openDays: 1,
+        zoneRank: 1,
+        outletTimings: 1,
+        deliveryTimings: 1,
+        discount: 1,
+        itemDiscounts: 1,
+        discountRules: 1,
+        menu: 1
     };
 
     // Use $geoNear only when geo is explicitly needed (radius filter or nearest sorting).
@@ -1327,21 +1380,44 @@ export const listApprovedRestaurants = async (query = {}) => {
         }
 
         const sortStage = (() => {
-            if (sortBy === 'rating' || sortBy === 'rating-high') return { $sort: { rating: -1, distanceMeters: 1 } };
-            if (sortBy === 'rating-low') return { $sort: { rating: 1, distanceMeters: 1 } };
-            if (sortBy === 'price-low') return { $sort: { featuredPrice: 1, distanceMeters: 1 } };
-            if (sortBy === 'price-high') return { $sort: { featuredPrice: -1, distanceMeters: 1 } };
-            if (sortBy === 'newest') return { $sort: { createdAt: -1 } };
-            if (sortBy === 'deliveryTime') return { $sort: { estimatedDeliveryTimeMinutes: 1, distanceMeters: 1 } };
+            if (sortBy === 'rating' || sortBy === 'rating-high') return { $sort: { computedZoneRank: 1, rating: -1, distanceMeters: 1 } };
+            if (sortBy === 'rating-low') return { $sort: { computedZoneRank: 1, rating: 1, distanceMeters: 1 } };
+            if (sortBy === 'price-low') return { $sort: { computedZoneRank: 1, featuredPrice: 1, distanceMeters: 1 } };
+            if (sortBy === 'price-high') return { $sort: { computedZoneRank: 1, featuredPrice: -1, distanceMeters: 1 } };
+            if (sortBy === 'newest') return { $sort: { computedZoneRank: 1, createdAt: -1 } };
+            if (sortBy === 'deliveryTime') return { $sort: { computedZoneRank: 1, estimatedDeliveryTimeMinutes: 1, distanceMeters: 1 } };
             // nearest (default)
-            return { $sort: { distanceMeters: 1 } };
+            return { $sort: { computedZoneRank: 1, distanceMeters: 1 } };
         })();
+
+        const lookupStages = [
+            {
+                $lookup: {
+                    from: 'food_restaurant_outlet_timings',
+                    localField: '_id',
+                    foreignField: 'restaurantId',
+                    as: 'outletTimingsDoc'
+                }
+            },
+            {
+                $addFields: {
+                    outletTimings: { 
+                        $ifNull: [
+                            { $arrayElemAt: ['$outletTimingsDoc.timings', 0] }, 
+                            []
+                        ] 
+                    }
+                }
+            }
+        ];
 
         const basePipeline = [
             geoNear,
+            ...lookupStages,
             {
                 $addFields: {
-                    distanceInKm: { $round: [{ $divide: ['$distanceMeters', 1000] }, 2] }
+                    distanceInKm: { $round: [{ $divide: ['$distanceMeters', 1000] }, 2] },
+                    computedZoneRank: { $ifNull: ['$zoneRank', 999] }
                 }
             },
             sortStage
@@ -1358,28 +1434,148 @@ export const listApprovedRestaurants = async (query = {}) => {
         ]);
 
         const total = totalDocs?.[0]?.count || 0;
-        return { restaurants: pageDocs, total, page, limit };
+        const restaurantsRawGeo = pageDocs;
+        
+        // Populate dish names and prices for itemDiscounts
+        try {
+            const allItemIds = [];
+            restaurantsRawGeo.forEach(r => {
+                if (Array.isArray(r.itemDiscounts)) {
+                    r.itemDiscounts.forEach(d => {
+                        if (d.itemId) allItemIds.push(d.itemId);
+                    });
+                }
+            });
+
+            if (allItemIds.length > 0) {
+                const { FoodItem } = await import('../../admin/models/food.model.js');
+                const { getFoodDisplayPrice } = await import('../../admin/services/foodVariant.service.js');
+                const itemDocs = await FoodItem.find({ _id: { $in: allItemIds } }).select('name price variants priceOnOtherPlatforms').lean();
+                const itemMap = new Map();
+                itemDocs.forEach(item => {
+                    itemMap.set(String(item._id), item);
+                });
+
+                restaurantsRawGeo.forEach(r => {
+                    if (Array.isArray(r.itemDiscounts)) {
+                        r.itemDiscounts.forEach(d => {
+                            if (d.itemId && itemMap.has(String(d.itemId))) {
+                                const itemDoc = itemMap.get(String(d.itemId));
+                                d.name = itemDoc.name || 'Special Dish';
+                                d.price = getFoodDisplayPrice(itemDoc);
+                            }
+                        });
+                    }
+                });
+            }
+        } catch (err) {
+            // Silently ignore
+        }
+        
+        const restaurants = (restaurantsRawGeo || []).map((r) => ({
+            ...r,
+            restaurantId: r._id,
+            id: r._id,
+            name: r.restaurantName || '',
+            rating: normalizeRatingValue(r.rating),
+            totalRatings: normalizeTotalRatingsValue(r.totalRatings),
+            profileImage: r.profileImage ? { url: r.profileImage } : null,
+            coverImages: Array.isArray(r.coverImages) ? r.coverImages : [],
+            openingTime: r.openingTime || null,
+            closingTime: r.closingTime || null,
+            openDays: Array.isArray(r.openDays) ? r.openDays : [],
+            menuImages: Array.isArray(r.menuImages) ? r.menuImages : []
+        }));
+
+        return { restaurants, total, page, limit };
     }
 
-    // Non-geo path: normal query + sort.
+    // Non-geo path: normal query + sort converted to aggregate for computedZoneRank
     const sort = (() => {
-        if (sortBy === 'rating' || sortBy === 'rating-high') return { rating: -1, createdAt: -1 };
-        if (sortBy === 'rating-low') return { rating: 1, createdAt: -1 };
-        if (sortBy === 'price-low') return { featuredPrice: 1, createdAt: -1 };
-        if (sortBy === 'price-high') return { featuredPrice: -1, createdAt: -1 };
-        if (sortBy === 'deliveryTime') return { estimatedDeliveryTimeMinutes: 1, createdAt: -1 };
-        return { createdAt: -1 };
+        if (sortBy === 'rating' || sortBy === 'rating-high') return { $sort: { computedZoneRank: 1, rating: -1, createdAt: -1 } };
+        if (sortBy === 'rating-low') return { $sort: { computedZoneRank: 1, rating: 1, createdAt: -1 } };
+        if (sortBy === 'price-low') return { $sort: { computedZoneRank: 1, featuredPrice: 1, createdAt: -1 } };
+        if (sortBy === 'price-high') return { $sort: { computedZoneRank: 1, featuredPrice: -1, createdAt: -1 } };
+        if (sortBy === 'deliveryTime') return { $sort: { computedZoneRank: 1, estimatedDeliveryTimeMinutes: 1, createdAt: -1 } };
+        return { $sort: { computedZoneRank: 1, createdAt: -1 } };
     })();
 
-    const [restaurantsRaw, total] = await Promise.all([
-        FoodRestaurant.find(filter)
-            .select(Object.keys(projection).join(' '))
-            .sort(sort)
-            .skip(skip)
-            .limit(limit)
-            .lean(),
-        FoodRestaurant.countDocuments(filter)
+    const lookupStages = [
+        {
+            $lookup: {
+                from: 'food_restaurant_outlet_timings',
+                localField: '_id',
+                foreignField: 'restaurantId',
+                as: 'outletTimingsDoc'
+            }
+        },
+        {
+            $addFields: {
+                outletTimings: { 
+                    $ifNull: [
+                        { $arrayElemAt: ['$outletTimingsDoc.timings', 0] }, 
+                        []
+                    ] 
+                }
+            }
+        }
+    ];
+
+    const basePipeline = [
+        { $match: filter },
+        ...lookupStages,
+        { $addFields: { computedZoneRank: { $ifNull: ['$zoneRank', 999] } } },
+        sort
+    ];
+
+    const [pageDocs, totalDocs] = await Promise.all([
+        FoodRestaurant.aggregate([
+            ...basePipeline,
+            { $project: projection },
+            { $skip: skip },
+            { $limit: limit }
+        ]),
+        FoodRestaurant.aggregate([...basePipeline, { $count: 'count' }])
     ]);
+
+    const total = totalDocs?.[0]?.count || 0;
+    const restaurantsRaw = pageDocs;
+    
+    // Populate dish names and prices for itemDiscounts
+    try {
+        const allItemIds = [];
+        restaurantsRaw.forEach(r => {
+            if (Array.isArray(r.itemDiscounts)) {
+                r.itemDiscounts.forEach(d => {
+                    if (d.itemId) allItemIds.push(d.itemId);
+                });
+            }
+        });
+
+        if (allItemIds.length > 0) {
+            const { FoodItem } = await import('../../admin/models/food.model.js');
+            const { getFoodDisplayPrice } = await import('../../admin/services/foodVariant.service.js');
+            const itemDocs = await FoodItem.find({ _id: { $in: allItemIds } }).select('name price variants priceOnOtherPlatforms').lean();
+            const itemMap = new Map();
+            itemDocs.forEach(item => {
+                itemMap.set(String(item._id), item);
+            });
+
+            restaurantsRaw.forEach(r => {
+                if (Array.isArray(r.itemDiscounts)) {
+                    r.itemDiscounts.forEach(d => {
+                        if (d.itemId && itemMap.has(String(d.itemId))) {
+                            const itemDoc = itemMap.get(String(d.itemId));
+                            d.name = itemDoc.name || 'Special Dish';
+                            d.price = getFoodDisplayPrice(itemDoc);
+                        }
+                    });
+                }
+            });
+        }
+    } catch (err) {
+        // Silently ignore if population fails
+    }
 
     const restaurants = (restaurantsRaw || []).map((r) => ({
         ...r,
@@ -1401,138 +1597,89 @@ export const listApprovedRestaurants = async (query = {}) => {
     return { restaurants, total, page, limit };
 };
 
-export const listPublicDishes = async (query = {}) => {
-    const limit = Math.min(Math.max(parseInt(query.limit, 10) || 200, 1), 1000);
-    const filter = {
-        approvalStatus: 'approved',
-        isAvailable: { $ne: false }
-    };
-
-    const categoryId = String(query.categoryId || '').trim();
-    if (categoryId && mongoose.Types.ObjectId.isValid(categoryId)) {
-        filter.categoryId = new mongoose.Types.ObjectId(categoryId);
-    }
-
-    const category = String(query.category || '').trim();
-    if (category) {
-        const rx = { $regex: category.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' };
-        filter.$or = [
-            { categoryName: rx },
-            { category: rx },
-            { name: rx }
-        ];
-    }
-
-    const tag = String(query.tag || '').trim();
-    if (tag && ['Healthy', 'Normal'].includes(tag)) {
-        filter.tag = tag;
-    }
-
-    const restaurantFilter = { status: 'approved' };
-    const zoneIdRaw = String(query.zoneId || '').trim();
-    if (zoneIdRaw && mongoose.Types.ObjectId.isValid(zoneIdRaw)) {
-        restaurantFilter.$or = [{ zoneId: new mongoose.Types.ObjectId(zoneIdRaw) }];
-        const zoneDoc = await FoodZone.findOne({ _id: zoneIdRaw, isActive: true }).lean();
-        const polygon = zoneToPolygon(zoneDoc);
-        if (polygon) {
-            restaurantFilter.$or.push({ location: { $geoWithin: { $geometry: polygon } } });
-        }
-    }
-
-    const restaurants = await FoodRestaurant.find(restaurantFilter)
-        .select('_id restaurantName restaurantNameNormalized profileImage coverImages menuImages cuisines rating totalRatings estimatedDeliveryTime estimatedDeliveryTimeMinutes pureVegRestaurant location zoneId status')
-        .limit(2000)
-        .lean();
-    const restaurantMap = new Map((restaurants || []).map((restaurant) => [String(restaurant._id), restaurant]));
-    const restaurantIds = Array.from(restaurantMap.keys()).map((id) => new mongoose.Types.ObjectId(id));
-
-    if (!restaurantIds.length) {
-        return { dishes: [], total: 0, limit };
-    }
-
-    filter.restaurantId = { $in: restaurantIds };
-
-    const foods = await FoodItem.find(filter)
-        .sort({ createdAt: -1 })
-        .limit(limit)
-        .lean();
-
-    const dishes = (foods || []).map((food) => {
-        const restaurant = restaurantMap.get(String(food.restaurantId)) || {};
-        return {
-            id: String(food._id),
-            _id: food._id,
-            restaurantId: String(food.restaurantId || ''),
-            restaurantName: restaurant.restaurantName || '',
-            restaurantSlug: restaurant.restaurantNameNormalized || normalizeName(restaurant.restaurantName),
-            restaurant: {
-                _id: restaurant._id,
-                restaurantName: restaurant.restaurantName || '',
-                name: restaurant.restaurantName || '',
-                rating: normalizeRatingValue(restaurant.rating),
-                totalRatings: normalizeTotalRatingsValue(restaurant.totalRatings),
-                profileImage: restaurant.profileImage ? { url: restaurant.profileImage } : null,
-                coverImages: Array.isArray(restaurant.coverImages) ? restaurant.coverImages : [],
-                menuImages: Array.isArray(restaurant.menuImages) ? restaurant.menuImages : [],
-                cuisines: Array.isArray(restaurant.cuisines) ? restaurant.cuisines : [],
-                estimatedDeliveryTime: restaurant.estimatedDeliveryTime || '',
-                estimatedDeliveryTimeMinutes: restaurant.estimatedDeliveryTimeMinutes || null,
-                pureVegRestaurant: restaurant.pureVegRestaurant === true,
-                location: restaurant.location || null,
-                zoneId: restaurant.zoneId || null,
-                status: restaurant.status || 'approved'
-            },
-            categoryId: food.categoryId ? String(food.categoryId) : '',
-            categoryName: food.categoryName || food.category || '',
-            category: food.categoryName || food.category || '',
-            name: food.name || '',
-            description: food.description || '',
-            price: getFoodDisplayPrice(food),
-            priceOnOtherPlatforms: food.priceOnOtherPlatforms || null,
-            otherPlatformGst: food.otherPlatformGst ?? null,
-            variants: serializeFoodVariants(food.variants),
-            variations: serializeFoodVariants(food.variants),
-            image: food.image || '',
-            foodType: food.foodType || 'Non-Veg',
-            tag: food.tag || 'Normal',
-            nutrition: food.nutrition || null,
-            isAvailable: food.isAvailable !== false,
-            approvalStatus: food.approvalStatus || 'approved',
-            preparationTime: food.preparationTime || '',
-            createdAt: food.createdAt,
-            updatedAt: food.updatedAt
-        };
-    });
-
-    return { dishes, total: dishes.length, limit };
-};
-
 export const getApprovedRestaurantByIdOrSlug = async (idOrSlug) => {
     const value = String(idOrSlug || '').trim();
     if (!value) return null;
 
+    const now = new Date();
+    const fetchOffers = async (restaurantId) => {
+        // Fetch Admin FoodOffers
+        const adminFilter = {
+            status: 'active',
+            $and: [
+                { $or: [{ startDate: { $exists: false } }, { startDate: null }, { startDate: { $lte: now } }] },
+                { $or: [{ endDate: { $exists: false } }, { endDate: null }, { endDate: { $gt: now } }] }
+            ],
+            $or: [
+                { restaurantScope: 'all' },
+                { restaurantScope: 'selected', restaurantId }
+            ]
+        };
+
+        const adminOffers = await FoodOffer.find(adminFilter).sort({ createdAt: -1 }).lean();
+        
+        // Fetch Restaurant Promocodes
+        const promoFilter = {
+            restaurantId,
+            isActive: true,
+            expiryDate: { $gt: now }
+        };
+        const restaurantPromos = await Promocode.find(promoFilter).sort({ createdAt: -1 }).lean();
+        // Filter out those that have reached usage limit
+        const validPromos = restaurantPromos.filter(p => !p.usageLimit || p.usageCount < p.usageLimit);
+
+        const mappedAdminOffers = adminOffers.map(o => ({
+            id: String(o._id),
+            title: o.discountType === 'percentage'
+                ? `${Number(o.discountValue) || 0}% OFF`
+                : `Flat ₹${Number(o.discountValue) || 0} OFF`,
+            code: o.couponCode,
+            description: `Use code ${o.couponCode}`,
+            discountType: o.discountType,
+            discountValue: o.discountValue
+        }));
+
+        const mappedPromos = validPromos.map(p => ({
+            id: String(p._id),
+            title: p.discountType === 'PERCENTAGE'
+                ? `${Number(p.discountValue) || 0}% OFF`
+                : `Flat ₹${Number(p.discountValue) || 0} OFF`,
+            code: p.code,
+            description: p.description || `Use code ${p.code}`,
+            discountType: p.discountType,
+            discountValue: p.discountValue
+        }));
+
+        return [...mappedAdminOffers, ...mappedPromos];
+    };
+
+    let doc = null;
+
     // ObjectId path
     if (/^[0-9a-fA-F]{24}$/.test(value)) {
-        const doc = await FoodRestaurant.findOne({ _id: value, status: 'approved' }).lean();
-        if (!doc) return null;
-        return {
-            ...doc,
-            rating: normalizeRatingValue(doc.rating),
-            totalRatings: normalizeTotalRatingsValue(doc.totalRatings)
-        };
+        doc = await FoodRestaurant.findOne({ _id: value, status: 'approved' }).lean();
+    } else {
+        // Slug path: use normalized field for index-friendly exact match.
+        const restaurantNameNormalized = normalizeName(value);
+        if (restaurantNameNormalized) {
+            doc = await FoodRestaurant.findOne({
+                status: 'approved',
+                restaurantNameNormalized
+            }).lean();
+        }
     }
 
-    // Slug path: use normalized field for index-friendly exact match.
-    const restaurantNameNormalized = normalizeName(value);
-    if (!restaurantNameNormalized) return null;
-
-    const doc = await FoodRestaurant.findOne({
-        status: 'approved',
-        restaurantNameNormalized
-    }).lean();
     if (!doc) return null;
+
+    const offers = await fetchOffers(doc._id);
+
     return {
         ...doc,
+        offers,
+        restaurantOffers: {
+            ...(doc.restaurantOffers || {}),
+            coupons: offers
+        },
         rating: normalizeRatingValue(doc.rating),
         totalRatings: normalizeTotalRatingsValue(doc.totalRatings)
     };

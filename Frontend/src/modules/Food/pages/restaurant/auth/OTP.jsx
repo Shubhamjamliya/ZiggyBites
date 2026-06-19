@@ -151,7 +151,7 @@ export default function RestaurantOTP() {
         sessionStorage.removeItem("restaurantAuthData")
         navigate("/food/restaurant/pending-verification", {
           replace: true,
-          state: { 
+          state: {
             phone: pendingPhone,
             isRejected: data.isRejected,
             rejectionReason: data.rejectionReason
@@ -187,7 +187,7 @@ export default function RestaurantOTP() {
       }
     } catch (err) {
       const message = err?.response?.data?.message || "Invalid OTP. Please try again."
-      
+
       if (/pending approval/i.test(message)) {
         const pendingPhone = authData?.phone || authData?.email || contactInfo
         setRestaurantPendingPhone(pendingPhone)
@@ -244,7 +244,7 @@ export default function RestaurantOTP() {
         className="absolute bottom-[-100px] left-[-100px] w-[400px] h-[400px] rounded-full blur-[120px] pointer-events-none"
         style={{ backgroundColor: "color-mix(in srgb, var(--app-theme-primary) 5%, transparent)" }}
       />
-      
+
       {/* Header / Back */}
       <div className="relative z-20 px-5 py-5 flex items-center">
         <motion.button
@@ -278,7 +278,7 @@ export default function RestaurantOTP() {
             >
               <ShieldCheck className="text-white w-8 h-8" />
             </motion.div>
-            
+
             <h1 className="text-3xl font-black text-slate-950 dark:text-white tracking-tight mb-3">
               Verify Account
             </h1>
@@ -314,8 +314,8 @@ export default function RestaurantOTP() {
                     }}
                     onBlur={() => setFocusedIndex(null)}
                     className={`w-full aspect-square bg-white dark:bg-gray-900/50 text-center text-3xl font-black text-slate-950 dark:text-white border-2 rounded-2xl outline-none transition-all ${
-                      focusedIndex === index 
-                        ? "scale-105" 
+                      focusedIndex === index
+                        ? "scale-105"
                         : digit
                           ? "border-slate-300 dark:border-gray-600"
                           : "border-slate-200 dark:border-gray-700 group-hover:border-slate-300"
@@ -363,7 +363,7 @@ export default function RestaurantOTP() {
           </div>
 
           <p className="mt-8 text-[10px] font-black text-gray-300 dark:text-gray-600 text-center uppercase tracking-[0.25em]">
-            Secure Verification &bull; ZiggyBites Partner
+            Secure Verification &bull; Indian Bites Partner
           </p>
         </motion.div>
       </div>

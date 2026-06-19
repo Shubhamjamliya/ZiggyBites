@@ -12,7 +12,7 @@ const DEFAULT_COUNTRY_CODE = "+91"
 export default function DeliverySignIn() {
   const navigate = useNavigate()
   const [phone, setPhone] = useState(() => {
-    const stored = sessionStorage.getItem("deliveryAuthData")
+    const stored = localStorage.getItem("deliveryAuthData")
     if (!stored) return ""
     try {
       const data = JSON.parse(stored)
@@ -26,7 +26,7 @@ export default function DeliverySignIn() {
     const cached = getCachedSettings()
     return {
       logoUrl: cached?.deliveryLogo?.url || cached?.logo?.url || null,
-      companyName: cached?.companyName || "ZiggyBites",
+      companyName: cached?.companyName || "Indian Bites",
     }
   })
   const submitting = useRef(false)
@@ -38,7 +38,7 @@ export default function DeliverySignIn() {
       if (!settings || cancelled) return
       setBrand({
         logoUrl: settings.deliveryLogo?.url || settings.logo?.url || null,
-        companyName: settings.companyName || "ZiggyBites",
+        companyName: settings.companyName || "Indian Bites",
       })
     }
 
@@ -73,7 +73,7 @@ export default function DeliverySignIn() {
     try {
       clearModuleAuth("delivery")
       await deliveryAPI.sendOTP(fullPhone, "login")
-      sessionStorage.setItem("deliveryAuthData", JSON.stringify({
+      localStorage.setItem("deliveryAuthData", JSON.stringify({
         method: "phone",
         phone: fullPhone,
         isSignUp: false,
@@ -123,7 +123,7 @@ export default function DeliverySignIn() {
               )}
             </div>
             <h1 className="text-4xl font-black italic tracking-tight text-[#ff1f1f] drop-shadow-sm">
-              {brand.companyName || "ZiggyBites"}
+              {brand.companyName || "Indian Bites"}
             </h1>
             <div className="mx-auto mt-2 h-1 w-16 rounded-full bg-[#ff1f1f]" />
           </div>

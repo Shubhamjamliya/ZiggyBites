@@ -8,11 +8,9 @@ import {
 } from "@food/components/ui/dialog"
 
 const getStatusColor = (status) => {
-  const normalized = String(status || "").toLowerCase()
-  if (normalized === "expired") return "bg-blue-100 text-blue-700"
-  if (normalized === "active") return "bg-emerald-100 text-emerald-700"
-  if (normalized.includes("pending")) return "bg-amber-100 text-amber-700"
-  if (normalized.includes("failed") || normalized.includes("cancel")) return "bg-rose-100 text-rose-700"
+  if (status === "Expired") return "bg-blue-100 text-blue-700"
+  if (status === "Active") return "bg-emerald-100 text-emerald-700"
+  if (status === "Pending") return "bg-amber-100 text-amber-700"
   return "bg-slate-100 text-slate-700"
 }
 
@@ -34,7 +32,7 @@ export default function ViewSubscriptionDialog({ isOpen, onOpenChange, order }) 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1">
                 <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Subscription ID</p>
-                <p className="text-sm font-medium text-slate-900">{order.shortId || order.subscriptionId}</p>
+                <p className="text-sm font-medium text-slate-900">{order.subscriptionId}</p>
               </div>
               <div className="space-y-1">
                 <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Order Type</p>
@@ -59,7 +57,7 @@ export default function ViewSubscriptionDialog({ isOpen, onOpenChange, order }) 
               <div className="space-y-1">
                 <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Status</p>
                 <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(order.status)}`}>
-                  {order.statusLabel || order.status}
+                  {order.status}
                 </span>
               </div>
             </div>
@@ -75,24 +73,6 @@ export default function ViewSubscriptionDialog({ isOpen, onOpenChange, order }) 
                 </div>
               </div>
             </div>
-            {Array.isArray(order.schedules) && order.schedules.length > 0 && (
-              <div className="pt-4 border-t border-slate-200">
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Upcoming / Recent Meals</p>
-                <div className="max-h-44 overflow-y-auto space-y-2">
-                  {order.schedules.slice(0, 8).map((schedule) => (
-                    <div key={schedule.scheduleId || schedule._id} className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2">
-                      <div>
-                        <p className="text-sm font-medium text-slate-900">{schedule.mealName}</p>
-                        <p className="text-xs text-slate-500">{schedule.dishName}</p>
-                      </div>
-                      <span className="text-xs font-semibold text-slate-600">
-                        {String(schedule.status || "").replace(/_/g, " ")}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
         )}
       </DialogContent>

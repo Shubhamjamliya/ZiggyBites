@@ -1,6 +1,6 @@
 import { FoodBusinessSettings } from '../models/businessSettings.model.js';
 import { sendResponse } from '../../../../utils/response.js';
-import { uploadImageBufferDetailed } from '../../../../services/cloudinary.service.js';
+import { uploadImageBufferDetailed, uploadFileBufferDetailed } from '../../../../services/cloudinary.service.js';
 
 export async function getBusinessSettings(req, res, next) {
     try {
@@ -34,7 +34,8 @@ export async function updateBusinessSettings(req, res, next) {
 
         const { 
             companyName, email, phoneCountryCode, phoneNumber, address, state, pincode, region,
-            supportEmail, supportPhone, supportHours 
+            supportEmail, supportPhone, supportHours, fssai, gstin, onlinePaymentOnly, maxCodAmount,
+            maintenanceMode, customerRegistration, restaurantRegistration, deliveryRegistration
         } = data;
 
         // Ensure string inputs for validation to prevent crashes from non-string values
@@ -47,15 +48,17 @@ export async function updateBusinessSettings(req, res, next) {
         const s_supportEmail = String(supportEmail || "").trim();
         const s_supportPhone = String(supportPhone || "").trim();
         const s_supportHours = String(supportHours || "").trim();
+        const s_fssai = String(fssai || "").trim();
+        const s_gstin = String(gstin || "").trim();
 
-        // Validation
-        if (!s_companyName || s_companyName.length < 2 || s_companyName.length > 50) {
+        // Validation (only if field is provided for partial updates)
+        if (companyName !== undefined && (!s_companyName || s_companyName.length < 2 || s_companyName.length > 50)) {
             return res.status(400).json({ success: false, message: 'Company name must be between 2 and 50 characters' });
         }
-        if (!s_email || s_email.length > 100 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s_email)) {
+        if (email !== undefined && (!s_email || s_email.length > 100 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s_email))) {
             return res.status(400).json({ success: false, message: 'Invalid email address (max 100 characters)' });
         }
-        if (!s_phoneNumber || !/^\d{7,15}$/.test(s_phoneNumber)) {
+        if (phoneNumber !== undefined && (!s_phoneNumber || !/^\d{7,15}$/.test(s_phoneNumber))) {
             return res.status(400).json({ success: false, message: 'Invalid phone number (7-15 digits required)' });
         }
         if (s_address && s_address.length > 250) {
@@ -92,6 +95,29 @@ export async function updateBusinessSettings(req, res, next) {
         if (supportEmail !== undefined) settings.supportEmail = s_supportEmail;
         if (supportPhone !== undefined) settings.supportPhone = s_supportPhone;
         if (supportHours !== undefined) settings.supportHours = s_supportHours;
+        if (fssai !== undefined) settings.fssai = s_fssai;
+        if (gstin !== undefined) settings.gstin = s_gstin;
+        
+        if (onlinePaymentOnly !== undefined) {
+            settings.onlinePaymentOnly = Boolean(onlinePaymentOnly === 'true' || onlinePaymentOnly === true);
+        }
+        
+        if (maxCodAmount !== undefined) {
+            settings.maxCodAmount = Number(maxCodAmount) || 0;
+        }
+
+        if (maintenanceMode !== undefined) {
+            settings.maintenanceMode = Boolean(maintenanceMode === 'true' || maintenanceMode === true);
+        }
+        if (customerRegistration !== undefined) {
+            settings.customerRegistration = Boolean(customerRegistration === 'true' || customerRegistration === true);
+        }
+        if (restaurantRegistration !== undefined) {
+            settings.restaurantRegistration = Boolean(restaurantRegistration === 'true' || restaurantRegistration === true);
+        }
+        if (deliveryRegistration !== undefined) {
+            settings.deliveryRegistration = Boolean(deliveryRegistration === 'true' || deliveryRegistration === true);
+        }
 
         // Handle file uploads
         if (req.files) {
@@ -109,18 +135,15 @@ export async function updateBusinessSettings(req, res, next) {
                     publicId: faviconResult.public_id
                 };
             }
-            if (req.files.restaurantLogo) {
-                const restaurantLogoResult = await uploadImageBufferDetailed(req.files.restaurantLogo[0].buffer, 'business/restaurant-logos');
-                settings.restaurantLogo = {
-                    url: restaurantLogoResult.secure_url,
-                    publicId: restaurantLogoResult.public_id
-                };
-            }
-            if (req.files.deliveryLogo) {
-                const deliveryLogoResult = await uploadImageBufferDetailed(req.files.deliveryLogo[0].buffer, 'business/delivery-logos');
-                settings.deliveryLogo = {
-                    url: deliveryLogoResult.secure_url,
-                    publicId: deliveryLogoResult.public_id
+            if (req.files.termsAndConditionsPdf) {
+                const pdfFile = req.files.termsAndConditionsPdf[0];
+                const pdfResult = await uploadFileBufferDetailed(pdfFile.buffer, 'business/legal', {
+                    fileName: pdfFile.originalname,
+                    format: 'pdf'
+                });
+                settings.termsAndConditionsPdf = {
+                    url: pdfResult.secure_url,
+                    publicId: pdfResult.public_id
                 };
             }
         }

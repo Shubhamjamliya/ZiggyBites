@@ -161,6 +161,7 @@ export default function UserRouter() {
           <Route path="product/:id" element={<ProductDetail />} />
           <Route path="choose-meal" element={<ChooseMeal />} />
           <Route path="subscription-plans" element={<SubscriptionPlans />} />
+          <Route path="subscriptions/checkout" element={<SubscriptionCheckout />} />
           <Route path="checkout" element={<SubscriptionCheckout />} />
 
           {/* Cart - Now Public */}

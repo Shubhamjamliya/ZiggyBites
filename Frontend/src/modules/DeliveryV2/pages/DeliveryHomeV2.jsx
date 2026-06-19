@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useDeliveryStore } from '@/modules/DeliveryV2/store/useDeliveryStore';
 import { useProximityCheck } from '@/modules/DeliveryV2/hooks/useProximityCheck';
 import { useOrderManager } from '@/modules/DeliveryV2/hooks/useOrderManager';
-import { useDeliveryNotifications } from '@food/hooks/useDeliveryNotifications';
+import { useDeliveryNotificationContext } from '@food/context/DeliveryNotificationContext';
 import { writeOrderTracking } from '@food/realtimeTracking';
 import { deliveryAPI } from '@food/api';
 import { toast } from 'sonner';
@@ -26,7 +26,7 @@ import {
   Bell, HelpCircle, AlertTriangle, 
   Wallet, History, User as UserIcon, LayoutGrid,
   Plus, Minus, Navigation2, Target, Play, CheckCircle2, Clock, ChevronDown,
-  Contact, Package
+  Contact, Package, Phone, MapPin
 } from 'lucide-react';
 
 import { getHaversineDistance, calculateETA, calculateHeading } from '@/modules/DeliveryV2/utils/geo';
@@ -69,7 +69,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
   const { isOnline, toggleOnline, riderLocation, activeOrder, tripStatus, setRiderLocation, setActiveOrder, updateTripStatus, clearActiveOrder } = useDeliveryStore();
   const { isWithinRange, distanceToTarget } = useProximityCheck();
   const { acceptOrder, reachPickup, pickUpOrder, reachDrop, completeDelivery, resetTrip } = useOrderManager();
-  const { newOrder, clearNewOrder, orderStatusUpdate, clearOrderStatusUpdate, claimedOrderId, clearClaimedOrderId, adminNotification, clearAdminNotification, isConnected: isSocketConnected, emitLocation } = useDeliveryNotifications();
+  const { newOrder, clearNewOrder, orderStatusUpdate, clearOrderStatusUpdate, claimedOrderId, clearClaimedOrderId, autoKilledOrder, clearAutoKilledOrder, adminNotification, clearAdminNotification, isConnected: isSocketConnected, emitLocation } = useDeliveryNotificationContext();
   const companyName = useCompanyName();
   const { items: broadcastItems, unreadCount: notificationUnreadCount, markAsRead: markBroadcastAsRead, dismissAll: dismissAllBroadcast } = useNotificationInbox("delivery", { limit: 20 });
 
@@ -91,6 +91,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
     accidentHelpline: "",
     contactPolice: "",
     insurance: "",
+    teamLeader: "",
   });
   
   const [isModalMinimized, setIsModalMinimized] = useState(false);
@@ -235,6 +236,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
     { title: "Accident Helpline", subtitle: "Report an accident", icon: <AlertTriangle className="text-orange-600" />, phone: emergencyNumbers.accidentHelpline },
     { title: "Contact Police", subtitle: "Nearest police support", icon: <AlertTriangle className="text-blue-600" />, phone: emergencyNumbers.contactPolice },
     { title: "Insurance", subtitle: "Policy & claim help", icon: <AlertTriangle className="text-green-600" />, phone: emergencyNumbers.insurance },
+    { title: "Team Leader", subtitle: "Contact your assigned team leader", icon: <UserIcon className="text-purple-600" />, phone: emergencyNumbers.teamLeader },
   ];
 
   // Reset simulation when trip phase/order/mode changes.
@@ -520,7 +522,9 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
     return () => clearInterval(pingInterval);
   }, [isOnline]);
 
-  useEffect(() => { if (newOrder) setIncomingOrder(newOrder); }, [newOrder]);
+  useEffect(() => { 
+    if (newOrder !== undefined) setIncomingOrder(newOrder); 
+  }, [newOrder]);
 
   useEffect(() => {
     if (activeOrder && incomingOrder) {
@@ -531,15 +535,40 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
   // When another delivery partner claims the incoming order (via socket 'order_claimed'),
   // dismiss the NewOrderModal and inform this delivery boy.
   useEffect(() => {
-    if (!claimedOrderId) return;
+    if (!claimedOrderId || !claimedOrderId.orderId) return;
+    
+    // Check if WE were the ones who claimed it
+    const token = localStorage.getItem('delivery_accessToken') || '';
+    let myUserId = null;
+    try {
+      if (token) {
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        myUserId = payload.userId;
+      }
+    } catch(e) {}
+    
+    if (claimedOrderId.claimedBy && String(claimedOrderId.claimedBy) === String(myUserId)) {
+      // We claimed it, do nothing here (activeOrder will handle it)
+      clearClaimedOrderId();
+      return;
+    }
+
     const incomingId = incomingOrder?.orderId || incomingOrder?._id || incomingOrder?.orderMongoId;
-    if (incomingId && String(incomingId) === String(claimedOrderId)) {
-      toast.info('Order was taken by another delivery partner.', { duration: 4000 });
+    if (incomingId && String(incomingId) === String(claimedOrderId.orderId)) {
+      if (claimedOrderId.claimedBy === 'cancelled') {
+        toast.error('Order was cancelled.', { duration: 4000 });
+      } else {
+        toast.info('Order was taken by another delivery partner.', { duration: 4000 });
+      }
       setIncomingOrder(null);
       clearNewOrder();
+    } else if (!incomingId) {
+       // Failsafe: if incoming is null but we got a claim event, ensure we are clear
+       setIncomingOrder(null);
+       clearNewOrder();
     }
     clearClaimedOrderId();
-  }, [claimedOrderId]);
+  }, [claimedOrderId, incomingOrder, clearNewOrder, clearClaimedOrderId]);
 
   useEffect(() => {
     if (!isOnline) return;
@@ -667,6 +696,23 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
     }
   }, [orderStatusUpdate, resetTrip, clearOrderStatusUpdate]);
 
+  // Handle auto-killed order reasoning
+  useEffect(() => {
+    if (autoKilledOrder) {
+      setTimeout(() => {
+        const reason = window.prompt("Your order exceeded the 1 hour limit and was cancelled by the system. Please provide a reason for the failure/delay:");
+        if (reason && reason.trim() !== "") {
+          deliveryAPI.rejectOrder(autoKilledOrder.orderId || autoKilledOrder.orderMongoId || autoKilledOrder._id, { reason })
+            .then(() => toast.success("Reason saved successfully."))
+            .catch(() => toast.error("Failed to save reason."));
+        } else {
+          toast.error("You must provide a reason for the delayed delivery.");
+        }
+        clearAutoKilledOrder();
+      }, 500); // small delay to ensure UI doesn't block the unmount of previous modals
+    }
+  }, [autoKilledOrder, clearAutoKilledOrder]);
+
   // Handle Real-time Admin Notifications
   useEffect(() => {
     if (adminNotification) {
@@ -701,28 +747,52 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
 
   return (
     <div className="relative h-screen w-full bg-white text-gray-900 overflow-hidden flex flex-col">
-      {/* ─── 1. TOP HEADER (Premium Dark Gray) ─── */}
-      {currentTab !== 'history' && (
-      <div className="absolute top-0 inset-x-0 bg-[#121212]/95 backdrop-blur-2xl shadow-2xl z-[200] safe-top pb-2 border-b border-white/10">
+      {/* ─── 1. TOP HEADER (Dynamic Theme Gradient) ─── */}
+      {currentTab !== 'history' && currentTab !== 'profile' && currentTab !== 'pocket' && (
+      <div 
+        className="absolute top-0 inset-x-0 backdrop-blur-2xl shadow-2xl z-[200] safe-top pb-2 border-b border-white/10"
+        style={{ backgroundColor: 'var(--dv-primary)' }}
+      >
         <div className="flex items-center justify-between px-4 py-2">
           <div className="flex items-center gap-4">
              <div 
                 onClick={() => navigate('/food/delivery/profile')}
                 className="w-10 h-10 rounded-full border border-white/20 p-0.5 shadow-xl overflow-hidden bg-white/5 cursor-pointer active:scale-95 transition-all"
              >
-                <img src={profileImage || "https://i.ibb.co/3m2Yh7r/Appzeto-Brand-Image.png"} alt="Profile" className="w-full h-full object-cover rounded-full" />
+                <img src={profileImage || "/delivery_avatar.png"} alt="Profile" className="w-full h-full object-cover rounded-full" />
              </div>
               <button 
                 onClick={async () => {
                   const nextState = !isOnline;
-                  toggleOnline(); // Store action
                   if (nextState) {
-                     // Try to get location and sync immediately so we are visible for dispatch right away
-                     navigator.geolocation.getCurrentPosition((pos) => {
-                         deliveryAPI.updateLocation(pos.coords.latitude, pos.coords.longitude, true).catch(() => {});
-                     }, (err) => console.warn('Online sync position failed:', err), { enableHighAccuracy: true });
+                      if (!navigator.geolocation) {
+                          toast.error("Geolocation is not supported by your browser.");
+                          return;
+                      }
+                      navigator.geolocation.getCurrentPosition(
+                        async (position) => {
+                            try {
+                              await deliveryAPI.updateOnlineStatus(true);
+                              toggleOnline();
+                              deliveryAPI.updateLocation(
+                                position.coords.latitude,
+                                position.coords.longitude,
+                                true
+                              ).catch(() => {});
+                              toast.success("Shift started successfully!");
+                            } catch (error) {
+                              console.error("Failed to start shift:", error);
+                              toast.error("Failed to start shift. Please try again.");
+                            }
+                        },
+                        () => {
+                            toast.error("Please enable your GPS for current location");
+                        },
+                        { timeout: 10000, enableHighAccuracy: true }
+                      );
                   } else {
-                     deliveryAPI.updateOnlineStatus(false).catch(() => {});
+                      toggleOnline(); // Store action
+                      deliveryAPI.updateOnlineStatus(false).catch(() => {});
                   }
                 }}
                 className={`delivery-online-toggle relative w-[92px] h-8 rounded-full p-1 transition-all duration-500 flex items-center ${isOnline ? 'is-online bg-green-500 shadow-lg shadow-green-500/20' : 'is-offline bg-green-400 shadow-lg shadow-green-400/20'}`}
@@ -770,7 +840,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
               {activeOrder ? (
                 <div className="grid grid-cols-2 gap-3 w-full">
                   {/* LEFT: DISTANCE (Vibrant Orange Card) */}
-                  <div className="bg-[#ff8100] rounded-2xl p-3.5 shadow-xl shadow-orange-500/20 border border-orange-400/50 flex items-center justify-between overflow-hidden relative">
+                  <div className="bg-primary rounded-2xl p-3.5 shadow-xl shadow-orange-500/20 border border-orange-400/50 flex items-center justify-between overflow-hidden relative">
                     <div className="flex flex-col z-10">
                       <span className="text-[9px] text-white/70 font-black uppercase tracking-[0.15em] mb-1">Distance</span>
                       <div className="flex items-end gap-1">
@@ -781,7 +851,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
                       </div>
                     </div>
                     <div className="w-9 h-9 bg-white rounded-xl flex items-center justify-center z-10 shadow-lg">
-                      <Navigation2 className="w-4 h-4 text-[#ff8100] rotate-45" />
+                      <Navigation2 className="w-4 h-4 text-primary rotate-45" />
                     </div>
                   </div>
 
@@ -802,16 +872,30 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
                   </div>
                 </div>
               ) : (
-                <div className="bg-white/5 rounded-2xl p-4 flex items-center border border-white/5 shadow-sm backdrop-blur-md">
+                <div className="bg-white/5 rounded-2xl p-4 flex items-center justify-between border border-white/5 shadow-sm backdrop-blur-md">
                   <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 bg-green-500/10 rounded-full flex items-center justify-center">
+                    <div className="w-10 h-10 bg-green-500/10 rounded-full flex items-center justify-center shrink-0">
                       <div className={`w-2 h-2 rounded-full ${isOnline ? 'bg-green-500 animate-pulse' : 'bg-gray-500'}`} />
                     </div>
-                    <div>
+                    <div className="flex-1">
                       <h3 className="text-white font-black text-[11px] uppercase tracking-widest leading-none mb-1">{isOnline ? 'System Online' : 'System Offline'}</h3>
-                      <p className="text-gray-400 text-[10px] font-bold uppercase tracking-tight">{isOnline ? 'Waiting for order requests' : 'Go online to receive jobs'}</p>
+                      <p className="text-gray-400 text-[10px] font-bold uppercase tracking-tight">{isOnline ? 'Waiting for order requests' : 'Go online to receive orders'}</p>
                     </div>
                   </div>
+                  {emergencyNumbers.teamLeader && (
+                    <div className="flex flex-col items-center justify-center ml-3 shrink-0">
+                      <button 
+                        onClick={() => window.location.href = `tel:${emergencyNumbers.teamLeader.replace(/\D/g, '')}`}
+                        className="w-10 h-10 rounded-full bg-blue-500/20 border border-blue-500/30 flex items-center justify-center text-blue-400 active:scale-95 transition-all shadow-lg"
+                        title="Call Team Leader"
+                      >
+                        <Phone className="w-4 h-4" />
+                      </button>
+                      <span className="text-[8px] font-bold text-blue-300/80 uppercase mt-1 tracking-wider text-center">
+                        Team Leader
+                      </span>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -832,10 +916,12 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
       )}
 
       {/* ─── 2. MAIN CONTENT ─── */}
-      <div className={`flex-1 relative overflow-y-auto ${currentTab === 'history' ? 'pt-0' : 'pt-[120px]'} no-scrollbar`}>
+      <div className={`flex-1 relative overflow-y-auto ${currentTab === 'history' || currentTab === 'profile' || currentTab === 'pocket' ? 'pt-0' : 'pt-[120px]'} no-scrollbar`}>
          {currentTab === 'feed' ? (
            <div className="absolute inset-0 top-[-120px]">
-             <LiveMap 
+             {isOnline ? (
+               <>
+                 <LiveMap 
                onMapLoad={(m) => mapRef.current = m}
                onMapClick={handleMapClick}
                onPathReceived={setSimPath}
@@ -933,6 +1019,43 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
                   <Target className="w-7 h-7" />
                 </button>
              </div>
+             </>
+            ) : (
+              <div className="w-full h-full bg-[#f8f9fa] flex flex-col items-center justify-center relative overflow-hidden">
+                {/* CSS Static Map Background Pattern */}
+                <div className="absolute inset-0 opacity-[0.04] pointer-events-none" style={{
+                  backgroundImage: `radial-gradient(#000 2px, transparent 2px)`,
+                  backgroundSize: '24px 24px'
+                }}></div>
+                {/* Fake Roads to simulate map */}
+                <div className="absolute inset-0 opacity-[0.06] pointer-events-none">
+                   <svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
+                     <path d="M -100,200 Q 150,250 300,100 T 800,300" stroke="#000" strokeWidth="8" fill="none" />
+                     <path d="M 200,-100 Q 250,150 100,300 T 300,800" stroke="#000" strokeWidth="6" fill="none" />
+                     <path d="M 400,-100 Q 350,150 500,400 T 200,800" stroke="#000" strokeWidth="10" fill="none" />
+                   </svg>
+                </div>
+                
+                {/* Avatar / Offline State */}
+                <div className="z-10 flex flex-col items-center mt-32 relative">
+                   <div className="relative z-10 mt-10">
+                     <div className="absolute inset-0 bg-blue-500/20 blur-[60px] rounded-full scale-150 pointer-events-none"></div>
+                     <img 
+                       src="/delivery_avatar.png" 
+                       alt="Offline Rider" 
+                       className="relative w-56 h-56 md:w-64 md:h-64 rounded-full object-cover object-top border-[8px] border-white shadow-[0_20px_60px_rgba(0,0,0,0.25)]"
+                       onError={(e) => {
+                          e.target.src = 'https://cdn-icons-png.flaticon.com/512/2950/2950150.png';
+                       }}
+                     />
+                   </div>
+                   <div className="mt-8 bg-white/90 backdrop-blur-md px-8 py-5 rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.08)] text-center border border-gray-100/50">
+                      <h2 className="text-gray-900 font-black uppercase tracking-widest text-lg">You are Offline</h2>
+                      <p className="text-gray-500 font-bold text-xs uppercase tracking-wider mt-1.5">Go online to receive orders</p>
+                   </div>
+                </div>
+              </div>
+            )}
            </div>
          ) : currentTab === 'pocket' ? (
            <PocketV2 />
@@ -996,7 +1119,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
                     distanceToTarget={distanceToTarget}
                     eta={eta}
                     onReachedPickup={reachPickup} 
-                    onPickedUp={(billImageUrl) => pickUpOrder(billImageUrl)} 
+                    onPickedUp={(billImageUrl, otp) => pickUpOrder(billImageUrl, otp)} 
                     onMinimize={() => setIsModalMinimized(true)}
                   />
                 )}
@@ -1010,36 +1133,71 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
                              <ChevronDown className="w-6 h-6 text-gray-400 stroke-[3]" />
                           </button>
                         </div>
-                        <div className="flex justify-between w-full items-center mb-10 px-2 text-left">
-                          <div className="flex items-center gap-4">
-                            <div className="w-16 h-16 rounded-2xl overflow-hidden border border-gray-100 shadow-sm">
-                               <img 
-                                 src={activeOrder?.user?.logo || activeOrder?.user?.profileImage || 'https://cdn-icons-png.flaticon.com/512/1275/1275302.png'} 
-                                 className="w-full h-full object-cover" 
-                                 alt="User"
-                               />
-                            </div>
-                            <div>
-                               <h3 className="text-gray-950 text-2xl font-bold uppercase">Handover Drop</h3>
-                               <p className={`text-[10px] font-bold uppercase tracking-[0.2em] mt-1.5 ${isWithinRange ? 'text-green-600' : 'text-orange-500'}`}>
-                                 {isWithinRange ? 'Ready - Swipe to Arrive √' : `${(distanceToTarget / 1000).toFixed(1)} km • ${eta || '--'} min Arrival`}
-                               </p>
-                            </div>
-                          </div>
-                        </div>
+                        <div className="w-full flex flex-col mb-8 text-left px-2">
+                           <div className="flex items-center gap-2 mb-2 font-bold text-[10px] uppercase tracking-widest text-blue-600">
+                              <MapPin className="w-4 h-4" />
+                              <span>Handover Drop</span>
+                           </div>
+                           <div className="flex justify-between items-start gap-4">
+                              <div>
+                                 <p className="text-gray-950 font-bold text-base sm:text-xl leading-tight">
+                                    {activeOrder?.user?.name || activeOrder?.deliveryAddress?.name || "Customer"}
+                                 </p>
+                                 <p className="text-gray-500 text-sm font-medium leading-relaxed mt-1 line-clamp-2">
+                                    {activeOrder?.deliveryAddress?.address || activeOrder?.deliveryAddress?.street || "Customer Location"}
+                                 </p>
+                              </div>
+                              {(activeOrder?.userPhone || activeOrder?.deliveryAddress?.phone || activeOrder?.user?.phone) && (
+                                <button
+                                  onClick={() => {
+                                    const num = activeOrder?.userPhone || activeOrder?.deliveryAddress?.phone || activeOrder?.user?.phone;
+                                    if (num) window.location.href = `tel:${num}`;
+                                  }}
+                                  className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 border border-blue-100 active:scale-95 transition-all shadow-sm shrink-0 mt-1"
+                                >
+                                  <Phone className="w-4 h-4 fill-current" />
+                                </button>
+                              )}
+                           </div>
 
-                        {/* Customer Instructions Panel */}
-                        {activeOrder?.note && (
-                          <div className="w-full bg-orange-50 border border-orange-100 rounded-3xl p-5 mb-8 flex gap-4 items-start shadow-sm mx-2">
-                             <div className="w-10 h-10 bg-white rounded-2xl flex items-center justify-center text-orange-500 shadow-sm shrink-0 border border-orange-50">
-                                <Package className="w-5 h-5" />
+                           {activeOrder?.items && activeOrder.items.length > 0 && (
+                             <div className="mt-4 p-3 bg-gray-50 rounded-xl border border-gray-100">
+                                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-1.5">Order Items</p>
+                                <p className="text-sm font-bold text-gray-800 line-clamp-2 leading-snug">
+                                  {activeOrder.items.map(item => `${item.quantity}x ${item.menuItem?.name || item.name || 'Item'}`).join(', ')}
+                                </p>
                              </div>
-                             <div className="flex-1">
-                                <p className="text-[10px] font-black text-orange-600 uppercase tracking-[0.2em] mb-1.5 opacity-80">Drop Message</p>
-                                <p className="text-sm font-bold text-gray-950 leading-relaxed capitalize">"{activeOrder.note}"</p>
+                           )}
+
+                           <div className="grid grid-cols-2 gap-2.5 sm:gap-4 mt-4">
+                             <div className="p-3 sm:p-4 bg-gray-50 rounded-2xl border border-gray-100 flex items-center gap-2.5 sm:gap-3">
+                               <Clock className="w-5 h-5 text-orange-500" />
+                               <div className="flex flex-col">
+                                  <span className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Time</span>
+                                  <span className={`text-sm font-bold ${isWithinRange ? 'text-green-600' : 'text-gray-900'}`}>{isWithinRange ? 'Ready' : `${eta || '--'} MINS`}</span>
+                               </div>
                              </div>
-                          </div>
-                        )}
+                             <div className="p-3 sm:p-4 bg-gray-50 rounded-2xl border border-gray-100 flex items-center gap-2.5 sm:gap-3">
+                               <MapPin className="w-5 h-5 text-gray-400" />
+                               <div className="flex flex-col">
+                                  <span className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Distance</span>
+                                  <span className={`text-sm font-bold ${isWithinRange ? 'text-green-600' : 'text-gray-900'}`}>{isWithinRange ? '0 KM' : `${(distanceToTarget / 1000).toFixed(1)} KM`}</span>
+                               </div>
+                             </div>
+                           </div>
+
+                           {activeOrder?.note && (
+                             <div className="w-full bg-orange-50 border border-orange-100 rounded-2xl p-4 mt-4 flex gap-3 items-start shadow-sm">
+                                <div className="w-8 h-8 bg-white rounded-xl flex items-center justify-center text-orange-500 shadow-sm shrink-0 border border-orange-50">
+                                   <Package className="w-4 h-4" />
+                                </div>
+                                <div className="flex-1">
+                                   <p className="text-[10px] font-black text-orange-600 uppercase tracking-[0.2em] mb-1 opacity-80">Drop Message</p>
+                                   <p className="text-sm font-bold text-gray-950 leading-relaxed capitalize">"{activeOrder.note}"</p>
+                                </div>
+                             </div>
+                           )}
+                        </div>
                         <ActionSlider label="Slide to Arrive" successLabel="Arrived ✓" disabled={!isWithinRange} onConfirm={reachDrop} color="bg-blue-600" />
                       </div>
                     ) : (
@@ -1054,6 +1212,29 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
                         <CheckCircle2 className="w-6 h-6" /> VERIFY & COMPLETE
                       </button>
                     )}
+
+                    <button
+                      onClick={() => {
+                         if (window.confirm("Are you sure you want to cancel this delivery? You will need to provide a reason.")) {
+                             const reason = window.prompt("Reason for cancellation / Issue:");
+                             if (reason !== null && reason.trim() !== "") {
+                                import('@food/api').then(({ deliveryAPI }) => {
+                                   deliveryAPI.rejectOrder(activeOrder.orderId || activeOrder._id, { reason })
+                                     .then(() => {
+                                        toast.success("Delivery cancelled successfully.");
+                                        setIsModalMinimized(true);
+                                     })
+                                     .catch(() => toast.error("Failed to cancel delivery."));
+                                });
+                             } else if (reason !== null) {
+                                toast.error("Reason is required to cancel delivery.");
+                             }
+                         }
+                      }}
+                      className="w-full mt-4 py-3 text-red-500 font-bold text-[10px] sm:text-xs uppercase tracking-widest bg-white/80 backdrop-blur-sm border border-red-100 hover:bg-red-50 rounded-2xl transition-colors flex justify-center items-center gap-2"
+                    >
+                      Report Issue / Cancel Delivery
+                    </button>
                   </div>
                 )}
                 {showVerification && tripStatus !== 'COMPLETED' && (

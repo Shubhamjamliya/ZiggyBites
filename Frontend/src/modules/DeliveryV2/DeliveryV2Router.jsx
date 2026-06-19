@@ -23,13 +23,13 @@ import { ProfileDocsV2 } from './pages/profile/ProfileDocsV2';
 import { SupportTicketsV2 } from './pages/help/SupportTicketsV2';
 import { CreateSupportTicketV2 } from './pages/help/CreateSupportTicketV2';
 import { ViewSupportTicketV2 } from './pages/help/ViewSupportTicketV2';
+import { PublicSupportV2 } from './pages/help/PublicSupportV2';
 import ShowIdCardV2 from './pages/help/ShowIdCardV2';
 import { PocketDetailsV2 } from './pages/pocket/PocketDetailsV2';
 import { ProfileDetailsV2 } from './pages/profile/ProfileDetailsV2';
 import TermsAndConditionsV2 from './pages/TermsAndConditionsV2';
 import PrivacyPolicyV2 from './pages/PrivacyPolicyV2';
 import NotificationsV2 from './pages/NotificationsV2';
-import DeliverySupportPage from './pages/DeliverySupportPage';
 
 
 
@@ -45,7 +45,6 @@ const DeliveryV2Router = () => {
         <Route path="signup/details" element={<SignupStep1 />} />
         <Route path="signup/documents" element={<SignupStep2 />} />
         <Route path="terms" element={<TermsAndConditionsV2 />} />
-        <Route path="support" element={<DeliverySupportPage />} />
         <Route path="profile/privacy" element={<PrivacyPolicyV2 />} />
         <Route path="profile/terms" element={<TermsAndConditionsV2 />} />
 
@@ -61,6 +60,7 @@ const DeliveryV2Router = () => {
         <Route path="/profile/documents" element={<ProtectedRoute><ProfileDocsV2 /></ProtectedRoute>} />
         
         {/* Support Systems */}
+        <Route path="/support" element={<PublicSupportV2 />} />
         <Route path="/help/tickets" element={<ProtectedRoute><SupportTicketsV2 /></ProtectedRoute>} />
         <Route path="/help/tickets/create" element={<ProtectedRoute><CreateSupportTicketV2 /></ProtectedRoute>} />
         <Route path="/help/tickets/:ticketId" element={<ProtectedRoute><ViewSupportTicketV2 /></ProtectedRoute>} />

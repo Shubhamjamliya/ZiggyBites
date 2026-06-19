@@ -11,12 +11,13 @@ import FilterPanel from "@food/components/admin/orders/FilterPanel"
 import ViewOrderDialog from "@food/components/admin/orders/ViewOrderDialog"
 import SettingsDialog from "@food/components/admin/orders/SettingsDialog"
 import RefundModal from "@food/components/admin/orders/RefundModal"
+import AssignDeliveryModal from "@food/components/admin/AssignDeliveryModal"
 import { useOrdersManagement } from "@food/components/admin/orders/useOrdersManagement"
 import { Loader2 } from "lucide-react"
 import { OrdersDashboardSkeleton } from "@food/components/ui/loading-skeletons"
 import { useDelayedLoading } from "@food/hooks/useDelayedLoading"
-const alertSound = "/alert.mp3"
-const originalSound = "/original.mp3"
+import alertSound from "@food/assets/audio/zomato_sms.mp3"
+import originalSound from "@food/assets/audio/original.mp3"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -47,6 +48,8 @@ export default function OrdersPage({ statusKey = "all" }) {
   const [deletingOrderId, setDeletingOrderId] = useState(null)
   const [refundModalOpen, setRefundModalOpen] = useState(false)
   const [selectedOrderForRefund, setSelectedOrderForRefund] = useState(null)
+  const [assignDeliveryModalOpen, setAssignDeliveryModalOpen] = useState(false)
+  const [selectedOrderForAssign, setSelectedOrderForAssign] = useState(null)
   const showLoadingSkeleton = useDelayedLoading(isLoading, { delay: 120, minDuration: 360 })
   const seenOrderIdsRef = useRef(new Set())
   const isFirstLoadRef = useRef(true)
@@ -70,10 +73,7 @@ export default function OrdersPage({ statusKey = "all" }) {
   }, [])
 
   const playDeliveryStyleBuzz = useCallback(async () => {
-    const selectedSound = localStorage.getItem("delivery_alert_sound") || "zomato_tone"
-    const soundFile = selectedSound === "original"
-      ? resolveAudioSource(originalSound, "admin-original")
-      : resolveAudioSource(alertSound, "admin-alert")
+    const soundFile = resolveAudioSource(alertSound, "admin-alert")
 
     try {
       if (!notificationAudioRef.current) {
@@ -204,7 +204,7 @@ export default function OrdersPage({ statusKey = "all" }) {
         requireInteraction: true,
         silent: false,
         vibrate: [200, 100, 200, 100, 300],
-        icon: "/favicon.ico",
+        icon: "/logo.png",
         data: { targetUrl: "/admin/orders/all" },
       }
 
@@ -244,10 +244,7 @@ export default function OrdersPage({ statusKey = "all" }) {
         fallbackAudioRef.current.muted = false
 
         if (!notificationAudioRef.current) {
-          const selectedSound = localStorage.getItem("delivery_alert_sound") || "zomato_tone"
-          const soundFile = selectedSound === "original"
-            ? resolveAudioSource(originalSound, "admin-original")
-            : resolveAudioSource(alertSound, "admin-alert")
+          const soundFile = resolveAudioSource(alertSound, "admin-alert")
           notificationAudioRef.current = new Audio(soundFile)
           notificationAudioRef.current.preload = "auto"
           notificationAudioRef.current.volume = 1
@@ -456,8 +453,10 @@ export default function OrdersPage({ statusKey = "all" }) {
 
 
       let displayStatus = order.orderStatus
-      if (!backendStatus || backendStatus === "created" || backendStatus === "confirmed") {
+      if (!backendStatus || backendStatus === "created") {
         displayStatus = "Pending"
+      } else if (backendStatus === "confirmed") {
+        displayStatus = "Accepted"
       } else if (backendStatus === "preparing" || backendStatus === "ready_for_pickup") {
         displayStatus = "Processing"
       } else if (backendStatus === "picked_up") {
@@ -593,35 +592,45 @@ export default function OrdersPage({ statusKey = "all" }) {
 
     const handleIncomingRealtimeOrder = (payload = {}) => {
       const orderId = payload?.orderId || payload?.orderMongoId || ""
-      if (!orderId) {
-        activeOrderAlertRef.current = payload || { orderId: "socket-new-order" }
-        playDefaultRing()
-        startAlertLoop()
-        toast.info("New order received")
-        showBrowserNotification(
-          "New order received",
-          "A new order arrived",
-          `admin-order-socket-${Date.now()}`,
-        )
-        fetchOrders({ silent: true, withRingCheck: false })
-        return
+      
+      // 1. Mark as seen immediately so polling doesn't trigger a duplicate
+      if (orderId) {
+        seenOrderIdsRef.current.add(orderId)
       }
 
       const now = Date.now()
-      const lastHandledAt = recentRealtimeOrderRef.current.get(orderId) || 0
-      if (now - lastHandledAt < 8000) return
-      recentRealtimeOrderRef.current.set(orderId, now)
+      
+      // 2. Inter-tab sound coordination: only play sound if no other tab did in the last 2 seconds
+      const lastSoundAt = Number(localStorage.getItem("admin_last_notification_sound_at") || 0)
+      const shouldPlaySound = now - lastSoundAt > 2000
+
+      if (orderId) {
+        const lastHandledAt = recentRealtimeOrderRef.current.get(orderId) || 0
+        if (now - lastHandledAt < 8000) return
+        recentRealtimeOrderRef.current.set(orderId, now)
+      }
 
       const title = "New order received"
       const body = payload?.restaurantName
-        ? `${payload.restaurantName} • ${orderId}`
-        : `Order ${orderId}`
+        ? `${payload.restaurantName} • ${orderId || "New"}`
+        : `Order ${orderId || "New"}`
 
       activeOrderAlertRef.current = payload || { orderId }
-      playDefaultRing()
-      startAlertLoop()
+      
+      if (shouldPlaySound) {
+        localStorage.setItem("admin_last_notification_sound_at", String(now))
+        playDefaultRing()
+        startAlertLoop()
+      }
+
       toast.info(title, { description: body })
-      showBrowserNotification(title, body, `admin-order-${orderId}`)
+
+      // 3. Only show Browser Notification if the tab is HIDDEN
+      // This avoids double notifications with the app's Toast + FCM Push
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+        showBrowserNotification(title, body, `admin-order-${orderId || now}`)
+      }
+      
       fetchOrders({ silent: true, withRingCheck: false })
     }
 
@@ -895,6 +904,11 @@ export default function OrdersPage({ statusKey = "all" }) {
     }
   }
 
+  const handleAssignDelivery = (order) => {
+    setSelectedOrderForAssign(order)
+    setAssignDeliveryModalOpen(true)
+  }
+
   if (showLoadingSkeleton) {
     return (
       <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-slate-50 p-4 lg:p-6">
@@ -935,6 +949,7 @@ export default function OrdersPage({ statusKey = "all" }) {
         isOpen={isViewOrderOpen}
         onOpenChange={setIsViewOrderOpen}
         order={selectedOrder}
+        onAssignDelivery={handleAssignDelivery}
       />
       <RefundModal
         isOpen={refundModalOpen}
@@ -942,6 +957,18 @@ export default function OrdersPage({ statusKey = "all" }) {
         order={selectedOrderForRefund}
         onConfirm={handleRefundConfirm}
         isProcessing={processingRefund !== null}
+      />
+      <AssignDeliveryModal
+        isOpen={assignDeliveryModalOpen}
+        onClose={() => {
+          setAssignDeliveryModalOpen(false)
+          setSelectedOrderForAssign(null)
+        }}
+        orderId={selectedOrderForAssign?.id || selectedOrderForAssign?.orderId}
+        onAssigned={() => {
+          fetchOrders({ silent: true, withRingCheck: false })
+          setIsViewOrderOpen(false)
+        }}
       />
       <OrdersTable 
         orders={filteredOrders} 
@@ -952,6 +979,7 @@ export default function OrdersPage({ statusKey = "all" }) {
         onDeleteOrder={statusKey === "all" ? handleDeleteOrder : undefined}
         onAcceptOrder={statusKey === "all" ? handleAcceptOrder : undefined}
         onRejectOrder={statusKey === "all" ? handleRejectOrder : undefined}
+        onAssignDelivery={handleAssignDelivery}
         actionLoadingOrderId={processingActionOrderId}
         deletingOrderId={deletingOrderId}
       />

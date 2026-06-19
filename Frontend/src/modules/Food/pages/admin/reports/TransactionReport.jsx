@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from "react"
+import { useNavigate } from "react-router-dom"
 import { BarChart3, ChevronDown, Info, Settings, FileText, FileSpreadsheet, Code, Loader2 } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@food/components/ui/dropdown-menu"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@food/components/ui/dialog"
@@ -31,16 +32,17 @@ export default function TransactionReport() {
     refundedTransaction: 0,
     adminEarning: 0,
     restaurantEarning: 0,
-    deliverymanEarning: 0
+    deliverymanEarning: 0,
+    adminEarningBreakdown: {}
   })
   const [filters, setFilters] = useState({
     zone: "All Zones",
     restaurant: "All restaurants",
     time: "All Time",
   })
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [zones, setZones] = useState([])
   const [restaurants, setRestaurants] = useState([])
+  const navigate = useNavigate()
 
   // Fetch zones and restaurants for filters
   useEffect(() => {
@@ -106,7 +108,8 @@ export default function TransactionReport() {
             refundedTransaction: 0,
             adminEarning: 0,
             restaurantEarning: 0,
-            deliverymanEarning: 0
+            deliverymanEarning: 0,
+            adminEarningBreakdown: {}
           })
         } else {
           setTransactions([])
@@ -178,7 +181,7 @@ export default function TransactionReport() {
     if (['pending', 'created', 'authorized', 'cod_pending'].includes(normalized)) {
       return 'bg-yellow-100 text-yellow-700'
     }
-    if (['failed', 'refunded', 'cancelled', 'cancelled_by_admin', 'cancelled_by_user', 'cancelled_by_restaurant'].includes(normalized)) {
+    if (['failed', 'refunded', 'cancelled', 'cancelled_by_admin', 'cancelled_by_user', 'cancelled_by_restaurant', 'dead'].includes(normalized)) {
       return 'bg-red-100 text-red-700'
     }
 
@@ -316,7 +319,11 @@ export default function TransactionReport() {
           {/* Right Column - Small Cards */}
           <div className="space-y-3">
             {/* Admin Earning */}
-            <div className="rounded-lg shadow-sm border border-slate-200 p-3" style={{ backgroundColor: '#f1f5f9' }}>
+            <div 
+              className="rounded-lg shadow-sm border border-slate-200 p-3 cursor-pointer hover:shadow-md transition-all" 
+              style={{ backgroundColor: '#f1f5f9' }}
+              onClick={() => navigate('/admin/food/admin-earning-report', { state: { filters, searchQuery } })}
+            >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center">
@@ -420,12 +427,6 @@ export default function TransactionReport() {
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-              <button 
-                onClick={() => setIsSettingsOpen(true)}
-                className="p-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 transition-all"
-              >
-                <Settings className="w-3 h-3" />
-              </button>
             </div>
           </div>
 
@@ -512,31 +513,6 @@ export default function TransactionReport() {
           </div>
         </div>
       </div>
-
-      {/* Settings Dialog */}
-      <Dialog open={isSettingsOpen} onOpenChange={setIsSettingsOpen}>
-        <DialogContent className="max-w-md bg-white p-0 opacity-0 data-[state=open]:opacity-100 data-[state=closed]:opacity-0 transition-opacity duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0 data-[state=open]:scale-100 data-[state=closed]:scale-100">
-          <DialogHeader className="px-6 pt-6 pb-4">
-            <DialogTitle className="flex items-center gap-2">
-              <Settings className="w-5 h-5" />
-              Report Settings
-            </DialogTitle>
-          </DialogHeader>
-          <div className="px-6 pb-6">
-            <p className="text-sm text-slate-700">
-              Transaction report settings and preferences will be available here.
-            </p>
-          </div>
-          <div className="px-6 pb-6 flex items-center justify-end">
-            <button
-              onClick={() => setIsSettingsOpen(false)}
-              className="px-4 py-2 text-sm font-medium rounded-lg bg-emerald-500 text-white hover:bg-emerald-600 transition-all shadow-md"
-            >
-              Close
-            </button>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }

@@ -12,6 +12,9 @@ import SearchOverlay from "./SearchOverlay"
 import BottomNavigation from "./BottomNavigation"
 import DesktopNavbar from "./DesktopNavbar"
 import { useUserNotifications } from "../../hooks/useUserNotifications"
+import { useLocation as useFoodLocation } from "@food/hooks/useLocation"
+import { useZone } from "@food/hooks/useZone"
+import LocationGuard from "./LocationGuard"
 
 // Create SearchOverlay context with default value
 const SearchOverlayContext = createContext({
@@ -113,7 +116,7 @@ export default function UserLayout() {
   // Note: Authentication checks and redirects are handled by ProtectedRoute components
   // UserLayout should not interfere with authentication redirects
 
-  // Show bottom navigation on the primary mobile app tabs.
+  // Show bottom navigation only on home page, dining page, under-250 page, and profile page
   const path = location.pathname.startsWith("/food")
     ? location.pathname.substring(5) || "/"
     : location.pathname
@@ -122,41 +125,42 @@ export default function UserLayout() {
 
   const isProfileRoot =
     normalizedPath === "/profile" ||
-    normalizedPath === "/user/profile" ||
-    normalizedPath.startsWith("/user/profile/")
+    normalizedPath === "/user/profile"
 
-  const isSubscriptionRoute =
-    normalizedPath === "/user/choose-meal" ||
-    normalizedPath === "/user/subscription-plans" ||
-    normalizedPath === "/user/checkout"
+  const { location: foodLocation } = useFoodLocation()
+  const { isOutOfService } = useZone(foodLocation)
 
-  const isHistoryRoute =
-    normalizedPath === "/user/orders" ||
-    normalizedPath.startsWith("/user/orders/")
-
-  const showBottomNav = normalizedPath === "/" ||
+  const showBottomNav = !isOutOfService && (normalizedPath === "/" ||
     normalizedPath === "/user" ||
-    isSubscriptionRoute ||
-    isHistoryRoute ||
+    normalizedPath === "/dining" ||
+    normalizedPath === "/user/dining" ||
+    normalizedPath === "/under-250" ||
+    normalizedPath === "/user/under-250" ||
+    normalizedPath === "/orders" ||
+    normalizedPath === "/user/orders" ||
     isProfileRoot ||
-    normalizedPath === "" // Handle empty string case for root relative to /food
+    normalizedPath === "") // Handle empty string case for root relative to /food
+
+  const isUnder250 = normalizedPath === "/under-250" || normalizedPath === "/user/under-250"
 
   return (
     <div className="min-h-screen bg-[#f5f5f5] dark:bg-[#0a0a0a] transition-colors duration-200">
+      
       <CartProvider>
         <ProfileProvider>
           <OrdersProvider>
             <SearchOverlayProvider>
               <LocationSelectorProvider>
-                {/* <Navbar /> */}
                 {/* Desktop Navbar - Hidden on mobile, visible on medium+ screens */}
                 <div className="hidden md:block">
-                  {showBottomNav && <DesktopNavbar />}
+                  {showBottomNav && <DesktopNavbar showLogo={!isUnder250} />}
                 </div>
-                <LocationPrompt />
-                <main className={showBottomNav ? "md:pt-40" : ""}>
-                  <Outlet />
-                </main>
+                {/* <LocationPrompt /> */}
+                <LocationGuard>
+                  <main className={showBottomNav ? "md:pt-40" : ""}>
+                    <Outlet />
+                  </main>
+                </LocationGuard>
                 {showBottomNav && <BottomNavigation />}
               </LocationSelectorProvider>
             </SearchOverlayProvider>

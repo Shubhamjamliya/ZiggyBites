@@ -13,7 +13,7 @@ export default function SignupStep1() {
   const navigate = useNavigate()
   const goBack = useDeliveryBackNavigation()
   const [formData, setFormData] = useState(() => {
-    const saved = sessionStorage.getItem("deliverySignupDetails")
+    const saved = localStorage.getItem("deliverySignupDetails")
     const base = {
       name: "",
       phone: "",
@@ -64,7 +64,7 @@ export default function SignupStep1() {
 
   // Save data to session storage whenever formData changes
   useEffect(() => {
-    sessionStorage.setItem("deliverySignupDetails", JSON.stringify(formData))
+    localStorage.setItem("deliverySignupDetails", JSON.stringify(formData))
   }, [formData])
 
   const handleChange = (e) => {
@@ -81,7 +81,7 @@ export default function SignupStep1() {
     }
 
     if (name === "vehicleNumber") {
-      updatedValue = updatedValue.slice(0, 10)
+      updatedValue = updatedValue.replace(/[^A-Z0-9]/g, "").slice(0, 10)
     }
 
     if (name === "drivingLicenseNumber") {
@@ -159,9 +159,7 @@ export default function SignupStep1() {
       newErrors.vehicleNumber = "Invalid Indian vehicle number format (e.g., MH12AB1234)"
     }
 
-    if (!formData.drivingLicenseNumber.trim()) {
-      newErrors.drivingLicenseNumber = "Driving license number is required"
-    } else if (!/^[A-Z]{2}[0-9]{2}[0-9]{4}[0-9]{7}$/.test(formData.drivingLicenseNumber)) {
+    if (formData.drivingLicenseNumber.trim() && !/^[A-Z]{2}[0-9]{2}[0-9]{4}[0-9]{7}$/.test(formData.drivingLicenseNumber)) {
       newErrors.drivingLicenseNumber = "Invalid DL format (e.g., MH1220110012345)"
     }
 
@@ -208,7 +206,7 @@ export default function SignupStep1() {
         panNumber: formData.panNumber.trim().toUpperCase(),
         aadharNumber: formData.aadharNumber.replace(/\s/g, "")
       }
-      sessionStorage.setItem("deliverySignupDetails", JSON.stringify(details))
+      localStorage.setItem("deliverySignupDetails", JSON.stringify(details))
       toast.success("Details saved")
       navigate("/food/delivery/signup/documents")
     } catch (error) {
@@ -384,7 +382,7 @@ export default function SignupStep1() {
           {/* Driving License Number */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Driving License Number <span className="text-red-500">*</span>
+              Driving License Number (Optional)
             </label>
             <input
               type="text"

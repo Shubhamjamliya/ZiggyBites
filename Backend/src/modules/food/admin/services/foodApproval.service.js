@@ -174,3 +174,32 @@ export async function rejectFoodItem(id, reason) {
     return updated;
 }
 
+
+export async function bulkApproveFoodItems(ids) {
+    if (!Array.isArray(ids) || ids.length === 0) {
+        throw new ValidationError('A list of IDs is required');
+    }
+
+    const results = {
+        successCount: 0,
+        errorCount: 0,
+        errors: []
+    };
+
+    for (const id of ids) {
+        try {
+            const updated = await approveFoodItem(id);
+            if (updated) {
+                results.successCount++;
+            } else {
+                results.errorCount++;
+                results.errors.push({ id, message: 'Item not found or already processed' });
+            }
+        } catch (err) {
+            results.errorCount++;
+            results.errors.push({ id, message: err.message });
+        }
+    }
+
+    return results;
+}

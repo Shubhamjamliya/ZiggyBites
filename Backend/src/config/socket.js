@@ -119,6 +119,7 @@ export const initSocket = async (server) => {
         if (userId && role) {
             if (role === 'RESTAURANT') socket.join(roomNames.restaurant(userId));
             if (role === 'USER') socket.join(roomNames.user(userId));
+            if (role === 'ADMIN') socket.join('admin'); // Admin panel broadcasts
             if (role === 'DELIVERY_PARTNER') {
                 socket.join(roomNames.delivery(userId));
                 socket.join('all_delivery'); // Global delivery broadcast room
@@ -129,6 +130,14 @@ export const initSocket = async (server) => {
                 });
             }
         }
+
+        // Generic joinRoom (used by Admin bulk upload page)
+        socket.on('joinRoom', (roomName) => {
+            if (typeof roomName === 'string' && roomName.trim()) {
+                socket.join(roomName.trim());
+                logger.info(`Socket ${socket.id} (${role}:${userId}) joined room: ${roomName.trim()}`);
+            }
+        });
 
         // Explicit join (used by existing restaurant client hook).
         socket.on('join-restaurant', (restaurantId) => {
@@ -357,12 +366,40 @@ export const initSocket = async (server) => {
                 });
               }
             }
+
+            if (
+              role === 'DELIVERY_PARTNER' &&
+              Array.isArray(state.pendingOffers) &&
+              state.pendingOffers.length > 0
+            ) {
+              logDeliverySocket('Resync recovered pending offers', {
+                socketId: socket.id,
+                deliveryPartnerId: String(userId || ''),
+                pendingOfferCount: state.pendingOffers.length,
+              });
+
+              socket.emit('pending_offers', {
+                offers: state.pendingOffers,
+                count: state.pendingOffers.length,
+                recoveredAt: Date.now(),
+              });
+
+              for (const offer of state.pendingOffers) {
+                socket.emit('new_order_available', {
+                  ...offer,
+                  recovered: true,
+                  recoveredAt: Date.now(),
+                });
+              }
+            }
+
             socket.emit('resync_complete', { timestamp: Date.now() });
             if (role === 'DELIVERY_PARTNER') {
               logDeliverySocket('Resync complete', {
                 socketId: socket.id,
                 deliveryPartnerId: String(userId || ''),
                 hasActiveOrder: Boolean(state.activeOrder),
+                pendingOfferCount: Array.isArray(state.pendingOffers) ? state.pendingOffers.length : 0,
               });
             }
           } catch (err) {

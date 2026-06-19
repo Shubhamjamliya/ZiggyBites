@@ -1,4 +1,4 @@
-﻿import mongoose from 'mongoose';
+import mongoose from 'mongoose';
 import { FoodOrder } from '../models/order.model.js';
 import { FoodRestaurant } from '../../restaurant/models/restaurant.model.js';
 import { FoodFeeSettings } from '../../admin/models/feeSettings.model.js';
@@ -6,24 +6,36 @@ import { FoodOffer } from '../../admin/models/offer.model.js';
 import { FoodOfferUsage } from '../../admin/models/offerUsage.model.js';
 import { ValidationError } from '../../../../core/auth/errors.js';
 import { haversineKm } from './order.helpers.js';
-import {
-  computeSubscriptionOrderAdjustment,
-  getApplicableActiveSubscription,
-} from '../../subscription/services/subscription.service.js';
 
 export async function calculateOrderPricing(userId, dto) {
   const restaurant = await FoodRestaurant.findById(dto.restaurantId)
-    .select("status location restaurantName name")
+    .select("status location itemDiscounts")
     .lean();
   if (!restaurant) throw new ValidationError("Restaurant not found");
   if (restaurant.status !== "approved")
     throw new ValidationError("Restaurant not available");
 
   const items = Array.isArray(dto.items) ? dto.items : [];
-  const subtotal = items.reduce(
-    (sum, it) => sum + (Number(it.price) || 0) * (Number(it.quantity) || 1),
-    0,
-  );
+  let itemDiscountTotal = 0;
+  let subtotal = 0;
+  let eligibleSubtotalForCoupon = 0;
+
+  items.forEach((it) => {
+    let price = Number(it.price) || 0;
+    const qty = Number(it.quantity) || 1;
+    let hasItemDiscount = false;
+    
+    // The frontend already sends the discounted price in it.price.
+    // If we need to calculate itemDiscountTotal, we should rely on originalPrice sent by frontend,
+    // but since it's not sent, we skip re-applying the discount to avoid double discounting.
+    // In a future secure update, backend should fetch item prices from DB and apply discounts here.
+    
+    subtotal += price * qty;
+    if (!hasItemDiscount) {
+      eligibleSubtotalForCoupon += price * qty;
+    }
+  });
+  itemDiscountTotal = Math.floor(itemDiscountTotal);
 
   const feeDoc = await FoodFeeSettings.findOne({ isActive: true })
     .sort({ createdAt: -1 })
@@ -32,7 +44,6 @@ export async function calculateOrderPricing(userId, dto) {
     deliveryFee: 25,
     deliveryFeeRanges: [],
     freeDeliveryUpTo: 0,
-    freeDeliveryThreshold: 149,
     platformFee: 5,
     packagingFee: 0,
     gstRate: 5,
@@ -42,7 +53,6 @@ export async function calculateOrderPricing(userId, dto) {
   const platformFee = feeSettings.platformFee != null ? Number(feeSettings.platformFee) : 0;
 
   const freeUpTo = Number(feeSettings.freeDeliveryUpTo || 0);
-  const freeThreshold = Number(feeSettings.freeDeliveryThreshold || 0);
   let distanceKm = null;
   if (
     restaurant?.location?.coordinates?.length === 2 &&
@@ -59,12 +69,6 @@ export async function calculateOrderPricing(userId, dto) {
     Number.isFinite(freeUpTo) &&
     freeUpTo > 0 &&
     subtotal >= freeUpTo
-  ) {
-    deliveryFee = 0;
-  } else if (
-    Number.isFinite(freeThreshold) &&
-    freeThreshold > 0 &&
-    subtotal >= freeThreshold
   ) {
     deliveryFee = 0;
   } else {
@@ -116,20 +120,51 @@ export async function calculateOrderPricing(userId, dto) {
   }
 
   const gstRate = feeSettings.gstRate != null ? Number(feeSettings.gstRate) : 0;
-  const tax =
-    Number.isFinite(gstRate) && gstRate > 0
-      ? Math.round(subtotal * (gstRate / 100))
-      : 0;
+  const gstOnDeliveryFee = feeSettings.gstOnDeliveryFee != null ? Number(feeSettings.gstOnDeliveryFee) : 0;
+  const gstOnPlatformFee = feeSettings.gstOnPlatformFee != null ? Number(feeSettings.gstOnPlatformFee) : 0;
+  const gstOnPackagingFee = feeSettings.gstOnPackagingFee != null ? Number(feeSettings.gstOnPackagingFee) : 0;
+
+  const itemTax = (Number.isFinite(gstRate) && gstRate > 0) ? (subtotal * (gstRate / 100)) : 0;
+  const deliveryTax = (Number.isFinite(gstOnDeliveryFee) && gstOnDeliveryFee > 0) ? (deliveryFee * (gstOnDeliveryFee / 100)) : 0;
+  const platformTax = (Number.isFinite(gstOnPlatformFee) && gstOnPlatformFee > 0) ? (platformFee * (gstOnPlatformFee / 100)) : 0;
+  const packagingTax = (Number.isFinite(gstOnPackagingFee) && gstOnPackagingFee > 0) ? (packagingFee * (gstOnPackagingFee / 100)) : 0;
+
+  const tax = Math.round(itemTax + deliveryTax + platformTax + packagingTax);
 
   let discount = 0;
   let appliedCoupon = null;
+  let couponError = null;
   const codeRaw = dto.couponCode
     ? String(dto.couponCode).trim().toUpperCase()
     : "";
 
   if (codeRaw) {
     const now = new Date();
-    const offer = await FoodOffer.findOne({ couponCode: codeRaw }).lean();
+    let offer = await FoodOffer.findOne({ couponCode: codeRaw }).lean();
+
+    if (!offer) {
+      const { default: Promocode } = await import('../../../../models/Promocode.js');
+      const promo = await Promocode.findOne({ code: codeRaw, restaurantId: dto.restaurantId }).lean();
+      if (promo) {
+        offer = {
+          _id: promo._id,
+          status: promo.isActive ? "active" : "inactive",
+          startDate: promo.startDate,
+          endDate: promo.expiryDate,
+          restaurantScope: "selected",
+          restaurantId: promo.restaurantId,
+          minOrderValue: promo.minOrderAmount || 0,
+          usageLimit: promo.usageLimit || 0,
+          usedCount: promo.usageCount || 0,
+          discountType: promo.discountType === 'PERCENTAGE' ? 'percentage' : 'flat',
+          discountValue: promo.discountValue,
+          maxDiscount: promo.maxDiscountAmount || 0,
+          perUserLimit: 0,
+          customerScope: "all"
+        };
+      }
+    }
+
     if (offer) {
       const statusOk = offer.status === "active";
       const startOk = !offer.startDate || now >= new Date(offer.startDate);
@@ -182,95 +217,61 @@ export async function calculateOrderPricing(userId, dto) {
         firstOrderOk;
 
       if (allowed) {
-        if (offer.discountType === "percentage") {
-          const raw = subtotal * (Number(offer.discountValue) / 100);
-          const capped = Number(offer.maxDiscount)
-            ? Math.min(raw, Number(offer.maxDiscount))
-            : raw;
-          discount = Math.max(0, Math.min(subtotal, Math.floor(capped)));
+        if (eligibleSubtotalForCoupon <= 0) {
+          couponError = "This coupon is not applicable on discounted items. Please try other items.";
         } else {
-          discount = Math.max(
-            0,
-            Math.min(subtotal, Math.floor(Number(offer.discountValue) || 0)),
-          );
+          if (offer.discountType === "percentage") {
+            const raw = eligibleSubtotalForCoupon * (Number(offer.discountValue) / 100);
+            const capped = Number(offer.maxDiscount)
+              ? Math.min(raw, Number(offer.maxDiscount))
+              : raw;
+            discount = Math.max(0, Math.min(eligibleSubtotalForCoupon, Math.floor(capped)));
+          } else {
+            discount = Math.max(
+              0,
+              Math.min(eligibleSubtotalForCoupon, Math.floor(Number(offer.discountValue) || 0)),
+            );
+          }
+          appliedCoupon = { code: codeRaw, discount };
         }
-        appliedCoupon = { code: codeRaw, discount };
+      } else {
+        if (!minOk) {
+          couponError = `Minimum order value of ${offer.minOrderValue} required for this coupon.`;
+        }
       }
+    } else {
+      couponError = "Invalid or expired coupon code.";
     }
   }
 
-  const total = Math.max(
-    0,
-    subtotal + packagingFee + deliveryFee + platformFee + tax - discount,
-  );
-
-  let subscriptionAdjustment = null;
-  if (userId && dto.restaurantId) {
-    const subscription = await getApplicableActiveSubscription(userId, dto.restaurantId, {
-      restaurantName: restaurant?.restaurantName || restaurant?.name || dto.restaurantName,
-    });
-    console.log(
-      "[OrderPricing] subscription lookup",
-      JSON.stringify(
-        {
-          userId: String(userId || ""),
-          restaurantId: String(dto.restaurantId || ""),
-          restaurantName:
-            restaurant?.restaurantName || restaurant?.name || dto.restaurantName || "",
-          matchedSubscription: subscription
-            ? {
-                id: String(subscription._id || ""),
-                restaurantId: String(subscription.restaurantId || ""),
-                status: subscription.status,
-                startDate: subscription.startDate,
-                endDate: subscription.endDate,
-                totalCredits: subscription.totalCredits,
-                usedCredits: subscription.usedCredits,
-                creditPerOrder: subscription.creditPerOrder,
-              }
-            : null,
-        },
-        null,
-        2,
-      ),
-    );
-    if (subscription) {
-      subscriptionAdjustment = computeSubscriptionOrderAdjustment(subscription, total);
-      console.log(
-        "[OrderPricing] subscription adjustment",
-        JSON.stringify(
-          {
-            orderTotal: total,
-            adjustment: subscriptionAdjustment,
-          },
-          null,
-          2,
-        ),
-      );
-    }
-  }
+  const couponDiscount = discount;
+  const totalDiscount = couponDiscount;
+  const totalBeforeDiscount = subtotal + deliveryFee + tax + platformFee + packagingFee;
+  const total = Math.max(0, totalBeforeDiscount - totalDiscount);
 
   return {
     pricing: {
       subtotal,
       tax,
+      taxBreakdown: {
+        itemTax,
+        deliveryTax,
+        platformTax,
+        packagingTax
+      },
       packagingFee,
       deliveryFee,
       deliveryFeeBreakdown: deliveryFeeBreakdown || undefined,
       freeDeliveryUpTo: Number.isFinite(freeUpTo) ? freeUpTo : undefined,
       platformFee,
-      discount,
-      originalTotal: total,
-      payableTotal: subscriptionAdjustment?.payableTotal ?? total,
-      subscriptionCreditApplied:
-        subscriptionAdjustment?.subscriptionCreditApplied ?? 0,
-      subscriptionWalletCredit:
-        subscriptionAdjustment?.walletCreditAmount ?? 0,
+      discount: totalDiscount,
+      itemDiscount: itemDiscountTotal > 0 ? itemDiscountTotal : undefined,
+      couponDiscount: couponDiscount > 0 ? couponDiscount : undefined,
       total,
       currency: "INR",
       couponCode: appliedCoupon?.code || codeRaw || null,
       appliedCoupon,
-      subscriptionAdjustment,
+      couponError,
     },
   };
 }

@@ -2,7 +2,8 @@ import { sendResponse, sendError } from '../../../../utils/response.js';
 import {
     listPendingFoodApprovals,
     approveFoodItem,
-    rejectFoodItem
+    rejectFoodItem,
+    bulkApproveFoodItems
 } from '../services/foodApproval.service.js';
 
 export async function getPendingFoodApprovals(req, res, next) {
@@ -34,3 +35,12 @@ export async function rejectFoodItemController(req, res, next) {
     }
 }
 
+
+export async function bulkApproveFoodItemsController(req, res, next) {
+    try {
+        const results = await bulkApproveFoodItems(req.body?.ids);
+        return sendResponse(res, 200, 'Bulk approval process completed', results);
+    } catch (error) {
+        next(error);
+    }
+}

@@ -35,23 +35,15 @@ const foodLandingSettingsSchema = new mongoose.Schema(
             type: Boolean,
             default: true
         },
-        showSplashScreen: {
-            type: Boolean,
-            default: true
-        },
-        showLocationPrompt: {
-            type: Boolean,
-            default: true
-        },
         under250PriceLimit: {
             type: Number,
             default: 250,
             min: 1,
             max: 10000
         },
-        festBannerVideoUrl: {
-            type: String,
-            default: ''
+        festBannerImages: {
+            type: [String],
+            default: []
         }
     },
     {

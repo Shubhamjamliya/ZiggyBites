@@ -3,6 +3,7 @@ import { ValidationError } from '../../../../core/auth/errors.js';
 import { FoodItem } from '../../admin/models/food.model.js';
 import { FoodCategory } from '../../admin/models/category.model.js';
 import { FoodRestaurant } from '../models/restaurant.model.js';
+import { uploadImageBuffer } from '../../../../services/cloudinary.service.js';
 import {
     extractRawFoodVariants,
     getFoodDisplayPrice,
@@ -14,7 +15,6 @@ import {
     categoryAllowsFoodType,
     GLOBAL_CATEGORY_FILTER
 } from '../../shared/categoryWorkflow.js';
-import { logger } from '../../../../utils/logger.js';
 
 const toStr = (v) => (v != null ? String(v).trim() : '');
 const APPROVED_CATEGORY_FILTER = [
@@ -31,25 +31,66 @@ const normalizeFoodType = (v) => {
     return 'Non-Veg';
 };
 
-const normalizeFoodTag = (v) => String(v || '').trim() === 'Healthy' ? 'Healthy' : 'Normal';
+const CLOUDINARY_HOST_RE = /res\.cloudinary\.com/i;
+const MAX_BULK_ITEMS = 500;
+const BULK_CONCURRENCY = 5;
+const IMAGE_UPLOAD_FOLDER = 'food/items';
 
-const normalizeNutritionInput = (input = {}) => {
-    const source = input && typeof input === 'object' ? input : {};
-    const toNonNegativeNumberOrNull = (value) => {
-        if (value === '' || value === null || value === undefined) return null;
-        const parsed = Number(value);
-        return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
-    };
-    const nutrition = {
-        calories: toNonNegativeNumberOrNull(source.calories ?? source.kcal),
-        protein: toNonNegativeNumberOrNull(source.protein),
-        fiber: toNonNegativeNumberOrNull(source.fiber ?? source.fibre),
-        carbohydrates: toNonNegativeNumberOrNull(source.carbohydrates ?? source.carbs),
-        fat: toNonNegativeNumberOrNull(source.fat),
-        weightPerServing: toNonNegativeNumberOrNull(source.weightPerServing),
-        allergens: toStr(source.allergens)
-    };
-    return Object.values(nutrition).some((value) => value !== null && value !== '') ? nutrition : undefined;
+const isCloudinaryUrl = (value) => CLOUDINARY_HOST_RE.test(String(value || ''));
+
+const shouldUploadImageUrl = (value) => {
+    const url = toStr(value);
+    if (!url) return false;
+    if (isCloudinaryUrl(url)) return false;
+    if (/^data:/i.test(url) || /^blob:/i.test(url)) return false;
+    return /^https?:\/\//i.test(url);
+};
+
+const downloadImageBuffer = async (url) => {
+    if (typeof fetch !== 'function') {
+        throw new Error('Image download is not supported in this runtime');
+    }
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
+    try {
+        const response = await fetch(url, { signal: controller.signal });
+        if (!response.ok) {
+            throw new Error(`Failed to download image (${response.status})`);
+        }
+        const arrayBuffer = await response.arrayBuffer();
+        return Buffer.from(arrayBuffer);
+    } finally {
+        clearTimeout(timeoutId);
+    }
+};
+
+const ensureCloudinaryImageUrl = async (value) => {
+    const url = toStr(value);
+    if (!url) return '';
+    if (!shouldUploadImageUrl(url)) return url;
+    const buffer = await downloadImageBuffer(url);
+    return await uploadImageBuffer(buffer, IMAGE_UPLOAD_FOLDER);
+};
+
+const asyncPool = async (limit, items, iterator) => {
+    const results = [];
+    const executing = new Set();
+
+    for (let i = 0; i < items.length; i++) {
+        const p = Promise.resolve().then(() => iterator(items[i], i));
+        results.push(p);
+        executing.add(p);
+
+        const cleanup = () => executing.delete(p);
+        p.then(cleanup).catch(cleanup);
+
+        if (executing.size >= limit) {
+            await Promise.race(executing);
+        }
+    }
+
+    return Promise.all(results);
 };
 
 const getCreateFoodPricing = (body = {}) => {
@@ -173,10 +214,23 @@ const resolveCategoryForRestaurant = async (context, body = {}) => {
             throw new ValidationError('Multiple categories share this name. Please choose a specific category.');
         }
         category = matches[0] || null;
+
+        // Automatically create category if not found by name
+        if (!category) {
+            category = await FoodCategory.create({
+                name: categoryNameRaw,
+                restaurantId: context.restaurantId,
+                createdByRestaurantId: context.restaurantId,
+                foodTypeScope: context.pureVegRestaurant ? 'Veg' : 'Both',
+                approvalStatus: 'approved',
+                isApproved: true,
+                isActive: true
+            });
+        }
     }
 
     if (!category?._id) {
-        throw new ValidationError('Category not found for this restaurant');
+        throw new ValidationError('Category lookup failed');
     }
 
     await backfillLegacyCategoryWorkflow([category]);
@@ -202,19 +256,13 @@ export async function createRestaurantFood(restaurantId, body = {}) {
     const context = await getRestaurantContext(restaurantId);
 
     const name = toStr(body.name);
-    if (!name) {
-        logger.warn(`Inventory Failure: Item name is missing (restaurantId: ${restaurantId})`);
-        throw new ValidationError('Item name is required');
-    }
-    if (name.length > 200) {
-        logger.warn(`Inventory Failure: Item name too long (restaurantId: ${restaurantId}, name: ${name})`);
-        throw new ValidationError('Item name is too long');
-    }
+    if (!name) throw new ValidationError('Item name is required');
+    if (name.length > 200) throw new ValidationError('Item name is too long');
 
     const { price, variants } = getCreateFoodPricing(body);
 
     const description = toStr(body.description);
-    const image = toStr(body.image);
+    const image = await ensureCloudinaryImageUrl(body.image || body.imageUrl || body.photoUrl || body.photo);
     const isAvailable = body.isAvailable !== false;
     const foodType = normalizeFoodType(body.foodType);
     const preparationTime = toStr(body.preparationTime);
@@ -234,8 +282,6 @@ export async function createRestaurantFood(restaurantId, body = {}) {
         variants,
         image,
         foodType,
-        tag: normalizeFoodTag(body.tag),
-        nutrition: normalizeNutritionInput(body.nutrition),
         isAvailable,
         preparationTime,
         approvalStatus: 'pending',
@@ -258,7 +304,6 @@ export async function createRestaurantFood(restaurantId, body = {}) {
         console.error('Failed to notify admins of new food approval request:', e);
     }
 
-    logger.info(`Inventory success: Added new food item ${doc._id} by restaurant ${restaurantId}`);
     return doc.toObject();
 }
 
@@ -275,14 +320,8 @@ export async function updateRestaurantFood(restaurantId, foodId, body = {}) {
 
     if (body.name !== undefined) {
         const name = toStr(body.name);
-        if (!name) {
-            logger.warn(`Inventory Failure: Item name is missing during update (restaurantId: ${restaurantId}, foodId: ${foodId})`);
-            throw new ValidationError('Item name is required');
-        }
-        if (name.length > 200) {
-            logger.warn(`Inventory Failure: Item name too long during update (restaurantId: ${restaurantId}, foodId: ${foodId})`);
-            throw new ValidationError('Item name is too long');
-        }
+        if (!name) throw new ValidationError('Item name is required');
+        if (name.length > 200) throw new ValidationError('Item name is too long');
         update.name = name;
     }
     if (body.description !== undefined) update.description = toStr(body.description);
@@ -299,8 +338,6 @@ export async function updateRestaurantFood(restaurantId, foodId, body = {}) {
 
     const targetFoodType = body.foodType !== undefined ? normalizeFoodType(body.foodType) : normalizeFoodType(existing.foodType);
     if (body.foodType !== undefined) update.foodType = targetFoodType;
-    if (body.tag !== undefined) update.tag = normalizeFoodTag(body.tag);
-    if (body.nutrition !== undefined) update.nutrition = normalizeNutritionInput(body.nutrition);
 
     if (
         body.categoryId !== undefined ||
@@ -349,6 +386,107 @@ export async function updateRestaurantFood(restaurantId, foodId, body = {}) {
         }
     }
 
-    logger.info(`Inventory success: Updated food item ${foodId} by restaurant ${restaurantId}`);
     return updated;
+}
+
+export async function bulkCreateFood(restaurantId, items = []) {
+    const context = await getRestaurantContext(restaurantId);
+    const results = {
+        successCount: 0,
+        errorCount: 0,
+        errors: [],
+        items: []
+    };
+
+    if (!Array.isArray(items) || items.length === 0) {
+        throw new ValidationError('No items provided for bulk upload');
+    }
+
+    // Limit bulk size to prevent timeout
+    if (items.length > MAX_BULK_ITEMS) {
+        throw new ValidationError(`Bulk upload limit is ${MAX_BULK_ITEMS} items per request`);
+    }
+
+    const processedItems = [];
+
+    await asyncPool(BULK_CONCURRENCY, items, async (item, index) => {
+        try {
+            const name = toStr(item.name);
+            if (!name) throw new Error('Item name is required');
+
+            const foodType = normalizeFoodType(item.foodType);
+            const { categoryObjectId, categoryName } = await resolveCategoryForRestaurant(context, {
+                categoryId: item.categoryId,
+                categoryName: item.categoryName,
+                foodType
+            });
+
+            const { price: finalPrice, variants: finalVariants } = getCreateFoodPricing(item);
+            const imageUrl = await ensureCloudinaryImageUrl(item.image || item.imageUrl || item.photoUrl || item.photo);
+
+            processedItems.push({
+                restaurantId,
+                categoryId: categoryObjectId,
+                categoryName: categoryName || '',
+                name,
+                description: toStr(item.description),
+                price: finalPrice,
+                variants: finalVariants,
+                image: imageUrl,
+                foodType,
+                isAvailable: item.isAvailable !== false,
+                preparationTime: toStr(item.preparationTime),
+                approvalStatus: 'pending',
+                requestedAt: new Date()
+            });
+
+            results.successCount++;
+        } catch (err) {
+            results.errorCount++;
+            results.errors.push({
+                index,
+                name: item?.name || 'Unknown',
+                message: err.message
+            });
+        }
+    });
+
+    if (processedItems.length > 0) {
+        const docs = await FoodItem.insertMany(processedItems);
+        results.items = docs;
+
+        // Notify admins about the bulk request
+        try {
+            const { notifyAdminsSafely } = await import('../../../../core/notifications/firebase.service.js');
+            void notifyAdminsSafely({
+                title: 'Bulk Product Approval Request 🚀',
+                body: `Restaurant has uploaded ${processedItems.length} new items for approval.`,
+                data: {
+                    type: 'approval_request',
+                    subType: 'food_bulk',
+                    restaurantId: String(restaurantId)
+                }
+            });
+        } catch (e) {
+            console.error('Failed to notify admins of bulk food upload:', e);
+        }
+    }
+
+    return results;
+}
+
+export async function deleteFood(userId, foodId) {
+    const context = await getRestaurantContext(userId);
+    if (!mongoose.Types.ObjectId.isValid(foodId)) {
+        throw new ValidationError("Invalid food ID");
+    }
+    const foodItem = await FoodItem.findOne({
+        _id: foodId,
+        restaurantId: context.restaurantId
+    });
+    if (!foodItem) {
+        throw new ValidationError("Food item not found or unauthorized");
+    }
+    await FoodItem.findByIdAndDelete(foodId);
+    return { success: true, message: "Food item deleted successfully" };
 }

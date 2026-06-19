@@ -29,13 +29,16 @@ import {
   Calendar,
   MapPin,
   LogOut,
+  Ticket,
 } from "lucide-react"
 import { Card, CardContent } from "@food/components/ui/card"
 import { DateRangeCalendar } from "@food/components/ui/date-range-calendar"
 import { clearModuleAuth, clearAuthData, getCurrentUser } from "@food/utils/auth"
-import { restaurantAPI } from "@food/api"
+import { restaurantAPI, notificationAPI } from "@food/api"
 import { firebaseAuth, ensureFirebaseInitialized } from "@food/firebase"
+import { toast } from "sonner"
 import BottomNavOrders from "@food/components/restaurant/BottomNavOrders"
+import { registerWebPushForCurrentModule } from "@food/utils/firebaseMessaging"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -322,7 +325,7 @@ function TimePickerWheel({
           <div className="border-t border-gray-200 px-4 py-4 flex justify-center">
             <button
               onClick={handleConfirm}
-              className="text-[#7e3866] hover:text-[#6a2f56] font-bold text-base transition-colors"
+              className="text-primary hover:text-[#6a2f56] font-bold text-base transition-colors"
             >
               Okay
             </button>
@@ -355,6 +358,14 @@ export default function ExploreMore() {
   const [existingSchedule, setExistingSchedule] = useState(null)
   const [deleteAccountConfirmOpen, setDeleteAccountConfirmOpen] = useState(false)
   const [isDeletingAccount, setIsDeletingAccount] = useState(false)
+  const [isTestingNotification, setIsTestingNotification] = useState(false)
+
+  useEffect(() => {
+    // Register for push notifications on mount for this module
+    registerWebPushForCurrentModule().catch(err => {
+      debugError("Failed to register push notifications:", err)
+    })
+  }, [])
 
   const STORAGE_KEY = "restaurant_schedule_off"
 
@@ -490,7 +501,30 @@ export default function ExploreMore() {
     try {
       // Call backend logout API to invalidate refresh token
       try {
-        await restaurantAPI.logout()
+        let fcmToken = null;
+        let platform = "web";
+        try {
+          if (typeof window !== "undefined") {
+            if (window.flutter_inappwebview) {
+              platform = "mobile";
+              const handlerNames = ["getFcmToken", "getFCMToken", "getPushToken", "getFirebaseToken"];
+              for (const handlerName of handlerNames) {
+                try {
+                  const t = await window.flutter_inappwebview.callHandler(handlerName, { module: "restaurant" });
+                  if (t && typeof t === "string" && t.length > 20) {
+                    fcmToken = t.trim();
+                    break;
+                  }
+                } catch (e) {}
+              }
+            } else {
+              fcmToken = localStorage.getItem("fcm_web_registered_token_restaurant") || null;
+            }
+          }
+        } catch (e) {
+          console.warn("Failed to get FCM token during logout", e);
+        }
+        await restaurantAPI.logout(null, fcmToken, platform);
       } catch (apiError) {
         // Continue with logout even if API call fails (network issues, etc.)
         debugWarn("Logout API call failed, continuing with local cleanup:", apiError)
@@ -545,73 +579,6 @@ export default function ExploreMore() {
     }
   }
 
-  const handleLogoutAllDevices = async () => {
-    if (isLoggingOut) return // Prevent multiple clicks
-
-    setIsLoggingOut(true)
-    setProfileOpen(false)
-
-    try {
-      // Call backend logout API to invalidate refresh token
-      try {
-        await restaurantAPI.logout()
-      } catch (apiError) {
-        // Continue with logout even if API call fails (network issues, etc.)
-        debugWarn("Logout API call failed, continuing with local cleanup:", apiError)
-      }
-
-      // Sign out from Firebase if restaurant logged in via Google
-      try {
-        const { signOut } = await import("firebase/auth")
-        // Firebase Auth is lazy-initialized now; ensure it before accessing firebaseAuth.currentUser
-        ensureFirebaseInitialized({ enableAuth: true, enableRealtimeDb: false })
-        const currentUser = firebaseAuth.currentUser
-        if (currentUser) {
-          await signOut(firebaseAuth)
-        }
-      } catch (firebaseError) {
-        // Continue even if Firebase logout fails
-        debugWarn("Firebase logout failed, continuing with local cleanup:", firebaseError)
-      }
-
-      // Clear auth for all modules (admin, restaurant, delivery, user)
-      clearAuthData()
-
-      // Clear any onboarding data from localStorage
-      localStorage.removeItem("restaurant_onboarding")
-
-      // Clear sessionStorage for all modules
-      sessionStorage.removeItem("restaurantAuthData")
-      sessionStorage.removeItem("adminAuthData")
-      sessionStorage.removeItem("deliveryAuthData")
-      sessionStorage.removeItem("userAuthData")
-
-      // Dispatch auth change events to notify other components
-      window.dispatchEvent(new Event("restaurantAuthChanged"))
-      window.dispatchEvent(new Event("adminAuthChanged"))
-      window.dispatchEvent(new Event("deliveryAuthChanged"))
-      window.dispatchEvent(new Event("userAuthChanged"))
-
-      // Small delay for UX, then navigate to welcome page
-      setTimeout(() => {
-        navigate("/food/restaurant/login", { replace: true })
-      }, 300)
-    } catch (error) {
-      // Even if there's an error, we should still clear local data and logout
-      debugError("Error during logout from all devices:", error)
-      clearAuthData()
-      localStorage.removeItem("restaurant_onboarding")
-      sessionStorage.removeItem("restaurantAuthData")
-      sessionStorage.removeItem("adminAuthData")
-      sessionStorage.removeItem("deliveryAuthData")
-      sessionStorage.removeItem("userAuthData")
-      window.dispatchEvent(new Event("restaurantAuthChanged"))
-      navigate("/food/restaurant/welcome", { replace: true })
-    } finally {
-      setIsLoggingOut(false)
-    }
-  }
-
   const handleDeleteAccount = async () => {
     if (isDeletingAccount) return
     setIsDeletingAccount(true)
@@ -632,6 +599,23 @@ export default function ExploreMore() {
     } finally {
       setIsDeletingAccount(false)
       setDeleteAccountConfirmOpen(false)
+    }
+  }
+
+  const handleTestNotification = async () => {
+    if (isTestingNotification) return
+    setIsTestingNotification(true)
+    try {
+      let platform = "web"
+      if (typeof window !== "undefined" && window.flutter_inappwebview) {
+        platform = "mobile"
+      }
+      await notificationAPI.sendTestNotification(platform, { contextModule: "restaurant" })
+      toast.success("Test notification sent! Check your device.")
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to send test notification")
+    } finally {
+      setIsTestingNotification(false)
     }
   }
 
@@ -759,8 +743,9 @@ export default function ExploreMore() {
   const manageOutletItems = [
     { id: 1, label: "Outlet info", icon: Info, route: "/food/restaurant/outlet-info" },
     { id: 2, label: "Outlet timings", icon: Clock, route: "/food/restaurant/outlet-timings" },
-    { id: 3, label: "Dining Reservations", icon: Calendar, route: "/food/restaurant/reservations" },
+    // { id: 3, label: "Dining Reservations", icon: Calendar, route: "/food/restaurant/reservations" },
     { id: 4, label: "Menu categories", icon: Settings, route: "/food/restaurant/menu-categories" },
+    { id: 6, label: "Promo Codes", icon: Ticket, route: "/food/restaurant/promocodes" },
   ]
 
   const settingsItems = [
@@ -932,7 +917,7 @@ export default function ExploreMore() {
             </button>
             <button
               onClick={() => setProfileOpen(true)}
-              className={`p-2 transition-all duration-200 rounded-full ${profileOpen ? "bg-[#7e3866] text-white shadow-lg" : "bg-gray-100 hover:bg-gray-200 text-gray-900"}`}
+              className={`p-2 transition-all duration-200 rounded-full ${profileOpen ? "bg-primary text-white shadow-lg" : "bg-gray-100 hover:bg-gray-200 text-gray-900"}`}
               aria-label="Profile"
             >
               <UserRound className="w-5 h-5" />
@@ -954,14 +939,14 @@ export default function ExploreMore() {
           }}
         >
           <Card 
-            className="bg-white border-gray-200 py-3 mb-6 rounded-lg shadow-0 hover:border-[#7e3866]/30 hover:bg-[#7e3866]/5 transition-all active:scale-[0.99] cursor-pointer"
+            className="bg-white border-gray-200 py-3 mb-6 rounded-lg shadow-0 hover:border-primary/30 hover:bg-primary/5 transition-all active:scale-[0.99] cursor-pointer"
             onClick={() => navigate("/food/restaurant/outlet-info")}
           >
             <CardContent className="px-4">
               <div className="w-full flex items-center justify-between">
                 <div className="flex items-center gap-3 flex-1">
-                  <div className="p-2 bg-gray-100 rounded-lg group-hover:bg-[#7e3866]/10 transition-colors">
-                    <Store className="w-5 h-5 text-gray-900 group-hover:text-[#7e3866]" />
+                  <div className="p-2 bg-gray-100 rounded-lg group-hover:bg-primary/10 transition-colors">
+                    <Store className="w-5 h-5 text-gray-900 group-hover:text-primary" />
                   </div>
                   <div className="flex-1 min-w-0 text-left">
                     <h2 className="text-base font-semibold text-gray-900 mb-0.5">
@@ -1033,8 +1018,8 @@ export default function ExploreMore() {
               onClick={(e) => e.stopPropagation()}
             >
               <div className="text-center">
-                <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-[#7e3866]/10">
-                  <LogOut className="w-5 h-5 text-[#7e3866]" />
+                <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
+                  <LogOut className="w-5 h-5 text-primary" />
                 </div>
                 <h3 className="text-lg font-bold text-gray-900">Logout?</h3>
                 <p className="mt-1 text-sm text-gray-500">Are you sure you want to logout?</p>
@@ -1056,7 +1041,7 @@ export default function ExploreMore() {
                     setLogoutConfirmOpen(false)
                   }}
                   disabled={isLoggingOut}
-                  className="rounded-2xl bg-[#7e3866] px-4 py-3 text-sm font-bold text-white transition-all hover:bg-[#6a2f56] active:scale-95 disabled:opacity-50"
+                  className="rounded-2xl bg-primary px-4 py-3 text-sm font-bold text-white transition-all hover:bg-[#6a2f56] active:scale-95 disabled:opacity-50"
                 >
                   {isLoggingOut ? "Logging out..." : "Yes"}
                 </button>
@@ -1163,7 +1148,7 @@ export default function ExploreMore() {
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     autoFocus
-                    className="w-full px-4 py-2 pr-10 bg-gray-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#7e3866] text-gray-900 placeholder-gray-500"
+                    className="w-full px-4 py-2 pr-10 bg-gray-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-gray-900 placeholder-gray-500"
                   />
                   {searchQuery && (
                     <button
@@ -1290,7 +1275,7 @@ export default function ExploreMore() {
                   className="w-full flex items-start gap-4 text-left p-2 -m-2 hover:bg-gray-50 rounded-xl transition-colors group"
                 >
                   {/* Avatar */}
-                  <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center shrink-0 overflow-hidden ring-4 ring-[#7e3866]/10 group-hover:ring-[#7e3866]/20 transition-all">
+                  <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center shrink-0 overflow-hidden ring-4 ring-primary/10 group-hover:ring-primary/20 transition-all">
                     {userData.profileImage?.url ? (
                       <img
                         src={userData.profileImage.url}
@@ -1298,8 +1283,8 @@ export default function ExploreMore() {
                         className="w-full h-full object-cover"
                       />
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-[#7e3866]/5 to-[#7e3866]/20">
-                        <User className="w-8 h-8 text-[#7e3866]" />
+                      <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/5 to-primary/20">
+                        <User className="w-8 h-8 text-primary" />
                       </div>
                     )}
                   </div>
@@ -1322,10 +1307,27 @@ export default function ExploreMore() {
                         {userData.email}
                       </p>
                     )}
-                    <p className="text-[10px] font-bold text-[#7e3866] uppercase tracking-widest mt-2 bg-[#7e3866]/5 w-fit px-2.5 py-1 rounded-full border border-[#7e3866]/10">
+                    <p className="text-[10px] font-bold text-primary uppercase tracking-widest mt-2 bg-primary/5 w-fit px-2.5 py-1 rounded-full border border-primary/10">
                       {userData.role}
                     </p>
                   </div>
+                </button>
+              </div>
+
+              {/* Test Notification (Debug) */}
+              <div className="px-6 pb-4">
+                <button
+                  onClick={handleTestNotification}
+                  disabled={isTestingNotification}
+                  className="w-full bg-blue-50 text-blue-600 border border-blue-100 hover:bg-blue-100/50 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed font-bold py-4 px-4 rounded-2xl transition-all flex items-center justify-between group"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="bg-white p-2 rounded-xl shadow-sm">
+                      <Bell className={`w-5 h-5 text-blue-500 ${isTestingNotification ? "animate-pulse" : ""}`} />
+                    </div>
+                    <span className="text-base font-bold">{isTestingNotification ? "Sending test..." : "Test Notification"}</span>
+                  </div>
+                  <ChevronRight className="w-5 h-5 text-blue-300 group-hover:text-blue-500 transition-colors" />
                 </button>
               </div>
 
@@ -1335,19 +1337,10 @@ export default function ExploreMore() {
                 <button
                   onClick={handleLogout}
                   disabled={isLoggingOut}
-                  className="w-full bg-[#7e3866]/10 text-[#7e3866] border border-[#7e3866]/20 hover:bg-[#7e3866]/20 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed font-bold py-4 px-4 rounded-2xl transition-all flex items-center justify-center gap-2"
+                  className="w-full bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed font-bold py-4 px-4 rounded-2xl transition-all flex items-center justify-center gap-2"
                 >
-                  <LogOut className="w-5 h-5 text-[#7e3866]" />
+                  <LogOut className="w-5 h-5 text-primary" />
                   {isLoggingOut ? "Logging out..." : "Logout"}
-                </button>
-
-                {/* Logout from all devices Button */}
-                <button
-                  onClick={handleLogoutAllDevices}
-                  disabled={isLoggingOut}
-                  className="w-full bg-[#7e3866]/10 text-[#7e3866] border border-[#7e3866]/20 hover:bg-[#7e3866]/20 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed font-bold py-4 px-4 rounded-2xl transition-all"
-                >
-                  {isLoggingOut ? "Logging out..." : "Logout from all devices"}
                 </button>
 
                 {/* Delete Restaurant Button */}
@@ -1578,7 +1571,7 @@ export default function ExploreMore() {
                 {/* Submit Button */}
                 <button
                   onClick={handleSubmitScheduleOff}
-                  className="w-full bg-[#7e3866] hover:bg-[#6a2f56] text-white font-bold py-3.5 px-4 rounded-xl transition-all shadow-md active:scale-[0.98] mt-4"
+                  className="w-full bg-primary hover:bg-[#6a2f56] text-white font-bold py-3.5 px-4 rounded-xl transition-all shadow-md active:scale-[0.98] mt-4"
                 >
                   Submit
                 </button>
@@ -1664,7 +1657,7 @@ export default function ExploreMore() {
                     setStartTime({ hour: "9", minute: "00", period: "am" })
                     setEndTime({ hour: "5", minute: "00", period: "pm" })
                   }}
-                  className="w-full bg-[#7e3866] text-white py-3.5 rounded-xl font-bold text-sm hover:bg-[#6a2f56] transition-all shadow-md active:scale-[0.98]"
+                  className="w-full bg-primary text-white py-3.5 rounded-xl font-bold text-sm hover:bg-[#6a2f56] transition-all shadow-md active:scale-[0.98]"
                 >
                   Done 
                 </button>

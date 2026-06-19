@@ -70,9 +70,6 @@ export default function ItemDetailsPage() {
   const [itemDescription, setItemDescription] = useState("")
   const [foodType, setFoodType] = useState("Non-Veg")
   const [basePrice, setBasePrice] = useState("")
-  const [priceOnOtherPlatforms, setPriceOnOtherPlatforms] = useState("")
-  const [otherPlatformGst, setOtherPlatformGst] = useState("")
-  const [otherPlatformGstError, setOtherPlatformGstError] = useState(false)
   const [variants, setVariants] = useState([])
   const [preparationTime, setPreparationTime] = useState("")
   const [gst, setGst] = useState("5.0")
@@ -104,6 +101,7 @@ export default function ItemDetailsPage() {
   const [categories, setCategories] = useState([])
   const [loadingCategories, setLoadingCategories] = useState(true)
   const [loadingItem, setLoadingItem] = useState(false)
+  const [restaurantProfile, setRestaurantProfile] = useState(null)
   const [keyboardInset, setKeyboardInset] = useState(0)
 
   const maxNameLength = 70
@@ -129,8 +127,6 @@ export default function ItemDetailsPage() {
     const itemVariants = getFoodVariants(item)
     setVariants(itemVariants.map(createVariantDraft))
     setBasePrice(itemVariants.length === 0 ? item.price?.toString() || "" : "")
-    setPriceOnOtherPlatforms(item.priceOnOtherPlatforms?.toString() || "")
-    setOtherPlatformGst(item.otherPlatformGst?.toString() || "")
     setPreparationTime(item.preparationTime || "")
     setGst(item.gst?.toString() || "5.0")
     setIsRecommended(item.isRecommended || false)
@@ -142,13 +138,13 @@ export default function ItemDetailsPage() {
       : (item.image ? [item.image] : [])
     setImages(existingImages)
 
-    setWeightPerServing(item.nutrition?.weightPerServing != null ? String(item.nutrition.weightPerServing) : "")
-    setCalorieCount(item.nutrition?.calories != null ? String(item.nutrition.calories) : "")
-    setProteinCount(item.nutrition?.protein != null ? String(item.nutrition.protein) : "")
-    setCarbohydrates(item.nutrition?.carbohydrates != null ? String(item.nutrition.carbohydrates) : "")
-    setFatCount(item.nutrition?.fat != null ? String(item.nutrition.fat) : "")
-    setFibreCount(item.nutrition?.fiber != null ? String(item.nutrition.fiber) : "")
-    setAllergens(item.nutrition?.allergens || "")
+    setWeightPerServing("")
+    setCalorieCount("")
+    setProteinCount("")
+    setCarbohydrates("")
+    setFatCount("")
+    setFibreCount("")
+    setAllergens("")
 
     if (item.nutrition && Array.isArray(item.nutrition)) {
       item.nutrition.forEach(nut => {
@@ -281,6 +277,28 @@ export default function ItemDetailsPage() {
 
     fetchCategories()
   }, [category, defaultCategory, defaultCategoryId, isNewItem, selectedCategoryId])
+
+  // Fetch restaurant profile
+  useEffect(() => {
+    const fetchRestaurantProfile = async () => {
+      try {
+        const response = await restaurantAPI.getCurrentRestaurant()
+        const profile =
+          response?.data?.data?.restaurant ||
+          response?.data?.restaurant ||
+          response?.data?.data ||
+          null
+        setRestaurantProfile(profile)
+        
+        if (profile?.pureVegRestaurant === true) {
+           setFoodType("Veg")
+        }
+      } catch (error) {
+        debugWarn("Failed to load restaurant profile:", error)
+      }
+    }
+    fetchRestaurantProfile()
+  }, [])
 
   // Keep focused form fields visible above mobile keyboard
   useEffect(() => {
@@ -643,14 +661,6 @@ export default function ItemDetailsPage() {
         return
       }
 
-      if (otherPlatformGst === "" || !Number.isFinite(Number(otherPlatformGst))) {
-        setOtherPlatformGstError(true)
-        toast.error("Other platform GST is required")
-        setUploadingImages(false)
-        return
-      }
-      setOtherPlatformGstError(false)
-
       const variantPayload = normalizedVariants.map((variant) => ({
         ...(variant.persistedId ? { _id: variant.persistedId } : {}),
         name: variant.name,
@@ -664,22 +674,11 @@ export default function ItemDetailsPage() {
           name: itemName.trim(),
           description: itemDescription.trim(),
           price: hasVariants ? undefined : parsedBasePrice,
-          priceOnOtherPlatforms: priceOnOtherPlatforms ? Number(priceOnOtherPlatforms) : null,
-          otherPlatformGst: Number(otherPlatformGst),
           variants: variantPayload,
           image: allImageUrls.length > 0 ? allImageUrls[0] : "",
           foodType: foodType,
           isAvailable: isInStock,
           preparationTime: preparationTime || "",
-          nutrition: {
-            calories: calorieCount,
-            protein: proteinCount,
-            fiber: fibreCount,
-            carbohydrates,
-            fat: fatCount,
-            weightPerServing,
-            allergens,
-          },
           categoryId: categoryId || undefined,
           categoryName,
         })
@@ -697,22 +696,11 @@ export default function ItemDetailsPage() {
           name: itemName.trim(),
           description: itemDescription.trim(),
           price: hasVariants ? undefined : parsedBasePrice,
-          priceOnOtherPlatforms: priceOnOtherPlatforms ? Number(priceOnOtherPlatforms) : null,
-          otherPlatformGst: Number(otherPlatformGst),
           variants: variantPayload,
           image: allImageUrls.length > 0 ? allImageUrls[0] : "",
           foodType: foodType,
           isAvailable: isInStock,
           preparationTime: preparationTime || "",
-          nutrition: {
-            calories: calorieCount,
-            protein: proteinCount,
-            fiber: fibreCount,
-            carbohydrates,
-            fat: fatCount,
-            weightPerServing,
-            allergens,
-          },
           categoryId: categoryId || undefined,
           categoryName,
         })
@@ -1023,16 +1011,18 @@ export default function ItemDetailsPage() {
                 {foodType === "Veg" && <Check className="w-4 h-4" />}
                 <span>Veg</span>
               </button>
-              <button
-                onClick={() => setFoodType("Non-Veg")}
-                className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${foodType === "Non-Veg"
-                  ? "border-red-600 border-2 text-red-600"
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                  }`}
-              >
-                {foodType === "Non-Veg" && <Check className="w-4 h-4" />}
-                <span>Non-Veg</span>
-              </button>
+              {restaurantProfile?.pureVegRestaurant !== true && (
+                <button
+                  onClick={() => setFoodType("Non-Veg")}
+                  className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${foodType === "Non-Veg"
+                    ? "border-red-600 border-2 text-red-600"
+                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                    }`}
+                >
+                  {foodType === "Non-Veg" && <Check className="w-4 h-4" />}
+                  <span>Non-Veg</span>
+                </button>
+              )}
             </div>
           </div>
 
@@ -1073,68 +1063,7 @@ export default function ItemDetailsPage() {
                     </div>
                   </div>
 
-                  <div className="relative">
-                    <label className="block text-xs text-gray-600 mb-1">
-                      Price on other platforms{" "}
-                      <span className="text-gray-400 text-xs font-normal">(Optional)</span>
-                    </label>
-                    <div className="relative">
-                      <input
-                        type="text"
-                        value={priceOnOtherPlatforms}
-                        onChange={(e) => {
-                          const value = e.target.value.replace(/[\u20B9\s,]/g, '').replace(/[^0-9.]/g, '')
-                          const parts = value.split('.')
-                          const cleanedValue = parts.length > 2
-                            ? parts[0] + '.' + parts.slice(1).join('')
-                            : value
-                          setPriceOnOtherPlatforms(cleanedValue)
-                        }}
-                        onFocus={(e) => {
-                          if (e.target.value.startsWith('\u20B9')) {
-                            e.target.value = e.target.value.replace(/[\u20B9\s]+/g, '')
-                          }
-                        }}
-                        placeholder="e.g., 299 (Enter the price on Swiggy, Zomato, etc.)"
-                        className="w-full pl-8 pr-3 py-3 border border-gray-300 rounded-lg text-sm text-gray-900 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      />
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-600">{"\u20B9"}</span>
-                    </div>
-                    <p className="mt-1.5 text-xs text-gray-500">
-                      Help customers see how much they save by ordering with us. We'll show the savings in their cart.
-                    </p>
-                  </div>
 
-                  <div className="relative">
-                    <label className="block text-xs text-gray-600 mb-1">
-                      Other platform GST (%) <span className="text-red-500">*</span>
-                    </label>
-                    <div className="relative">
-                      <input
-                        type="text"
-                        value={otherPlatformGst}
-                        onChange={(e) => {
-                          const value = e.target.value.replace(/[^0-9.]/g, '')
-                          const parts = value.split('.')
-                          const cleanedValue = parts.length > 2
-                            ? parts[0] + '.' + parts.slice(1).join('')
-                            : value
-                          const parsed = cleanedValue === '' ? '' : Math.min(100, Number(cleanedValue))
-                          setOtherPlatformGst(parsed === '' ? '' : String(parsed))
-                          setOtherPlatformGstError(false)
-                        }}
-                        placeholder="e.g., 5"
-                        className={`w-full pr-8 pl-3 py-3 border ${otherPlatformGstError ? 'border-red-500' : 'border-gray-300'} rounded-lg text-sm text-gray-900 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
-                      />
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-600">%</span>
-                    </div>
-                    {otherPlatformGstError && (
-                      <p className="mt-1.5 text-xs text-red-500">Other platform GST is required</p>
-                    )}
-                    <p className="mt-1.5 text-xs text-gray-500">
-                      Enter the GST rate applied on other platforms for this item.
-                    </p>
-                  </div>
                 </>
               ) : (
                 <div className="rounded-lg border border-orange-100 bg-orange-50 px-3 py-2 text-sm text-orange-700">
@@ -1225,44 +1154,6 @@ export default function ItemDetailsPage() {
                     <option value="35-45 mins">35-45 mins</option>
                   </select>
                   <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500 pointer-events-none" />
-                </div>
-              </div>
-              <div className="rounded-xl border border-gray-200 bg-white p-3 space-y-3">
-                <div>
-                  <p className="text-sm font-medium text-gray-900">Nutrition values</p>
-                  <p className="text-xs text-gray-500">Shown to customers below the dish description.</p>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div>
-                    <label className="block text-xs text-gray-600 mb-1">Calories (kcal)</label>
-                    <input
-                      type="text"
-                      value={calorieCount}
-                      onChange={(e) => setCalorieCount(e.target.value.replace(/[^0-9.]/g, ''))}
-                      placeholder="520"
-                      className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm text-gray-900 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-600 mb-1">Protein (g)</label>
-                    <input
-                      type="text"
-                      value={proteinCount}
-                      onChange={(e) => setProteinCount(e.target.value.replace(/[^0-9.]/g, ''))}
-                      placeholder="24"
-                      className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm text-gray-900 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-600 mb-1">Fiber (g)</label>
-                    <input
-                      type="text"
-                      value={fibreCount}
-                      onChange={(e) => setFibreCount(e.target.value.replace(/[^0-9.]/g, ''))}
-                      placeholder="18"
-                      className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm text-gray-900 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                  </div>
                 </div>
               </div>
               {/* <div>

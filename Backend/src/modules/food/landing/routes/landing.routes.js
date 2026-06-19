@@ -1,4 +1,4 @@
-import express from 'express';
+﻿import express from 'express';
 import { upload } from '../../../../middleware/upload.js';
 import {
     listHeroBannersController,
@@ -36,24 +36,6 @@ import {
     updateExploreMoreOrderController
 } from '../controllers/exploreIcon.controller.js';
 import {
-    createMealSlotController,
-    deleteMealSlotController,
-    listMealSlotsAdminController,
-    listMealSlotsPublicController,
-    toggleMealSlotStatusController,
-    updateMealSlotController,
-    updateMealSlotOrderController
-} from '../controllers/mealSlot.controller.js';
-import {
-    createSubscriptionPlanController,
-    deleteSubscriptionPlanController,
-    listSubscriptionPlansAdminController,
-    listSubscriptionPlansPublicController,
-    toggleSubscriptionPlanStatusController,
-    updateSubscriptionPlanController,
-    updateSubscriptionPlanOrderController
-} from '../controllers/subscriptionPlan.controller.js';
-import {
     getPublicHeroBannersController,
     getPublicUnder250BannersController,
     getPublicDiningBannersController,
@@ -73,6 +55,25 @@ import {
 import { getPublicPageController } from '../../admin/controllers/pageContent.controller.js';
 import { getPublicReferralSettingsController } from '../controllers/publicReferralSettings.controller.js';
 import { getAppCustomizationController } from '../../shared/appCustomization.controller.js';
+import {
+    listMealSlotsAdminController,
+    listMealSlotsPublicController,
+    createMealSlotController,
+    updateMealSlotController,
+    deleteMealSlotController,
+    toggleMealSlotStatusController,
+    updateMealSlotOrderController,
+} from '../controllers/mealSlot.controller.js';
+import {
+    listSubscriptionPlansAdminController,
+    createSubscriptionPlanController,
+    updateSubscriptionPlanController,
+    deleteSubscriptionPlanController,
+    toggleSubscriptionPlanStatusController,
+    updateSubscriptionPlanOrderController,
+    listSubscriptionPlansPublicController,
+} from '../controllers/subscriptionPlan.controller.js';
+import { getPublicActiveAds } from '../../admin/controllers/appIntroAd.controller.js';
 
 const router = express.Router();
 
@@ -81,6 +82,25 @@ router.get('/pages/:key', getPublicPageController);
 // Public referral settings (no auth required).
 router.get('/referral-settings', getPublicReferralSettingsController);
 router.get('/app-customization/public', getAppCustomizationController);
+router.get('/meal-slots/public', listMealSlotsPublicController);
+router.get('/subscription-plans/public', listSubscriptionPlansPublicController);
+
+
+// Admin meal slots for user subscription flow
+router.get('/meal-slots', listMealSlotsAdminController);
+router.post('/meal-slots', upload.single('image'), createMealSlotController);
+router.patch('/meal-slots/:id', upload.single('image'), updateMealSlotController);
+router.delete('/meal-slots/:id', deleteMealSlotController);
+router.patch('/meal-slots/:id/status', toggleMealSlotStatusController);
+router.patch('/meal-slots/:id/order', updateMealSlotOrderController);
+
+// Admin subscription plans for user subscription flow
+router.get('/subscription-plans', listSubscriptionPlansAdminController);
+router.post('/subscription-plans', createSubscriptionPlanController);
+router.patch('/subscription-plans/:id', updateSubscriptionPlanController);
+router.delete('/subscription-plans/:id', deleteSubscriptionPlanController);
+router.patch('/subscription-plans/:id/status', toggleSubscriptionPlanStatusController);
+router.patch('/subscription-plans/:id/order', updateSubscriptionPlanOrderController);
 
 // Admin hero banner management (DEV: auth temporarily disabled for faster integration)
 router.get('/hero-banners', listHeroBannersController);
@@ -106,16 +126,16 @@ router.delete('/hero-banners/under-250/:id', deleteUnder250BannerController);
 router.patch('/hero-banners/under-250/:id/order', updateUnder250BannerOrderController);
 router.patch('/hero-banners/under-250/:id/status', toggleUnder250BannerStatusController);
 
-// Admin dining banners
-router.get('/hero-banners/dining', listDiningBannersController);
+// Admin ads banners
+router.get('/hero-banners/ads', listDiningBannersController);
 router.post(
-    '/hero-banners/dining/multiple',
+    '/hero-banners/ads/multiple',
     upload.array('files'),
     uploadDiningBannersController
 );
-router.delete('/hero-banners/dining/:id', deleteDiningBannerController);
-router.patch('/hero-banners/dining/:id/order', updateDiningBannerOrderController);
-router.patch('/hero-banners/dining/:id/status', toggleDiningBannerStatusController);
+router.delete('/hero-banners/ads/:id', deleteDiningBannerController);
+router.patch('/hero-banners/ads/:id/order', updateDiningBannerOrderController);
+router.patch('/hero-banners/ads/:id/status', toggleDiningBannerStatusController);
 
 // Admin Explore More (icons)
 router.get('/hero-banners/landing/explore-more', listExploreMoreController);
@@ -133,22 +153,6 @@ router.patch(
     updateExploreMoreController
 );
 
-// Admin meal slots for user subscription flow
-router.get('/meal-slots', listMealSlotsAdminController);
-router.post('/meal-slots', upload.single('image'), createMealSlotController);
-router.patch('/meal-slots/:id', upload.single('image'), updateMealSlotController);
-router.delete('/meal-slots/:id', deleteMealSlotController);
-router.patch('/meal-slots/:id/status', toggleMealSlotStatusController);
-router.patch('/meal-slots/:id/order', updateMealSlotOrderController);
-
-// Admin subscription plans for user subscription flow
-router.get('/subscription-plans', listSubscriptionPlansAdminController);
-router.post('/subscription-plans', createSubscriptionPlanController);
-router.patch('/subscription-plans/:id', updateSubscriptionPlanController);
-router.delete('/subscription-plans/:id', deleteSubscriptionPlanController);
-router.patch('/subscription-plans/:id/status', toggleSubscriptionPlanStatusController);
-router.patch('/subscription-plans/:id/order', updateSubscriptionPlanOrderController);
-
 // Admin Gourmet (hero-banners)
 router.get('/hero-banners/gourmet', listGourmetAdmin);
 router.post('/hero-banners/gourmet', createGourmetAdmin);
@@ -159,19 +163,25 @@ router.patch('/hero-banners/gourmet/:id/status', toggleGourmetStatusAdmin);
 // Public landing endpoints (Food user app)
 router.get('/hero-banners/public', getPublicHeroBannersController);
 router.get('/hero-banners/under-250/public', getPublicUnder250BannersController);
-router.get('/hero-banners/dining/public', getPublicDiningBannersController);
+router.get('/hero-banners/ads/public', getPublicDiningBannersController);
 router.get('/explore-icons/public', getPublicExploreIconsController);
 router.get('/hero-banners/gourmet/public', getPublicGourmetController);
 router.get('/landing/settings/public', getPublicLandingSettingsController);
-router.get('/meal-slots/public', listMealSlotsPublicController);
-router.get('/subscription-plans/public', listSubscriptionPlansPublicController);
 router.get('/zones/detect', detectZonePublicController);
 router.get('/zones/nearby', listZonesNearbyPublicController);
 router.get('/zones/public', listZonesPublicController);
 router.get('/public/env', getPublicEnvController);
+router.get('/app-intro-ads/public', getPublicActiveAds);
+
 // Admin landing settings (old paths used by admin UI)
 router.get('/hero-banners/landing/settings', getAdminLandingSettingsController);
 router.patch('/hero-banners/landing/settings', updateAdminLandingSettingsController);
 
 export default router;
+
+
+
+
+
+
 

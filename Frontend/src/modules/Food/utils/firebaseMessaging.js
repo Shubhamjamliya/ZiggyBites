@@ -1,9 +1,8 @@
 import { toast } from "sonner";
 import { userAPI, restaurantAPI, deliveryAPI, adminAPI } from "@food/api";
 import { initializeApp, getApp, getApps } from "firebase/app";
-const fallbackNotificationSound = "/alert.mp3";
-
-const pushNotificationSoundPath = "/zomato_sms.mp3";
+import fallbackNotificationSound from "@food/assets/audio/alert.mp3";
+import pushNotificationSoundPath from "@food/assets/audio/zomato_sms.mp3";
 
 const DEFAULT_FIREBASE_CONFIG = {
   apiKey: "",
@@ -26,16 +25,9 @@ let pushSoundUnlocked = false;
 let pushSoundContext = null;
 const PUSH_DEBUG_PREFIX = "[push-debug]";
 const notificationDedupWindowMs = 8000;
-const pushDebugLog = (prefix, message, data = {}) => {
-  if (typeof window !== "undefined" && localStorage.getItem("push_debug") === "true") {
-    console.log(`${prefix} ${message}`, data);
-  }
-};
-const pushDebugWarn = (prefix, message, data = {}) => {
-  if (typeof window !== "undefined" && localStorage.getItem("push_debug") === "true") {
-    console.warn(`${prefix} ${message}`, data);
-  }
-};
+
+const pushDebugLog = (prefix, message, data = {}) => {};
+const pushDebugWarn = (prefix, message, data = {}) => {};
 
 function normalizeModuleFromPath(pathname = window.location.pathname) {
   if (pathname.includes("/restaurant") && !pathname.includes("/restaurants")) return "restaurant";
@@ -82,32 +74,51 @@ function sanitize(value) {
 }
 
 function getNotificationKey(payload = {}) {
-  return (
-    payload?.data?.notificationId ||
-    payload?.data?.messageId ||
-    payload?.messageId ||
-    [
-      payload?.notification?.title || "",
-      payload?.notification?.body || "",
-      payload?.data?.orderId || "",
-      payload?.data?.targetUrl || "",
-    ].join("::")
-  );
+  // Use unique identifiers from FCM if available
+  const fcmId = payload?.messageId || payload?.data?.messageId || payload?.data?.notificationId;
+  if (fcmId) return String(fcmId);
+
+  // Fallback to content-based fingerprinting
+  const title = (payload?.notification?.title || payload?.data?.title || "").trim();
+  const body = (payload?.notification?.body || payload?.data?.body || "").trim();
+  const orderId = payload?.data?.orderId || "";
+  
+  if (!title && !body && !orderId) return null;
+
+  return [
+    title.toLowerCase(),
+    body.toLowerCase(),
+    orderId
+  ].join("|");
 }
 
 function wasRecentlyHandled(notificationKey) {
   if (!notificationKey) return false;
   const now = Date.now();
 
+  // Cleanup old entries
   for (const [key, timestamp] of recentForegroundNotifications.entries()) {
     if (now - timestamp > notificationDedupWindowMs) {
       recentForegroundNotifications.delete(key);
     }
   }
 
+  // Check memory-based dedup (for same tab)
   if (recentForegroundNotifications.has(notificationKey)) {
-    pushDebugLog(PUSH_DEBUG_PREFIX, "Duplicate notification skipped", { notificationKey });
+    pushDebugLog(PUSH_DEBUG_PREFIX, "Duplicate notification skipped (memory)", { notificationKey });
     return true;
+  }
+
+  // Check storage-based dedup (for cross-tab)
+  const storageKey = `fcm_handled_${notificationKey.replace(/[^a-zA-Z0-9]/g, '_')}`;
+  if (typeof localStorage !== "undefined") {
+    const lastSeen = localStorage.getItem(storageKey);
+    if (lastSeen && now - Number(lastSeen) < notificationDedupWindowMs) {
+      pushDebugLog(PUSH_DEBUG_PREFIX, "Duplicate notification skipped (storage)", { notificationKey });
+      return true;
+    }
+    localStorage.setItem(storageKey, String(now));
+    // Periodic cleanup of storage keys would be good but this is enough for now
   }
 
   recentForegroundNotifications.set(notificationKey, now);
@@ -488,13 +499,15 @@ async function registerNativeWebViewFcmToken(moduleName) {
   }
 }
 
-function showForegroundNotification(payload = {}) {
+// options.fromSwRelay = true means the service worker already showed the system
+// notification; we should only show the in-app toast here to avoid duplicates.
+function showForegroundNotification(payload = {}, options = {}) {
   if (!isRecord(payload)) {
     pushDebugWarn(PUSH_DEBUG_PREFIX, "Ignoring malformed foreground notification payload", { payload });
     return;
   }
   const notificationKey = getNotificationKey(payload);
-  pushDebugLog(PUSH_DEBUG_PREFIX, "showForegroundNotification received", { notificationKey, payload });
+  pushDebugLog(PUSH_DEBUG_PREFIX, "showForegroundNotification received", { notificationKey, fromSwRelay: options.fromSwRelay, payload });
   if (wasRecentlyHandled(notificationKey)) {
     return;
   }
@@ -502,10 +515,13 @@ function showForegroundNotification(payload = {}) {
   const title =
     payload?.notification?.title ||
     payload?.data?.title ||
+    payload?.data?.alert ||
     "New notification";
   const body =
     payload?.notification?.body ||
     payload?.data?.body ||
+    payload?.data?.message ||
+    payload?.data?.msg ||
     "";
   const image =
     payload?.notification?.image ||
@@ -516,22 +532,29 @@ function showForegroundNotification(payload = {}) {
 
   playPushSound(payload);
 
-  // Force system notification even when the tab is in focus
-  if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+  // Only show a system notification from the PAGE if this is NOT a SW relay.
+  // When it IS a SW relay the service worker already showed the notification —
+  // creating another one here would produce a duplicate.
+  const isTabVisible = typeof document !== "undefined" && document.visibilityState === "visible";
+
+  // Only show a system notification from the PAGE if:
+  // 1. This is NOT a relay from the service worker (the SW already handles background alerts).
+  // 2. The tab is currently HIDDEN (if visible, the user sees the toast instead).
+  // 3. We are NOT in a mobile WebView (where native notifications are preferred).
+  if (!options.fromSwRelay && !isTabVisible && !isFlutterWebView() && typeof Notification !== "undefined" && Notification.permission === "granted") {
     try {
-      pushDebugLog(PUSH_DEBUG_PREFIX, "Showing browser notification from page", {
+      pushDebugLog(PUSH_DEBUG_PREFIX, "Showing browser notification from page (tab is hidden)", {
         title,
         body,
         image,
         notificationKey,
       });
-      // Use service worker to show native system notification to ensure it bypasses focus checks
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.getRegistration().then(registration => {
           if (registration) {
             registration.showNotification(title, {
               body,
-              icon: "/favicon.ico",
+              icon: "/logo.png",
               image,
               tag: notificationKey || undefined,
               data: payload?.data || {},
@@ -541,7 +564,7 @@ function showForegroundNotification(payload = {}) {
           } else {
             new Notification(title, {
               body,
-              icon: "/favicon.ico",
+              icon: "/logo.png",
               image,
               tag: notificationKey || undefined,
               requireInteraction: true
@@ -550,7 +573,7 @@ function showForegroundNotification(payload = {}) {
         }).catch(() => {
           new Notification(title, {
             body,
-            icon: "/favicon.ico",
+            icon: "/logo.png",
             image,
             tag: notificationKey || undefined,
           });
@@ -558,7 +581,7 @@ function showForegroundNotification(payload = {}) {
       } else {
         new Notification(title, {
           body,
-          icon: "/favicon.ico",
+          icon: "/logo.png",
           image,
           tag: notificationKey || undefined,
         });
@@ -570,12 +593,44 @@ function showForegroundNotification(payload = {}) {
     }
   }
 
-  // Still show in-app toast for immediate context if we are in focus
+  // Show in-app toast if tab is visible.
   if (typeof document !== "undefined" && document.visibilityState === "visible") {
+    // Cross-tab deduplication using BroadcastChannel and LocalStorage
+    const notificationId = payload?.data?.broadcastId || payload?.data?.orderId || payload?.data?.id || (title + body).replace(/\s+/g, '');
+    const channelName = `notification_dedupe_${notificationId}`;
+    const storageKey = `handled_notify_${notificationId}`;
+
+    if (localStorage.getItem(storageKey)) {
+      return;
+    }
+
+    localStorage.setItem(storageKey, "true");
+    setTimeout(() => localStorage.removeItem(storageKey), 5000);
+
+    const channel = new BroadcastChannel(channelName);
+    channel.postMessage({ type: "HANDLED" });
+    channel.close();
+
+    const isNewOrder = 
+      title.toLowerCase().includes("order") || 
+      body.toLowerCase().includes("order") || 
+      payload?.data?.orderId;
+
     if (body) {
-      toast.success(`${title}: ${body}`);
+      toast(title, {
+        description: body,
+        duration: isNewOrder ? 15000 : 6000,
+        important: isNewOrder,
+        action: payload?.data?.targetUrl ? {
+          label: 'View',
+          onClick: () => window.location.href = payload.data.targetUrl
+        } : undefined
+      });
     } else {
-      toast.success(title);
+      toast(title, {
+        duration: isNewOrder ? 15000 : 6000,
+        important: isNewOrder
+      });
     }
   }
 }
@@ -598,7 +653,8 @@ function attachServiceWorkerMessageListener() {
         return;
       }
       pushDebugLog(PUSH_DEBUG_PREFIX, "Received service worker message in page", { payload: data.payload });
-      scheduleForegroundNotification(data.payload);
+      // fromSwRelay: true — SW already showed the system notification; only show toast.
+      scheduleForegroundNotification(data.payload, { fromSwRelay: true });
     });
   }
 
@@ -627,10 +683,10 @@ function attachServiceWorkerMessageListener() {
   serviceWorkerMessageListenerAttached = true;
 }
 
-function scheduleForegroundNotification(payload) {
+function scheduleForegroundNotification(payload, options = {}) {
   // Keep message handlers fast to avoid Chrome [Violation] warnings.
   // Defer heavier work (toast, audio) to idle time / next tick.
-  const run = () => showForegroundNotification(payload);
+  const run = () => showForegroundNotification(payload, options);
   try {
     if (typeof window !== "undefined" && typeof window.requestIdleCallback === "function") {
       window.requestIdleCallback(run, { timeout: 1000 });
@@ -698,13 +754,13 @@ export async function registerWebPushForCurrentModule(pathname = window.location
     registrationInFlight = (async () => {
       const firebasePublicEnv = await getFirebasePublicEnv();
       if (!firebasePublicEnv?.vapidKey) {
-        pushDebugWarn(PUSH_DEBUG_PREFIX, "FCM web registration skipped: FIREBASE_VAPID_KEY is missing in env setup.");
+        console.warn("FCM web registration skipped: FIREBASE_VAPID_KEY is missing in env setup.");
         return;
       }
 
       const app = getMessagingFirebaseApp(firebasePublicEnv);
       if (!app) {
-        pushDebugWarn(PUSH_DEBUG_PREFIX, "FCM web registration skipped: Firebase public web config is incomplete.");
+        console.warn("FCM web registration skipped: Firebase public web config is incomplete.");
         return;
       }
 
@@ -714,7 +770,7 @@ export async function registerWebPushForCurrentModule(pathname = window.location
           : Notification.permission;
 
       if (permission !== "granted") {
-        pushDebugLog(PUSH_DEBUG_PREFIX, "FCM web registration skipped: Notification permission not granted.", { permission });
+        console.warn("FCM web registration skipped: Notification permission not granted.", permission);
         return;
       }
 
@@ -723,7 +779,6 @@ export async function registerWebPushForCurrentModule(pathname = window.location
       if (!supported) return;
 
       const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js");
-      await registration.update().catch(() => {});
       pushDebugLog(PUSH_DEBUG_PREFIX, "Service worker registered for push", {
         scope: registration.scope,
         moduleName,
@@ -741,12 +796,12 @@ export async function registerWebPushForCurrentModule(pathname = window.location
         tokenPreview: `${token.slice(0, 12)}...`,
       });
 
-      // Removed localStorage caching (getSavedToken/setSavedToken) as per user requirements.
-      // The backend 'upsert' already handles duplicates efficiently.
+      // Cache the token in localStorage so it can be retrieved during logout for cleanup.
+      setSavedToken(moduleName, token);
+
       try {
         pushDebugLog(PUSH_DEBUG_PREFIX, "Synchronizing FCM token with backend database", { moduleName, tokenPreview: `${token?.slice(0, 10)}...` });
         await saveTokenByModule(moduleName, token);
-        setSavedToken(moduleName, token);
         pushDebugLog(PUSH_DEBUG_PREFIX, "FCM token synchronized with backend successfully");
       } catch (e) {
         pushDebugWarn(PUSH_DEBUG_PREFIX, "Failed to synchronize FCM token to backend", { error: e?.message || e, stack: e?.stack });

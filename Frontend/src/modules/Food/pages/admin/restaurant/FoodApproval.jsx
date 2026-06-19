@@ -25,6 +25,7 @@ export default function FoodApproval() {
   const [showRejectModal, setShowRejectModal] = useState(false)
   const [rejectReason, setRejectReason] = useState("")
   const [processing, setProcessing] = useState(false)
+  const [selectedIds, setSelectedIds] = useState([])
   const isMountedRef = useRef(true)
 
   // Fetch pending food approval requests
@@ -162,6 +163,57 @@ export default function FoodApproval() {
     }
   }
 
+  // Handle bulk approve
+  const handleBulkApprove = async () => {
+    if (selectedIds.length === 0) return
+    
+    // Filter out addons if any (since backend bulkApproveFoodItems currently only handles FoodItems)
+    const actionableFoodIds = foodRequests
+      .filter(r => selectedIds.includes(r._id || r.id) && r.entityType !== 'addon' && r.isActionable)
+      .map(r => r._id || r.id);
+      
+    if (actionableFoodIds.length === 0) {
+      toast.error('Only food items can be bulk approved at this time');
+      return;
+    }
+
+    try {
+      setProcessing(true)
+      const res = await adminAPI.bulkApproveFood(actionableFoodIds)
+      const results = res?.data?.data || res?.data
+      
+      if (results?.successCount > 0) {
+        toast.success(`${results.successCount} items approved successfully`)
+      }
+      if (results?.errorCount > 0) {
+        toast.warning(`${results.errorCount} items failed bulk approval`)
+      }
+      
+      setSelectedIds([])
+      await fetchFoodRequests()
+    } catch (error) {
+      debugError('Error in bulk approval:', error)
+      toast.error('Failed to complete bulk approval')
+    } finally {
+      setProcessing(false)
+    }
+  }
+
+  const toggleSelectAll = () => {
+    const actionableFood = filteredRequests.filter(r => r.isActionable && r.entityType !== 'addon');
+    if (selectedIds.length === actionableFood.length && actionableFood.length > 0) {
+      setSelectedIds([])
+    } else {
+      setSelectedIds(actionableFood.map(r => r._id || r.id))
+    }
+  }
+
+  const toggleSelectId = (id) => {
+    setSelectedIds(prev => 
+      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+    )
+  }
+
   // View food item details
   const handleViewDetails = (request) => {
     setSelectedRequest(request)
@@ -185,6 +237,21 @@ export default function FoodApproval() {
             Food Approval
           </h1>
         </div>
+
+        {selectedIds.length > 0 && (
+          <button
+            onClick={handleBulkApprove}
+            disabled={processing}
+            className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg font-bold text-sm shadow-lg hover:bg-green-700 transition-all active:scale-95 disabled:opacity-50"
+          >
+            {processing ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <CheckCircle2 className="w-4 h-4" />
+            )}
+            Approve Selected ({selectedIds.length})
+          </button>
+        )}
       </div>
 
       {/* Food Approval List Section */}
@@ -227,6 +294,14 @@ export default function FoodApproval() {
                 <table className="min-w-full divide-y divide-gray-200 text-sm">
                   <thead style={{ backgroundColor: "rgba(0, 111, 189, 0.1)" }}>
                     <tr>
+                      <th className="px-3 py-3 text-left">
+                        <input
+                          type="checkbox"
+                          className="w-4 h-4 rounded border-gray-300 text-[#006fbd] focus:ring-[#006fbd]"
+                          checked={selectedIds.length > 0 && selectedIds.length === filteredRequests.filter(r => r.isActionable && r.entityType !== 'addon').length}
+                          onChange={toggleSelectAll}
+                        />
+                      </th>
                       <th className="px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                         S.No
                       </th>
@@ -259,13 +334,23 @@ export default function FoodApproval() {
                   <tbody className="divide-y divide-gray-200 bg-white">
                     {filteredRequests.length === 0 ? (
                       <tr>
-                        <td colSpan="9" className="px-3 py-8 text-center text-sm text-gray-500">
+                        <td colSpan="10" className="px-3 py-8 text-center text-sm text-gray-500">
                           {loading ? "Loading..." : "No food or add-on records found."}
                         </td>
                       </tr>
                     ) : (
                       filteredRequests.map((request, index) => (
                         <tr key={request._id || request.id} className="hover:bg-gray-50">
+                          <td className="px-3 py-3">
+                            {request.isActionable && request.entityType !== 'addon' && (
+                              <input
+                                type="checkbox"
+                                className="w-4 h-4 rounded border-gray-300 text-[#006fbd] focus:ring-[#006fbd]"
+                                checked={selectedIds.includes(request._id || request.id)}
+                                onChange={() => toggleSelectId(request._id || request.id)}
+                              />
+                            )}
+                          </td>
                           <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-700 font-semibold">
                             {index + 1}
                           </td>

@@ -1,9 +1,8 @@
-import express from 'express';
+﻿import express from 'express';
 import { upload } from '../../../../middleware/upload.js';
 import {
     registerRestaurantController,
     listApprovedRestaurantsController,
-    listPublicDishesController,
     getApprovedRestaurantController,
     listPublicOffersController,
     getCurrentRestaurantController,
@@ -42,7 +41,9 @@ import {
 } from '../controllers/outletTimings.controller.js';
 import {
     createRestaurantFoodController,
-    updateRestaurantFoodController
+    bulkCreateRestaurantFoodController,
+    updateRestaurantFoodController,
+    deleteRestaurantFoodController
 } from '../controllers/restaurantFood.controller.js';
 import {
     listAddonsController,
@@ -54,8 +55,8 @@ import * as orderController from '../../orders/controllers/order.controller.js';
 import {
     listTodaySubscriptionMealsRestaurantController,
     sendSubscriptionMealToDeliveryController,
+    resendSubscriptionMealToDeliveryController,
     cancelSubscriptionForRestaurantController,
-    resendSubscriptionMealToDeliveryController
 } from '../../subscription/controllers/subscription.controller.js';
 import { downloadRestaurantMenuPdf } from '../../admin/controllers/admin.controller.js';
 import { authMiddleware } from '../../../../core/auth/auth.middleware.js';
@@ -87,7 +88,6 @@ router.post('/register', uploadFields, registerRestaurantController);
 
 // Public: approved restaurants list (for user app)
 router.get('/restaurants', cacheResponse(300, 'restaurants'), listApprovedRestaurantsController);
-router.get('/dishes', cacheResponse(300, 'public_dishes'), listPublicDishesController);
 router.get('/restaurants/:id', cacheResponse(600, 'restaurant_detail'), getApprovedRestaurantController);
 router.get('/restaurants/:id/menu', cacheResponse(600, 'restaurant_menu'), getPublicRestaurantMenuController);
 router.get('/restaurants/:id/outlet-timings', cacheResponse(600, 'restaurant_timings'), getOutletTimingsByRestaurantIdController);
@@ -185,14 +185,20 @@ router.get('/restaurants/:id/addons', cacheResponse(600, 'restaurant_addons'), g
 // Foods (restaurant creates/updates items -> stored in food_items collection)
 router.post('/foods', authMiddleware, requireRestaurant, async (req, res, next) => {
     await invalidateCache('restaurant_menu:*');
-    await invalidateCache('public_dishes:*');
     next();
 }, createRestaurantFoodController);
+router.post('/foods/bulk', authMiddleware, requireRestaurant, async (req, res, next) => {
+    await invalidateCache('restaurant_menu:*');
+    next();
+}, bulkCreateRestaurantFoodController);
 router.patch('/foods/:id', authMiddleware, requireRestaurant, async (req, res, next) => {
     await invalidateCache('restaurant_menu:*');
-    await invalidateCache('public_dishes:*');
     next();
 }, updateRestaurantFoodController);
+router.delete('/foods/:id', authMiddleware, requireRestaurant, async (req, res, next) => {
+    await invalidateCache('restaurant_menu:*');
+    next();
+}, deleteRestaurantFoodController);
 
 // Add-ons (restaurant dashboard) - approval handled by admin
 router.get('/addons', authMiddleware, requireRestaurant, listAddonsController);
@@ -205,6 +211,8 @@ router.get('/orders', authMiddleware, requireRestaurant, orderController.listOrd
 router.get('/orders/:orderId', authMiddleware, requireRestaurant, orderController.getOrderByIdRestaurantController);
 router.patch('/orders/:orderId/status', authMiddleware, requireRestaurant, orderController.updateOrderStatusRestaurantController);
 router.post('/orders/:orderId/resend-notification', authMiddleware, requireRestaurant, orderController.resendDeliveryNotificationRestaurantController);
+
+// Subscription meals (restaurant dashboard)
 router.get('/subscription-meals/today', authMiddleware, requireRestaurant, listTodaySubscriptionMealsRestaurantController);
 router.post('/subscription-meals/:scheduleId/send-to-delivery', authMiddleware, requireRestaurant, sendSubscriptionMealToDeliveryController);
 router.post('/subscriptions/:subscriptionId/resend-to-delivery', authMiddleware, requireRestaurant, resendSubscriptionMealToDeliveryController);
@@ -233,5 +241,7 @@ router.get('/download-menu-pdf/:id', authMiddleware, (req, res, next) => {
 router.delete('/account', authMiddleware, requireRestaurant, deleteRestaurantAccountController);
 
 export default router;
+
+
 
 

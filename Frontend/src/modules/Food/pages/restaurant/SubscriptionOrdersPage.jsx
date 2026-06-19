@@ -346,9 +346,8 @@ function SubscriptionOrdersPage() {
                 key={tab.id}
                 type="button"
                 onClick={() => setActiveTab(tab.id)}
-                className={`shrink-0 rounded-full px-4 py-2 text-xs font-black uppercase tracking-wide transition-colors ${
-                  isActive ? "bg-primary-orange text-white shadow-sm" : "bg-white text-gray-600 shadow-sm"
-                }`}>
+                className={`shrink-0 rounded-full px-4 py-2 text-xs font-black uppercase tracking-wide transition-colors ${isActive ? "bg-primary-orange text-white shadow-sm" : "bg-white text-gray-600 shadow-sm"
+                  }`}>
                 {tab.label}
                 <span className={`ml-2 rounded-full px-1.5 py-0.5 text-[10px] ${isActive ? "bg-white/20" : "bg-gray-100"}`}>
                   {count}

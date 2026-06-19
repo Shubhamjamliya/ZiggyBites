@@ -145,7 +145,7 @@ export default function SubscriptionCheckout() {
     navigate("/food/user/address-selector", {
       state: {
         mode: "subscription-checkout-address",
-        returnTo: "/food/user/checkout",
+        returnTo: "/food/user/subscriptions/checkout",
         checkoutState: {
           ...(location.state || {}),
           dish,
@@ -604,3 +604,4 @@ export default function SubscriptionCheckout() {
     </div>
   );
 }
+

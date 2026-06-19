@@ -32,12 +32,14 @@ const applyZonePayload = (data, { setZoneId, setZone, setZoneStatus }) => {
     setZoneStatus('IN_SERVICE')
     localStorage.setItem('userZoneId', data.zoneId)
     localStorage.setItem('userZone', JSON.stringify(data.zone))
+    localStorage.removeItem('outOfService')
   } else {
     setZoneId(null)
     setZone(null)
     setZoneStatus('OUT_OF_SERVICE')
     localStorage.removeItem('userZoneId')
     localStorage.removeItem('userZone')
+    localStorage.setItem('outOfService', 'true')
   }
 }
 
@@ -47,9 +49,20 @@ const applyZonePayload = (data, { setZoneId, setZone, setZoneStatus }) => {
  * Automatically detects zone when location is available
  */
 export function useZone(location) {
-  const [zoneId, setZoneId] = useState(null)
-  const [zoneStatus, setZoneStatus] = useState('loading') // 'loading' | 'IN_SERVICE' | 'OUT_OF_SERVICE'
-  const [zone, setZone] = useState(null)
+  const [zoneId, setZoneId] = useState(() => localStorage.getItem("userZoneId") || null)
+  const [zoneStatus, setZoneStatus] = useState(() => {
+    if (localStorage.getItem("userZoneId")) return 'IN_SERVICE'
+    if (localStorage.getItem("outOfService")) return 'OUT_OF_SERVICE'
+    return 'loading'
+  })
+  const [zone, setZone] = useState(() => {
+    const cached = localStorage.getItem("userZone")
+    try {
+      return cached && cached !== "undefined" ? JSON.parse(cached) : null
+    } catch {
+      return null
+    }
+  })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const prevCoordsRef = useRef({ latitude: null, longitude: null })
@@ -109,7 +122,11 @@ export function useZone(location) {
       if (cachedZoneId) {
         const cachedZone = localStorage.getItem("userZone");
         setZoneId(cachedZoneId);
-        setZone(cachedZone ? JSON.parse(cachedZone) : null);
+        try {
+          setZone(cachedZone && cachedZone !== "undefined" ? JSON.parse(cachedZone) : null);
+        } catch {
+          setZone(null);
+        }
         setZoneStatus("IN_SERVICE");
       } else {
         // Network/CORS/backend failures should not be treated as confirmed out-of-zone.
@@ -129,16 +146,19 @@ export function useZone(location) {
 
     // Check if coordinates have changed significantly (threshold: ~10 meters)
     const coordThreshold = 0.0001; // approximately 10 meters
+    const prevLat = prevCoordsRef.current.latitude;
+    const prevLng = prevCoordsRef.current.longitude;
     const coordsChanged =
-      !prevCoordsRef.current.latitude ||
-      !prevCoordsRef.current.longitude ||
-      Math.abs(prevCoordsRef.current.latitude - (lat || 0)) > coordThreshold ||
-      Math.abs(prevCoordsRef.current.longitude - (lng || 0)) > coordThreshold;
+      prevLat === null ||
+      prevLng === null ||
+      Math.abs(prevLat - (lat || 0)) > coordThreshold ||
+      Math.abs(prevLng - (lng || 0)) > coordThreshold;
 
     if (Number.isFinite(lat) && Number.isFinite(lng)) {
       // Only detect zone if coordinates changed significantly
       if (coordsChanged) {
         prevCoordsRef.current = { latitude: lat, longitude: lng }
+        setZoneStatus('loading')
         if (debounceTimerRef.current) {
           clearTimeout(debounceTimerRef.current)
         }
@@ -152,7 +172,11 @@ export function useZone(location) {
       if (cachedZoneId) {
         const cachedZone = localStorage.getItem("userZone");
         setZoneId(cachedZoneId);
-        setZone(cachedZone ? JSON.parse(cachedZone) : null);
+        try {
+          setZone(cachedZone && cachedZone !== "undefined" ? JSON.parse(cachedZone) : null);
+        } catch {
+          setZone(null);
+        }
         setZoneStatus("IN_SERVICE");
       } else {
         // If no location and no cached zone, we are in an "IDLE" or "UNKNOWN" state,

@@ -14,7 +14,9 @@ import {
   ChevronRight,
   X,
   ThumbsUp,
-  Pencil
+  Pencil,
+  Check,
+  Trash2
 } from "lucide-react"
 import RestaurantNavbar from "@food/components/restaurant/RestaurantNavbar"
 import BottomNavOrders from "@food/components/restaurant/BottomNavOrders"
@@ -22,6 +24,7 @@ import { Switch } from "@food/components/ui/switch"
 import { useNavigate } from "react-router-dom"
 import { restaurantAPI, uploadAPI } from "@food/api"
 import { toast } from "sonner"
+import { downloadFile } from "@/shared/utils/downloadUtils"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -714,9 +717,9 @@ function SimpleCalendar({ selectedDate, onDateSelect, isOpen, onClose }) {
                     className={`h-10 text-sm rounded transition-colors ${!isCurrent
                         ? 'text-gray-300'
                         : isSelectedDate
-                          ? 'bg-[#7e3866] text-white'
+                          ? 'bg-primary text-white'
                           : isTodayDate
-                            ? 'bg-[#f9f0f7] text-[#7e3866] font-semibold'
+                            ? 'bg-[#f9f0f7] text-primary font-semibold'
                             : 'text-gray-700 hover:bg-gray-100'
                       }`}
                   >
@@ -768,6 +771,10 @@ export default function Inventory() {
   const [toggleTarget, setToggleTarget] = useState(null)
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [isAddPopupOpen, setIsAddPopupOpen] = useState(false)
+  const [showBulkUpload, setShowBulkUpload] = useState(false)
+  const [isUploadingBulk, setIsUploadingBulk] = useState(false)
+  const [selectedBulkFile, setSelectedBulkFile] = useState(null)
+  const [bulkUploadResult, setBulkUploadResult] = useState(null)
 
   // Toggle popup state
   const [selectedOption, setSelectedOption] = useState("specific-time")
@@ -794,10 +801,205 @@ export default function Inventory() {
 
   // Swipe gesture refs
   const touchStartX = useRef(0)
-  const touchEndX = useRef(0)
   const touchStartY = useRef(0)
   const isSwiping = useRef(false)
   const mouseStartX = useRef(0)
+
+  // Handle browser back button for all popups
+  const anyPopupOpen = filterOpen || togglePopupOpen || isAddPopupOpen || showBulkUpload || showCalendar || showTimePicker || isMenuOpen;
+  const popupStatePushed = useRef(false);
+
+  useEffect(() => {
+    if (anyPopupOpen && !popupStatePushed.current) {
+      window.history.pushState({ popupOpen: true }, '');
+      popupStatePushed.current = true;
+    } else if (!anyPopupOpen && popupStatePushed.current) {
+      popupStatePushed.current = false;
+      if (window.history.state?.popupOpen) {
+        window.history.back();
+      }
+    }
+  }, [anyPopupOpen]);
+
+  useEffect(() => {
+    const handlePopState = (e) => {
+      if (popupStatePushed.current) {
+        popupStatePushed.current = false;
+        
+        if (showCalendar) setShowCalendar(false);
+        else if (showTimePicker) setShowTimePicker(false);
+        else if (togglePopupOpen) setTogglePopupOpen(false);
+        else if (filterOpen) setFilterOpen(false);
+        else if (isAddPopupOpen) setIsAddPopupOpen(false);
+        else if (showBulkUpload) setShowBulkUpload(false);
+        else if (isMenuOpen) setIsMenuOpen(false);
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [showCalendar, showTimePicker, togglePopupOpen, filterOpen, isAddPopupOpen, showBulkUpload, isMenuOpen]);
+
+  // XLSX Helper: Loads the library dynamically from CDN
+  const loadXlsx = () => {
+    return new Promise((resolve, reject) => {
+      if (window.XLSX) return resolve(window.XLSX);
+      const script = document.createElement("script");
+      script.src = "https://cdn.sheetjs.com/xlsx-0.19.3/package/dist/xlsx.full.min.js";
+      script.onload = () => {
+        if (window.XLSX) resolve(window.XLSX);
+        else reject(new Error("XLSX not found after script load"));
+      };
+      script.onerror = () => reject(new Error("Failed to load XLSX library"));
+      document.head.appendChild(script);
+    });
+  };
+
+  // Bulk Upload Functions
+  const downloadTemplate = async () => {
+    try {
+      setIsUploadingBulk(true);
+      const XLSX = await loadXlsx();
+      const headers = ["Name", "Description", "Price", "Category Name", "Food Type (Veg/Non-Veg)", "Preparation Time", "Is Available (TRUE/FALSE)", "Image URL", "Variants (Name:Price, Name:Price)"];
+      const rows = [
+        ["Chicken Dum Biryani", "Authentic slow-cooked chicken biryani with aromatic spices", 350, "Biryani", "Non-Veg", "30 mins", "TRUE", "https://res.cloudinary.com/demo/image/upload/sample.jpg", "Half:180, Full:350"],
+        ["Paneer Tikka", "Grilled cottage cheese cubes marinated in yogurt and spices", 280, "Starters", "Veg", "20 mins", "TRUE", "https://res.cloudinary.com/demo/image/upload/sample.jpg", ""]
+      ];
+
+
+      const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Inventory");
+      
+      const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+      downloadFile({
+        data: wbout,
+        filename: "indianbites_inventory_template.xlsx",
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      });
+    } catch (err) {
+      console.error("Template download error:", err);
+      toast.error("Failed to generate Excel template. Please check your internet connection.");
+    } finally {
+      setIsUploadingBulk(false);
+    }
+  };
+
+  const handleBulkFileChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setSelectedBulkFile(file);
+  };
+
+  const handleBulkSubmit = async () => {
+    if (!selectedBulkFile) {
+      toast.error("Please select an Excel file first");
+      return;
+    }
+
+    setIsUploadingBulk(true);
+    try {
+      const XLSX = await loadXlsx();
+      const reader = new FileReader();
+      
+      reader.onload = async (event) => {
+        try {
+          const data = new Uint8Array(event.target.result);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const firstSheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[firstSheetName];
+          const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+          if (jsonData.length < 2) {
+            toast.error("File is empty or missing headers");
+            setIsUploadingBulk(false);
+            return;
+          }
+
+          const rawHeaders = jsonData[0].map(h => String(h || '').trim().toLowerCase());
+          const rows = jsonData.slice(1);
+          
+          const items = rows.filter(row => row.length > 0 && row[0]).map(row => {
+            const item = {};
+            rawHeaders.forEach((header, index) => {
+              const val = row[index];
+              if (header.includes("variant") || header.includes("variation")) {
+                if (val && typeof val === 'string') {
+                  const parsedVariants = val.split(',').map(v => {
+                    const parts = v.split(':');
+                    if (parts.length === 2) {
+                      const vName = parts[0].trim();
+                      const vPrice = Number(parts[1].trim());
+                      if (vName && !isNaN(vPrice)) {
+                        return { name: vName, price: vPrice };
+                      }
+                    }
+                    return null;
+                  }).filter(Boolean);
+                  if (parsedVariants.length > 0) {
+                    item.variants = parsedVariants;
+                  }
+                }
+              }
+              else if (header === "name") item.name = val;
+              else if (header.includes("description")) item.description = val;
+              else if (header.includes("price")) item.price = Number(val) || 0;
+              else if (header.includes("category")) item.categoryName = val;
+              else if (header.includes("type")) item.foodType = val;
+              else if (header.includes("prep")) item.preparationTime = val;
+              else if (header.includes("available")) item.isAvailable = String(val).toLowerCase() === "true";
+              else if (header.includes("image")) item.image = val;
+            });
+            return item;
+          });
+
+          if (items.length === 0) {
+            toast.error("No valid items found in the file");
+            setIsUploadingBulk(false);
+            return;
+          }
+
+          const res = await restaurantAPI.bulkCreateFood(items);
+          // Backend sendResponse wraps results in .data.data
+          const results = res?.data?.data || res?.data;
+
+          if (res?.data?.success || res?.status === 201) {
+            setBulkUploadResult({
+              successCount: results?.successCount || 0,
+              errorCount: results?.errorCount || 0,
+              errors: results?.errors || [],
+              total: items.length
+            });
+            
+            setSelectedBulkFile(null);
+            
+            // Refresh inventory
+            setLoadingInventory(true);
+            const menuRes = await restaurantAPI.getMenu();
+            if (menuRes?.data?.success) {
+              const menuData = menuRes.data.data?.categories || menuRes.data.categories || [];
+              setCategories(menuData)
+              localStorage.setItem(INVENTORY_STORAGE_KEY, JSON.stringify(menuData))
+            }
+            setLoadingInventory(false);
+          } else {
+            toast.error(res?.data?.message || "Failed to upload bulk items")
+          }
+        } catch (err) {
+          console.error("Parsing error:", err);
+          toast.error("Error parsing file. Ensure it's a valid Excel file.");
+        } finally {
+          setIsUploadingBulk(false);
+        }
+      };
+      
+      reader.readAsArrayBuffer(selectedBulkFile);
+    } catch (err) {
+      console.error("XLSX load error:", err);
+      toast.error("Could not load Excel processing library.");
+      setIsUploadingBulk(false);
+    }
+  };
+
   const mouseEndX = useRef(0)
   const isMouseDown = useRef(false)
   const [isTransitioning, setIsTransitioning] = useState(false)
@@ -1747,6 +1949,27 @@ export default function Inventory() {
     window.scrollTo({ top: el.offsetTop - 100, behavior: "smooth" })
   }
 
+  const handleDeleteFoodItem = async (foodId) => {
+    if (!window.confirm("Are you sure you want to delete this item?")) return;
+    try {
+      setIsLoading(true);
+      await restaurantAPI.deleteFood(foodId);
+      toast.success("Food item deleted successfully");
+      await fetchInitialData(); // Refresh the data
+    } catch (err) {
+      console.error("Delete Error details:", err?.response?.data || err);
+      const serverMessage = err?.response?.data?.error || err?.response?.data?.message;
+      if (serverMessage === "Food item not found or unauthorized") {
+        toast.success("Item is already deleted. Refreshing list...");
+        await fetchInitialData();
+      } else {
+        toast.error(serverMessage || err?.message || "Failed to delete item");
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleEditItem = (category, item) => {
     if (!item?.id) return
 
@@ -1782,10 +2005,10 @@ export default function Inventory() {
         <div ref={tabBarRef} className="grid grid-cols-2 gap-3">
           <motion.button
             onClick={() => setActiveTab("all-items")}
-            className={`relative overflow-hidden rounded-lg border px-4 py-3 text-sm font-semibold ${
+            className={`relative overflow-hidden rounded-[24px] border px-4 py-3 text-sm font-semibold ${
               activeTab === "all-items"
-                ? "border-[#7e3866] bg-[#7e3866] text-white"
-                : "border-gray-200 bg-white text-gray-700"
+                ? "border-primary text-white shadow-[0_18px_32px_-24px_rgba(126,56,102,0.6)]"
+                : "border-[#ead6e3] bg-white/90 text-[#6d6470] shadow-[0_16px_40px_-34px_rgba(109,100,112,0.35)]"
             }`}
             animate={{
               scale: activeTab === "all-items" ? 1.02 : 1,
@@ -1795,7 +2018,7 @@ export default function Inventory() {
             {activeTab === "all-items" && (
               <motion.div
                 layoutId="activeTabBackground"
-                className="absolute inset-0 rounded-lg bg-[#7e3866] -z-10"
+                className="absolute inset-0 rounded-[24px] bg-primary -z-10"
                 initial={false}
                 transition={{
                   type: "spring",
@@ -1807,7 +2030,7 @@ export default function Inventory() {
             <span className="relative z-10 flex min-h-7 items-center justify-center gap-2 leading-none">
               <span className="whitespace-nowrap">All items</span>
               <span className={`inline-flex min-h-5 min-w-[24px] items-center justify-center rounded-full px-2 py-0.5 text-xs font-semibold ${
-                activeTab === "all-items" ? "bg-white text-[#7e3866]" : "bg-[#f6ecf3] text-[#6d6470]"
+                activeTab === "all-items" ? "bg-white text-primary" : "bg-[#f6ecf3] text-[#6d6470]"
               }`}>
                 {totalItems}
               </span>
@@ -1816,10 +2039,10 @@ export default function Inventory() {
 
           <motion.button
             onClick={() => setActiveTab("add-ons")}
-            className={`relative overflow-hidden rounded-lg border px-4 py-3 text-sm font-semibold ${
+            className={`relative overflow-hidden rounded-[24px] border px-4 py-3 text-sm font-semibold ${
               activeTab === "add-ons"
-                ? "border-[#7e3866] bg-[#7e3866] text-white"
-                : "border-gray-200 bg-white text-gray-700"
+                ? "border-primary text-white shadow-[0_18px_32px_-24px_rgba(126,56,102,0.6)]"
+                : "border-[#ead6e3] bg-white/90 text-[#6d6470] shadow-[0_16px_40px_-34px_rgba(109,100,112,0.35)]"
             }`}
             animate={{
               scale: activeTab === "add-ons" ? 1.02 : 1,
@@ -1829,7 +2052,7 @@ export default function Inventory() {
             {activeTab === "add-ons" && (
               <motion.div
                 layoutId="activeTabBackground"
-                className="absolute inset-0 rounded-lg bg-[#7e3866] -z-10"
+                className="absolute inset-0 rounded-[24px] bg-primary -z-10"
                 initial={false}
                 transition={{
                   type: "spring",
@@ -1841,7 +2064,7 @@ export default function Inventory() {
             <span className="relative z-10 flex min-h-7 items-center justify-center gap-2 leading-none">
               <span className="whitespace-nowrap">Add ons</span>
               <span className={`inline-flex min-h-5 min-w-[24px] items-center justify-center rounded-full px-2 py-0.5 text-xs font-semibold ${
-                activeTab === "add-ons" ? "bg-white text-[#7e3866]" : "bg-[#f6ecf3] text-[#6d6470]"
+                activeTab === "add-ons" ? "bg-white text-primary" : "bg-[#f6ecf3] text-[#6d6470]"
               }`}>
                 {addons.length}
               </span>
@@ -1917,16 +2140,16 @@ export default function Inventory() {
       >
         {/* Search and Filter */}
         <div className="sticky top-0 z-30 -mx-4 px-4 pb-4 bg-[#f3f5f8]/95 backdrop-blur supports-[backdrop-filter]:bg-[#f3f5f8]/80">
-          <div className="overflow-hidden rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+          <div className="overflow-hidden rounded-[28px] border border-white/80 bg-white/90 p-4 shadow-[0_20px_48px_-34px_rgba(15,23,42,0.45)] backdrop-blur">
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-sm font-semibold text-slate-950">
-                  {activeTab === "add-ons" ? "Search add-ons" : "Search menu items"}
+                  {activeTab === "add-ons" ? "Search and review add-ons" : "Search and manage menu inventory"}
                 </p>
                 <p className="mt-1 text-xs text-slate-500">
                   {activeTab === "add-ons"
                     ? `${filteredAddons.length} add-on${filteredAddons.length !== 1 ? "s" : ""} in this view`
-                    : `${listToRender.length} categor${listToRender.length !== 1 ? "ies" : "y"} and ${activeFilterCount} item${activeFilterCount !== 1 ? "s" : ""}`}
+                    : `${listToRender.length} categor${listToRender.length !== 1 ? "ies" : "y"} and ${activeFilterCount} item${activeFilterCount !== 1 ? "s" : ""} in focus`}
                 </p>
               </div>
               {hasActiveTools ? (
@@ -1936,22 +2159,22 @@ export default function Inventory() {
                     setSearchQuery("")
                     setSelectedFilter("all")
                   }}
-                  className="rounded-md border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-700 transition-colors hover:bg-gray-50"
+                  className="rounded-full border border-[#e7d5e0] px-3 py-1.5 text-xs font-semibold text-[#6b4d62] transition-colors hover:border-[#d5bdd0] hover:bg-[#f9f0f7]"
                 >
                   Clear all
                 </button>
               ) : null}
             </div>
 
-            <div className="mt-4 flex gap-2 flex-wrap">
-              <div className="flex-1 min-w-[220px] relative">
+            <div className="mt-4 flex flex-col gap-3">
+              <div className="w-full relative">
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <input
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder={activeTab === "add-ons" ? "Search add-ons by name or status" : "Search categories or menu items"}
-                  className="h-12 w-full rounded-lg border border-gray-300 bg-white pl-11 pr-10 text-sm text-slate-900 placeholder:text-slate-400 focus:border-[#7e3866] focus:outline-none"
+                  className="h-12 w-full rounded-[20px] border border-[#e7d5e0] bg-[#fcf7fb] pl-11 pr-10 text-sm text-slate-900 placeholder:text-slate-400 focus:border-[#c796b8] focus:bg-white focus:outline-none"
                 />
                 {searchQuery ? (
                   <button
@@ -1965,29 +2188,40 @@ export default function Inventory() {
                 ) : null}
               </div>
 
-              <button
-                onClick={() => setFilterOpen(true)}
-                className="relative flex h-12 items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 text-sm font-semibold text-gray-800 transition-colors hover:bg-gray-50"
-              >
-                <SlidersHorizontal className="w-4 h-4 text-[#7e3866]" />
+              <div className="flex gap-2 flex-wrap items-center">
+                <button
+                  onClick={() => setFilterOpen(true)}
+                  className="relative flex h-12 items-center justify-center gap-2 rounded-[20px] border border-[#e7d5e0] bg-white px-4 text-sm font-semibold text-secondary transition-colors hover:border-[#d5bdd0] hover:bg-[#f9f0f7]"
+                >
+                <SlidersHorizontal className="w-4 h-4 text-primary" />
                 <span>Filters</span>
                 {selectedFilter !== "all" && (
-                  <span className="absolute right-1.5 top-1.5 h-2.5 w-2.5 rounded-full bg-[#7e3866] ring-2 ring-white" />
+                  <span className="absolute right-1.5 top-1.5 h-2.5 w-2.5 rounded-full bg-primary ring-2 ring-white" />
                 )}
               </button>
+
+              {activeTab !== "add-ons" && (
+                <button
+                  onClick={() => setIsAddPopupOpen(true)}
+                  className="h-12 rounded-[20px] bg-primary px-4 text-sm font-semibold text-white shadow-[0_18px_32px_-24px_rgba(126,56,102,0.7)] transition-colors hover:bg-secondary"
+                >
+                  + Add item
+                </button>
+              )}
 
               {activeTab === "add-ons" && (
                 <button
                   onClick={() => setIsAddAddonOpen((v) => !v)}
-                  className="h-12 rounded-lg bg-[#7e3866] px-4 text-sm font-semibold text-white transition-colors hover:bg-[#55254b]"
+                  className="h-12 rounded-[20px] bg-primary px-4 text-sm font-semibold text-white shadow-[0_18px_32px_-24px_rgba(126,56,102,0.7)] transition-colors hover:bg-secondary"
                   style={{ minWidth: "128px" }}
                 >
                   {isAddAddonOpen ? "Close" : "Add Add-on"}
                 </button>
-              )}
+                )}
+              </div>
             </div>
 
-            <div className="mt-4 flex gap-2 overflow-x-auto scrollbar-hide pb-1">
+            <div className="mt-3 flex gap-2 overflow-x-auto scrollbar-hide pb-1">
               {activeFilterOptions.map((option) => {
                 const count = activeTab === "add-ons"
                   ? (addonFilterCounts[option.value] || 0)
@@ -2001,8 +2235,8 @@ export default function Inventory() {
                     onClick={() => setSelectedFilter(option.value)}
                     className={`shrink-0 rounded-full border px-3.5 py-2 text-xs font-semibold transition-colors ${
                       isActive
-                        ? "border-[#7e3866] bg-[#7e3866] text-white"
-                        : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
+                        ? "border-primary bg-primary text-white shadow-[0_14px_28px_-24px_rgba(126,56,102,0.8)]"
+                        : "border-[#e7d5e0] bg-[#fcf7fb] text-[#6d6470] hover:border-[#d5bdd0] hover:bg-white"
                     }`}
                   >
                     <span>{option.label}</span>
@@ -2031,7 +2265,7 @@ export default function Inventory() {
                         type="text"
                         value={addonName}
                         onChange={(e) => setAddonName(e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-[#7e3866] focus:outline-none"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary focus:outline-none"
                         placeholder="e.g., Coke, Chips"
                       />
                     </div>
@@ -2040,7 +2274,7 @@ export default function Inventory() {
                       <textarea
                         value={addonDescription}
                         onChange={(e) => setAddonDescription(e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-[#7e3866] focus:outline-none resize-none"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary focus:outline-none resize-none"
                         rows={3}
                         placeholder="Describe the add-on..."
                       />
@@ -2051,7 +2285,7 @@ export default function Inventory() {
                         type="number"
                         value={addonPrice}
                         onChange={(e) => setAddonPrice(e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-[#7e3866] focus:outline-none"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary focus:outline-none"
                         min="0"
                         step="0.01"
                         placeholder="0.00"
@@ -2106,7 +2340,7 @@ export default function Inventory() {
                         type="button"
                         onClick={handleSaveAddon}
                         disabled={savingAddon}
-                        className="px-4 py-2 bg-[#7e3866] text-white rounded-md text-sm font-medium hover:bg-[#55254b] disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                        className="px-4 py-2 bg-primary text-white rounded-md text-sm font-medium hover:bg-secondary disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                       >
                         {savingAddon && <Loader2 className="h-4 w-4 animate-spin" />}
                         <span>{savingAddon ? "Saving..." : "Submit for approval"}</span>
@@ -2120,13 +2354,13 @@ export default function Inventory() {
                   <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
                 </div>
               ) : filteredAddons.length === 0 ? (
-                <div className="rounded-lg border border-dashed border-gray-300 bg-white px-4 py-16 text-center shadow-sm">
+                <div className="rounded-[28px] border border-dashed border-slate-200 bg-white/70 px-4 py-20 text-center shadow-[0_18px_40px_-34px_rgba(15,23,42,0.35)]">
                   <div className="text-center">
                     <p className="text-lg font-semibold text-slate-700">
                       {hasActiveTools ? "No matching add-ons found" : "No add-ons available"}
                     </p>
                     <p className="mt-2 text-sm text-slate-500">
-                      {hasActiveTools ? "Try changing your search or filters" : "Add-ons will appear here"}
+                      {hasActiveTools ? "Try changing your search or filters" : "All add-ons will appear here"}
                     </p>
                   </div>
                 </div>
@@ -2135,7 +2369,7 @@ export default function Inventory() {
                   {filteredAddons.map((addon) => (
                     <div
                       key={addon.id}
-                      className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm"
+                      className="rounded-[28px] border border-white/80 bg-white p-4 shadow-[0_20px_48px_-34px_rgba(15,23,42,0.45)]"
                     >
                       <div className="flex items-start justify-between gap-4">
                         <div className="flex-1 min-w-0">
@@ -2146,7 +2380,7 @@ export default function Inventory() {
                                 ? "bg-emerald-50 text-emerald-700"
                                 : "bg-slate-100 text-slate-600"
                             }`}>
-                              {addon.isAvailable !== false ? "Available" : "Unavailable"}
+                              {addon.isAvailable !== false ? "Live" : "Paused"}
                             </span>
                             {addon.approvalStatus === 'approved' && (
                               <span className="rounded-full bg-green-100 px-2.5 py-1 text-[11px] font-semibold text-green-800">Approved</span>
@@ -2171,7 +2405,7 @@ export default function Inventory() {
                             <img
                               src={addon.images[0]}
                               alt={addon.name}
-                              className="h-20 w-20 rounded-lg object-cover ring-1 ring-slate-200"
+                              className="h-20 w-20 rounded-2xl object-cover ring-1 ring-slate-200"
                               onError={(e) => {
                                 e.target.style.display = 'none'
                               }}
@@ -2195,7 +2429,7 @@ export default function Inventory() {
             </>
           )}
           {activeTab !== "add-ons" && !loadingInventory && listToRender.length === 0 && (
-            <div className="rounded-lg border border-dashed border-gray-300 bg-white px-6 py-16 text-center shadow-sm">
+            <div className="rounded-[28px] border border-dashed border-slate-200 bg-white/70 px-6 py-16 text-center shadow-[0_18px_40px_-34px_rgba(15,23,42,0.35)]">
               <p className="text-lg font-semibold text-slate-700">
                 {hasActiveTools ? "No matching categories or items found" : "No menu categories available"}
               </p>
@@ -2214,7 +2448,7 @@ export default function Inventory() {
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: isLoading ? 0.6 : 1, y: 0 }}
                 transition={{ delay: index * 0.05 }}
-                className="relative overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm"
+                className="relative overflow-hidden rounded-[30px] border border-white/80 bg-white shadow-[0_22px_52px_-36px_rgba(15,23,42,0.45)]"
                 ref={(el) => {
                   if (el) {
                     categoryRefs.current[category.id] = el
@@ -2226,7 +2460,7 @@ export default function Inventory() {
                   <motion.div
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
-                    className="absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-white/80"
+                    className="absolute inset-0 z-10 flex items-center justify-center rounded-[30px] bg-white/80"
                   >
                     <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
                   </motion.div>
@@ -2240,39 +2474,39 @@ export default function Inventory() {
                   <div className="flex items-center justify-between gap-4">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-3 mb-2 flex-wrap">
-                        <h3 className="text-lg font-semibold text-slate-950 dark:text-white">
+                        <h3 className="text-xl font-black tracking-tight text-slate-950 dark:text-white">
                           {category.name}
                         </h3>
                         <div className="flex items-center gap-2">
-                          <span className="rounded-full bg-slate-100 dark:bg-gray-800 px-3 py-1 text-xs font-medium text-slate-600">
+                          <span className="rounded-full bg-slate-100 dark:bg-gray-800 px-3 py-1 text-[10px] font-black uppercase tracking-wider text-slate-500">
                             {category.items?.length || category.itemCount || 0} items
                           </span>
-                          <span className={`rounded-full px-3 py-1 text-xs font-medium ${
+                          <span className={`rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-wider ${
                             category.inStock
                               ? "bg-green-50 text-green-700 border border-green-100"
                               : "bg-amber-50 text-amber-700 border border-amber-100"
                           }`}>
-                            {category.inStock ? "Available" : "Unavailable"}
+                            {category.inStock ? "Healthy" : "Needs attention"}
                           </span>
                         </div>
                       </div>
                       
                       <div className="flex flex-wrap items-center gap-3 mt-4">
                         {category.inStock ? (
-                          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-green-50 rounded-lg border border-green-100">
-                            <div className="w-1.5 h-1.5 rounded-full bg-green-500" />
-                            <p className="text-xs font-medium text-green-700">All items available</p>
+                          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-green-50/50 rounded-xl border border-green-100/50">
+                            <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                            <p className="text-[10px] font-bold text-green-700">All items live</p>
                           </div>
                         ) : (
-                          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 rounded-lg border border-rose-100">
+                          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-50/50 rounded-xl border border-rose-100/50">
                             <div className="w-1.5 h-1.5 rounded-full bg-rose-500" />
-                            <p className="text-xs font-medium text-rose-700">
-                              {getOutOfStockCount(category)} item{getOutOfStockCount(category) !== 1 ? "s" : ""} unavailable
+                            <p className="text-[10px] font-bold text-rose-700">
+                              {getOutOfStockCount(category)} Items paused
                             </p>
                           </div>
                         )}
-                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 rounded-lg border border-blue-100">
-                          <p className="text-xs font-medium text-blue-700">
+                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50/50 rounded-xl border border-blue-100/50">
+                          <p className="text-[10px] font-bold text-blue-700">
                             {(categoryItems.filter((item) => item.isRecommended).length)} Recommended
                           </p>
                         </div>
@@ -2283,7 +2517,7 @@ export default function Inventory() {
                       {/* Category Toggle Switch */}
                       <div
                         onClick={(e) => e.stopPropagation()}
-                        className="scale-100"
+                        className="scale-110"
                       >
                         <Switch
                           checked={category.inStock}
@@ -2330,14 +2564,14 @@ export default function Inventory() {
 
                           return (
                           <div key={item.id} className="group px-1">
-                            <div className="flex items-center justify-between gap-3 sm:gap-4 rounded-lg border border-gray-200 bg-white p-3 sm:p-4 shadow-sm transition-colors hover:border-gray-300">
+                            <div className="flex items-center justify-between gap-3 sm:gap-4 rounded-[28px] border border-slate-100/80 bg-white p-3 sm:p-4 shadow-[0_8px_20px_-12px_rgba(0,0,0,0.08)] hover:shadow-[0_20px_40px_-20px_rgba(0,0,0,0.12)] hover:border-slate-200 transition-all duration-500">
                               <div className="flex min-w-0 flex-1 items-center gap-3 sm:gap-5">
                                 {item.image && (
-                                  <div className="w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24 flex-shrink-0 overflow-hidden rounded-lg border border-gray-200">
+                                  <div className="w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24 flex-shrink-0 rounded-[20px] overflow-hidden shadow-md border-2 border-white ring-1 ring-slate-100/50">
                                     <img
                                       src={item.image}
                                       alt={item.name}
-                                      className="w-full h-full object-cover"
+                                      className="w-full h-full object-cover transform group-hover:scale-110 transition-transform duration-700"
                                       onError={(e) => {
                                         e.target.style.display = 'none';
                                       }}
@@ -2345,12 +2579,12 @@ export default function Inventory() {
                                   </div>
                                 )}
                                 <div className="min-w-0 flex-1">
-                                  <h4 className="line-clamp-1 text-sm sm:text-base font-semibold text-slate-950 leading-tight mb-1.5">
+                                  <h4 className="line-clamp-1 text-sm sm:text-base md:text-lg font-black text-slate-950 tracking-tight leading-tight mb-1.5">
                                     {item.name}
                                   </h4>
                                   
                                   <div className="flex flex-wrap items-center gap-1.5 mb-2.5">
-                                    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 sm:px-2.5 sm:py-1 text-[10px] sm:text-xs font-medium ${
+                                    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 sm:px-2.5 sm:py-1 text-[9px] sm:text-[10px] font-black uppercase tracking-wider shadow-sm transition-all ${
                                       item.isVeg
                                         ? "bg-white text-green-600 border border-green-100"
                                         : "bg-white text-red-600 border border-red-100"
@@ -2360,21 +2594,21 @@ export default function Inventory() {
                                       </div>
                                       {item.isVeg ? "Veg" : "Non-veg"}
                                     </span>
-                                    <span className={`rounded-full px-2 py-0.5 sm:px-2.5 sm:py-1 text-[10px] sm:text-xs font-medium border ${approvalMeta.className.replace('text-', 'text-').replace('bg-', 'bg-white border-')}`}>
+                                    <span className={`rounded-full px-2 py-0.5 sm:px-2.5 sm:py-1 text-[9px] sm:text-[10px] font-black uppercase tracking-wider border shadow-sm ${approvalMeta.className.replace('text-', 'text-').replace('bg-', 'bg-white border-')}`}>
                                       {approvalMeta.label}
                                     </span>
                                   </div>
                                   
                                   <div className="flex items-center gap-3 sm:gap-4 mt-1">
-                                    <p className={`text-xs font-medium ${
+                                    <p className={`text-[9px] sm:text-[10px] font-black uppercase tracking-widest ${
                                       item.inStock ? "text-green-500" : "text-rose-500"
                                     }`}>
-                                      {item.inStock ? "Available" : getRuleStatusLabel(item.stockRule)}
+                                      {item.inStock ? "● Live" : `● ${getRuleStatusLabel(item.stockRule)}`}
                                     </p>
                                     <button
                                       type="button"
                                       onClick={() => handleEditItem(category, item)}
-                                      className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 sm:px-3 sm:py-2 text-xs font-medium transition-colors ${
+                                      className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 sm:px-3 sm:py-2 text-[9px] sm:text-[10px] font-black uppercase tracking-widest transition-all shadow-sm ${
                                         isRejectedItem
                                           ? "bg-red-600 text-white hover:bg-red-700"
                                           : "bg-slate-100 text-slate-800 hover:bg-slate-800 hover:text-white"
@@ -2383,10 +2617,18 @@ export default function Inventory() {
                                       <Pencil className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
                                       {isRejectedItem ? "Fix" : "Edit"}
                                     </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteFoodItem(item.id || item._id)}
+                                      className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 sm:px-3 sm:py-2 text-[9px] sm:text-[10px] font-black uppercase tracking-widest transition-all shadow-sm bg-rose-50 text-rose-600 hover:bg-rose-600 hover:text-white"
+                                      title="Delete Item"
+                                    >
+                                      <Trash2 className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                                    </button>
                                   </div>
 
                                   {item.approvalStatus === "rejected" && item.rejectionReason && (
-                                    <p className="mt-2 rounded-md border border-red-100 bg-red-50 px-2.5 py-1 text-xs font-medium text-red-600">
+                                    <p className="mt-2 text-[9px] sm:text-[10px] font-bold text-red-600 bg-red-50/50 border border-red-100/50 px-2.5 py-1 rounded-lg italic">
                                       {item.rejectionReason}
                                     </p>
                                   )}
@@ -2399,9 +2641,9 @@ export default function Inventory() {
                                     e.stopPropagation()
                                     handleRecommendToggle(category.id, item.id)
                                   }}
-                                  className={`w-8 h-8 sm:w-10 sm:h-10 flex items-center justify-center rounded-lg transition-colors border ${
+                                  className={`w-8 h-8 sm:w-10 sm:h-10 flex items-center justify-center rounded-[14px] sm:rounded-2xl transition-all shadow-sm border ${
                                     item.isRecommended
-                                      ? "bg-blue-600 border-blue-600 text-white"
+                                      ? "bg-blue-600 border-blue-600 text-white rotate-12 scale-110"
                                       : "bg-white border-slate-100 text-slate-300 hover:border-slate-200 hover:text-slate-600"
                                   }`}
                                 >
@@ -2460,8 +2702,8 @@ export default function Inventory() {
                     <h2 className="text-lg font-bold text-gray-900">Filters</h2>
                     <p className="text-sm text-gray-500 mt-1">
                       {activeTab === "add-ons"
-                        ? "Filter add-ons by availability or approval status."
-                        : "Filter items by stock status, recommendation, or food type."}
+                        ? "Refine the add-ons list by availability or approval status."
+                        : "Refine your inventory by stock state, recommendation, or food type."}
                     </p>
                   </div>
                   {selectedFilter !== "all" ? (
@@ -2509,7 +2751,7 @@ export default function Inventory() {
                   )}
                   <button
                     onClick={handleFilterApply}
-                    className={`${selectedFilter !== "all" ? 'flex-1' : 'w-full'} bg-[#7e3866] text-white py-3 rounded-lg font-medium hover:bg-[#55254b] transition-colors`}
+                    className={`${selectedFilter !== "all" ? 'flex-1' : 'w-full'} bg-primary text-white py-3 rounded-lg font-medium hover:bg-secondary transition-colors`}
                   >
                     Apply
                   </button>
@@ -2680,7 +2922,7 @@ export default function Inventory() {
                   </button>
                   <button
                     onClick={handleToggleConfirm}
-                    className="flex-1 bg-[#7e3866] text-white py-3 rounded-lg font-medium hover:bg-[#55254b] transition-colors"
+                    className="flex-1 bg-primary text-white py-3 rounded-lg font-medium hover:bg-secondary transition-colors"
                   >
                     Confirm
                   </button>
@@ -2717,7 +2959,10 @@ export default function Inventory() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              onClick={() => setIsAddPopupOpen(false)}
+              onClick={() => {
+                setIsAddPopupOpen(false)
+                setShowBulkUpload(false)
+              }}
               className="fixed inset-0 bg-black/50 z-[70]"
             />
             <motion.div
@@ -2725,53 +2970,232 @@ export default function Inventory() {
               animate={{ y: 0 }}
               exit={{ y: "100%" }}
               transition={{ type: "spring", damping: 30, stiffness: 300 }}
-              className="fixed bottom-0 left-0 right-0 bg-white rounded-t-2xl shadow-2xl z-[71] max-h-[70vh] overflow-y-auto pb-[calc(1rem+env(safe-area-inset-bottom)+5.5rem)]"
+              className="fixed bottom-0 left-0 right-0 bg-white rounded-t-2xl shadow-2xl z-[71] max-h-[85vh] overflow-y-auto pb-[calc(1rem+env(safe-area-inset-bottom)+5.5rem)]"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="sticky top-0 bg-white px-4 py-4 border-b border-gray-200">
-                <h2 className="text-lg font-bold text-gray-900 text-center">Add item</h2>
-              </div>
-              <div className="px-4 py-4 space-y-2">
+              <div className="sticky top-0 bg-white px-4 py-4 border-b border-gray-200 flex items-center justify-between">
+                <div className="w-8" />
+                <h2 className="text-lg font-bold text-gray-900 text-center">
+                  {showBulkUpload ? "Bulk Inventory Upload" : "Add item"}
+                </h2>
                 <button
                   onClick={() => {
                     setIsAddPopupOpen(false)
-                    navigate(`/food/restaurant/hub-menu/item/new`, {
-                      state: {
-                        backTo: "/food/restaurant/inventory",
-                      },
-                    })
+                    setShowBulkUpload(false)
                   }}
-                  className="w-full py-3 px-4 text-left rounded-lg hover:bg-gray-50 transition-colors"
+                  className="p-1 rounded-full hover:bg-gray-100"
                 >
-                  <span className="text-sm font-medium text-gray-900">Add item</span>
+                  <X className="w-5 h-5 text-gray-400" />
                 </button>
               </div>
+
+              {!showBulkUpload ? (
+                <div className="px-4 py-6 space-y-4">
+                  <button
+                    onClick={() => {
+                      setIsAddPopupOpen(false)
+                      navigate(`/food/restaurant/hub-menu/item/new`, {
+                        state: {
+                          backTo: "/food/restaurant/inventory",
+                        },
+                      })
+                    }}
+                    className="w-full group flex items-center gap-4 p-4 rounded-2xl bg-slate-50 hover:bg-slate-100 border border-slate-100 transition-all"
+                  >
+                    <div className="w-12 h-12 rounded-xl bg-orange-100 text-orange-600 flex items-center justify-center group-hover:scale-110 transition-transform">
+                      <Plus className="w-6 h-6" />
+                    </div>
+                    <div className="text-left">
+                      <p className="text-base font-bold text-slate-900">Add single item</p>
+                      <p className="text-xs text-slate-500">Manually enter item details, images, and variants.</p>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => setShowBulkUpload(true)}
+                    className="w-full group flex items-center gap-4 p-4 rounded-2xl bg-slate-50 hover:bg-slate-100 border border-slate-100 transition-all"
+                  >
+                    <div className="w-12 h-12 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center group-hover:scale-110 transition-transform">
+                      <Upload className="w-6 h-6" />
+                    </div>
+                    <div className="text-left">
+                      <p className="text-base font-bold text-slate-900">Bulk upload items</p>
+                      <p className="text-xs text-slate-500">Upload multiple items at once using an Excel/CSV file.</p>
+                    </div>
+                  </button>
+                </div>
+              ) : (
+                <div className="px-4 py-6 space-y-6">
+                  <div className="rounded-2xl bg-blue-50 border border-blue-100 p-4">
+                    <div className="flex gap-3">
+                      <div className="mt-0.5">
+                        <Upload className="w-5 h-5 text-blue-600" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold text-blue-900">How it works</p>
+                        <p className="text-xs text-blue-700 leading-relaxed mt-1">
+                          1. Download our template file below.<br />
+                          2. Fill in your item details following the format.<br />
+                          3. Upload the completed file to add all items at once.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={downloadTemplate}
+                    className="w-full flex items-center justify-center gap-2 py-3.5 border-2 border-dashed border-slate-200 rounded-2xl text-slate-600 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-600 transition-all font-bold text-sm"
+                  >
+                    Download dummy Excel template (.xlsx)
+                  </button>
+
+                  <div className="relative">
+                    <input
+                      type="file"
+                      accept=".xlsx, .xls"
+                      onChange={handleBulkFileChange}
+                      className="hidden"
+                      id="bulk-file-input"
+                      disabled={isUploadingBulk}
+                    />
+                    <label
+                      htmlFor="bulk-file-input"
+                      className={`w-full flex flex-col items-center justify-center gap-3 p-8 rounded-[28px] border-2 border-dashed ${
+                        selectedBulkFile ? 'border-green-300 bg-green-50' : 'border-[#ead6e3] bg-[#fcf7fb] hover:bg-[#f9f0f7] hover:border-[#d5bdd0]'
+                      } transition-all cursor-pointer`}
+                    >
+                      <div className="w-16 h-16 rounded-full bg-white flex items-center justify-center shadow-sm">
+                        {selectedBulkFile ? (
+                          <Check className="w-8 h-8 text-green-600" />
+                        ) : (
+                          <Upload className="w-8 h-8 text-primary" />
+                        )}
+                      </div>
+                      <div className="text-center">
+                        <p className="text-base font-bold text-slate-900">
+                          {selectedBulkFile ? selectedBulkFile.name : "Select Excel file to upload"}
+                        </p>
+                        <p className="text-xs text-slate-500 mt-1">
+                          {selectedBulkFile ? "File selected! Tap Submit to upload." : "Tap to choose your .xlsx file from device"}
+                        </p>
+                      </div>
+                    </label>
+                  </div>
+
+                  {selectedBulkFile && (
+                    <button
+                      onClick={handleBulkSubmit}
+                      disabled={isUploadingBulk}
+                      className="w-full py-4 bg-primary text-white rounded-2xl font-bold flex items-center justify-center gap-2 shadow-lg hover:bg-[#6a2f56] transition-all disabled:opacity-50"
+                    >
+                      {isUploadingBulk ? (
+                        <>
+                          <Loader2 className="w-5 h-5 animate-spin" />
+                          Processing...
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="w-5 h-5" />
+                          Submit & Upload
+                        </>
+                      )}
+                    </button>
+                  )}
+
+
+                  <button
+                    onClick={() => setShowBulkUpload(false)}
+                    className="w-full py-4 text-sm font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 transition-colors"
+                  >
+                    Back to options
+                  </button>
+                </div>
+              )}
             </motion.div>
           </>
         )}
       </AnimatePresence>
 
+      {/* Bulk Upload Result Summary Popup */}
+      <AnimatePresence>
+        {bulkUploadResult && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setBulkUploadResult(null)}
+              className="fixed inset-0 bg-black/60 z-[80] backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[90%] max-w-md bg-white rounded-3xl p-6 shadow-2xl z-[81] text-center"
+            >
+              <div className="w-20 h-20 rounded-full bg-green-100 text-green-600 flex items-center justify-center mx-auto mb-4">
+                <Check className="w-10 h-10" />
+              </div>
+              <h3 className="text-xl font-black text-slate-900 mb-2">Upload Summary</h3>
+              <p className="text-sm text-slate-500 mb-6">Process completed successfully.</p>
+              
+              <div className="grid grid-cols-2 gap-4 mb-6">
+                <div className="p-4 rounded-2xl bg-green-50 border border-green-100">
+                  <p className="text-2xl font-black text-green-600">{bulkUploadResult.successCount}</p>
+                  <p className="text-xs font-bold text-green-700 uppercase tracking-wider">Success</p>
+                </div>
+                <div className="p-4 rounded-2xl bg-red-50 border border-red-100">
+                  <p className="text-2xl font-black text-red-600">{bulkUploadResult.errorCount}</p>
+                  <p className="text-xs font-bold text-red-700 uppercase tracking-wider">Failed</p>
+                </div>
+              </div>
+
+              {bulkUploadResult.errors && bulkUploadResult.errors.length > 0 && (
+                <div className="mb-8 text-left">
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Failure Reasons</p>
+                  <div className="max-h-[200px] overflow-y-auto space-y-2 pr-2 custom-scrollbar">
+                    {bulkUploadResult.errors.map((err, idx) => (
+                      <div key={idx} className="p-3 rounded-xl bg-slate-50 border border-slate-100">
+                        <p className="text-xs font-bold text-slate-900">{err.name || `Row ${err.index + 2}`}</p>
+                        <p className="text-[10px] text-red-500 mt-0.5">{err.message}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <button
+                onClick={() => {
+                  setBulkUploadResult(null);
+                  setIsAddPopupOpen(false);
+                  setShowBulkUpload(false);
+                }}
+                className="w-full py-4 bg-slate-900 text-white rounded-2xl font-bold shadow-lg hover:bg-slate-800 transition-all"
+              >
+                Got it!
+              </button>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+
+
       {/* Floating Menu Button & Popup (hidden on Add-ons tab) */}
       {activeTab !== "add-ons" && (
         <div className="fixed right-4 bottom-24 z-30 flex flex-col items-end gap-2">
-          <motion.button
-            whileTap={{ scale: 0.96 }}
-            onClick={() => setIsAddPopupOpen(true)}
-            className="rounded-full bg-[#7e3866] px-5 py-3 text-sm font-semibold text-white shadow-[0_22px_40px_-24px_rgba(126,56,102,0.72)]"
-          >
-            + Add item
-          </motion.button>
+
           <motion.button
             type="button"
             whileTap={{ scale: 0.96 }}
             onClick={() => setIsMenuOpen((prev) => !prev)}
-            className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-800 shadow-sm"
+            className="flex items-center gap-2 rounded-full border border-[#ead6e3] bg-white/95 px-4 py-3 text-sm font-semibold text-secondary shadow-[0_18px_36px_-28px_rgba(126,56,102,0.45)]"
           >
             <span className="w-5 h-5 flex items-center justify-center">
               {isMenuOpen ? (
-                <X className="w-4 h-4 text-[#55254b]" />
+                <X className="w-4 h-4 text-secondary" />
               ) : (
-                <Utensils className="w-4 h-4 text-[#7e3866]" />
+                <Utensils className="w-4 h-4 text-primary" />
               )}
             </span>
             <span>{isMenuOpen ? "Close" : "Menu"}</span>
@@ -2795,11 +3219,11 @@ export default function Inventory() {
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: 20 }}
                   transition={{ duration: 0.2 }}
-                  className="fixed right-4 bottom-36 z-30 h-[45vh] w-[60vw] max-w-sm overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg"
+                  className="fixed right-4 bottom-36 z-30 h-[45vh] w-[60vw] max-w-sm overflow-hidden rounded-[28px] border border-[#ead6e3] bg-white shadow-[0_24px_60px_-30px_rgba(126,56,102,0.45)]"
                 >
                   <div className="h-full flex flex-col">
-                    <div className="bg-gray-50 px-4 pt-4 pb-3">
-                      <p className="text-sm font-semibold text-gray-900">Jump to category</p>
+                    <div className="bg-[linear-gradient(135deg,#fcf4f9_0%,#f6e8f1_100%)] px-4 pt-4 pb-3">
+                      <p className="text-sm font-semibold text-secondary">Jump to category</p>
                     </div>
                     <div className="mx-4 h-px bg-slate-200" />
                     <div className="flex-1 overflow-y-auto px-4 py-2 space-y-1">

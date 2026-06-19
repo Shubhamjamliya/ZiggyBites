@@ -5,6 +5,7 @@ import {
   QrCode, Loader2, Info, X, RefreshCw, Package
 } from 'lucide-react';
 import { deliveryAPI } from '@food/api';
+import { useDeliveryStore } from '@/modules/DeliveryV2/store/useDeliveryStore';
 import { toast } from 'sonner';
 import { ActionSlider } from '@/modules/DeliveryV2/components/ui/ActionSlider';
 
@@ -86,6 +87,26 @@ const OtpModal = ({ order, onVerified, onClose }) => {
     try {
       const res = await deliveryAPI.verifyDropOtp(orderId, otpString);
       if (res?.data?.success) {
+        // Update local order state in the store so it persists if modal is toggled
+        try {
+          const { setActiveOrder, activeOrder: currentOrder } = useDeliveryStore.getState();
+          if (currentOrder) {
+            setActiveOrder({
+              ...currentOrder,
+              deliveryVerification: {
+                ...currentOrder.deliveryVerification,
+                dropOtp: {
+                  ...currentOrder.deliveryVerification?.dropOtp,
+                  verified: true,
+                  code: otpString
+                }
+              }
+            });
+          }
+        } catch (e) {
+          console.warn('Failed to update global store state:', e);
+        }
+
         setIsOtpVerified(true);
         // toast.success("OTP Verified Successfully");
         setTimeout(() => onVerified(otpString), 600);

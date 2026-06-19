@@ -8,6 +8,7 @@ import { useLocationSelector } from "./UserLayout"
 import { FaLocationDot } from "react-icons/fa6"
 import { getCachedSettings, loadBusinessSettings } from "@food/utils/businessSettings"
 import quickSpicyLogo from "@food/assets/quicky-spicy-logo.png"
+import { toast } from "sonner"
 
 export default function PageNavbar({
   textColor = "white",
@@ -72,6 +73,8 @@ export default function PageNavbar({
 
         if (!isGranted) {
           debugLog("?? Geolocation permission not granted; waiting for user action")
+          openLocationSelector()
+          toast.error("Please enter location or enable GPS")
           return
         }
         const fetchedLocation = await requestLocationRef.current()
@@ -83,6 +86,8 @@ export default function PageNavbar({
           debugLog("? Location fetched successfully:", fetchedLocation)
         } else {
           debugLog("Location fetch returned placeholder, user may need to select manually")
+          openLocationSelector()
+          toast.error("Please enter location or enable GPS")
         }
       } catch (err) {
         if (!cancelled) {
@@ -1003,9 +1008,9 @@ export default function PageNavbar({
     openLocationSelector()
   }
 
-  const textColorClass = textColor === "white" ? "text-white" : "text-[#7e3866]"
+  const textColorClass = textColor === "white" ? "text-white" : "text-primary"
   const iconFill = textColor === "white" ? "white" : "#7e3866"
-  const ringColor = textColor === "white" ? "ring-white/30" : "ring-[#7e3866]/30"
+  const ringColor = textColor === "white" ? "ring-white/30" : "ring-primary/30"
 
   const zIndexClass = zIndex === 50 ? "z-50" : "z-20"
 
@@ -1023,7 +1028,7 @@ export default function PageNavbar({
               <img
                 src={logoUrl}
                 alt={companyName || "Company Logo"}
-                className="h-9 w-auto sm:h-12 md:h-14 object-contain scale-[1.6] sm:scale-[1.8] origin-left"
+                className="h-8 w-auto sm:h-10 md:h-12 object-contain scale-[1.2] sm:scale-[1.3] origin-left"
                 crossOrigin="anonymous"
                 onError={(e) => {
                   // Fallback to name if image fails
@@ -1031,14 +1036,14 @@ export default function PageNavbar({
                 }}
               />
             ) : companyName ? (
-              <span className={`text-lg font-bold text-${textColor}`}>
+              <span className={`text-base font-bold text-${textColor}`}>
                 {companyName}
               </span>
             ) : (
               <img
                 src={quickSpicyLogo}
                 alt="Logo"
-                className="h-9 w-auto sm:h-12 md:h-14 object-contain scale-[1.6] sm:scale-[1.8] origin-left"
+                className="h-8 w-auto sm:h-10 md:h-12 object-contain scale-[1.2] sm:scale-[1.3] origin-left"
               />
             )}
           </Link>
@@ -1059,13 +1064,13 @@ export default function PageNavbar({
             ) : (
               <div className="flex flex-col items-center min-w-0">
                 <div className="flex items-center justify-center gap-1">
-                  <span className={`text-sm sm:text-base font-bold ${textColorClass} truncate max-w-[140px] sm:max-w-[200px]`}>
+                  <span className={`text-xs sm:text-sm font-bold ${textColorClass} truncate max-w-[140px] sm:max-w-[200px]`}>
                     {displayArea}
                   </span>
                   <ChevronDown className={`h-3 w-3 sm:h-4 sm:w-4 ${textColorClass} flex-shrink-0`} strokeWidth={2.5} />
                 </div>
                 {displayAddress && (
-                  <span className={`text-[10px] sm:text-xs font-medium ${textColorClass}/70 truncate max-w-[140px] sm:max-w-[200px] text-center`}>
+                  <span className={`text-[9px] sm:text-[10px] font-medium ${textColorClass}/70 truncate max-w-[140px] sm:max-w-[200px] text-center`}>
                     {displayAddress}
                   </span>
                 )}
@@ -1087,7 +1092,7 @@ export default function PageNavbar({
               title="Wallet"
             >
               <div className={`h-full w-full rounded-full bg-transparent flex items-center justify-center shadow-md border border-gray-100/50 dark:border-white/10`}>
-                <Wallet className={`h-4.5 w-4.5 sm:h-5.5 sm:w-5.5 ${textColor === "white" ? "text-white" : "text-[#7e3866] dark:text-[#a14b84]"}`} strokeWidth={3} />
+                <Wallet className={`h-4.5 w-4.5 sm:h-5.5 sm:w-5.5 ${textColor === "white" ? "text-white" : "text-primary dark:text-[#a14b84]"}`} strokeWidth={3} />
               </div>
             </Button>
           </Link>
@@ -1100,10 +1105,10 @@ export default function PageNavbar({
               title="Cart"
             >
               <div className={`h-full w-full rounded-full bg-transparent flex items-center justify-center shadow-md border border-gray-100/50 dark:border-white/10`}>
-                <ShoppingCart className={`h-4.5 w-4.5 sm:h-5.5 sm:w-5.5 ${textColor === "white" ? "text-white" : "text-[#7e3866] dark:text-[#a14b84]"}`} strokeWidth={3} />
+                <ShoppingCart className={`h-4.5 w-4.5 sm:h-5.5 sm:w-5.5 ${textColor === "white" ? "text-white" : "text-primary dark:text-[#a14b84]"}`} strokeWidth={3} />
               </div>
               {cartCount > 0 && (
-                <span className="absolute -top-1 -right-1 w-4.5 h-4.5 bg-[#7e3866] rounded-full flex items-center justify-center ring-2 ring-white">
+                <span className="absolute -top-1 -right-1 w-4.5 h-4.5 bg-primary rounded-full flex items-center justify-center ring-2 ring-white">
                   <span className="text-[10px] font-black text-white">{cartCount > 99 ? "99+" : cartCount}</span>
                 </span>
               )}
@@ -1120,7 +1125,7 @@ export default function PageNavbar({
                 title="Profile"
               >
                 <div className={`h-full w-full rounded-full bg-transparent flex items-center justify-center shadow-md border border-gray-100/50 dark:border-white/10`}>
-                  <span className={`text-sm sm:text-base font-black ${textColor === "white" ? "text-white" : "text-[#7e3866] dark:text-[#a14b84]"}`}>
+                  <span className={`text-sm sm:text-base font-black ${textColor === "white" ? "text-white" : "text-primary dark:text-[#a14b84]"}`}>
                     A
                   </span>
                 </div>

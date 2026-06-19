@@ -18,7 +18,7 @@ export default function AdminLogin() {
     const cached = getCachedSettings()
     return {
       logoUrl: cached?.logo?.url || null,
-      companyName: cached?.companyName || "Indian Bites",
+      companyName: cached?.companyName || "ZiggyBites",
     }
   })
   const submitting = useRef(false)
@@ -30,7 +30,7 @@ export default function AdminLogin() {
       if (!settings || cancelled) return
       setBrand({
         logoUrl: settings.logo?.url || null,
-        companyName: settings.companyName || "Indian Bites",
+        companyName: settings.companyName || "ZiggyBites",
       })
     }
 

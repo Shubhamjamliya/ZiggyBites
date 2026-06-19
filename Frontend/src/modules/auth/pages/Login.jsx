@@ -36,7 +36,7 @@ export default function UnifiedOTPFastLogin() {
     const cached = getCachedSettings()
     return {
       logoUrl: cached?.logo?.url || null,
-      companyName: cached?.companyName || "Indian Bites",
+      companyName: cached?.companyName || "ZiggyBites",
     }
   })
   const navigate = useNavigate()
@@ -50,7 +50,7 @@ export default function UnifiedOTPFastLogin() {
       if (!settings || cancelled) return
       setBrand({
         logoUrl: settings.logo?.url || null,
-        companyName: settings.companyName || "Indian Bites",
+        companyName: settings.companyName || "ZiggyBites",
       })
     }
 
@@ -282,6 +282,45 @@ export default function UnifiedOTPFastLogin() {
     return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`
   }
 
+  const updateOtpDigit = (index, rawValue) => {
+    const val = rawValue.replace(/\D/g, "").slice(-1)
+    const nextOtp = Array.from({ length: 4 }, (_, digitIndex) => otp[digitIndex] || "")
+    nextOtp[index] = val
+    setOtp(nextOtp.join(""))
+
+    if (val && index < 3) {
+      document.getElementById(`otp-${index + 1}`)?.focus()
+    }
+  }
+
+  const handleOtpBackspace = (index) => {
+    const nextOtp = Array.from({ length: 4 }, (_, digitIndex) => otp[digitIndex] || "")
+
+    if (nextOtp[index]) {
+      nextOtp[index] = ""
+      setOtp(nextOtp.join(""))
+      return
+    }
+
+    if (index > 0) {
+      nextOtp[index - 1] = ""
+      setOtp(nextOtp.join(""))
+      document.getElementById(`otp-${index - 1}`)?.focus()
+    }
+  }
+
+  const handleOtpPaste = (e) => {
+    e.preventDefault()
+    const digits = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 4)
+    if (!digits) return
+
+    const nextOtp = Array.from({ length: 4 }, (_, digitIndex) => digits[digitIndex] || "")
+    setOtp(nextOtp.join(""))
+
+    const nextFocusIndex = Math.min(digits.length, 3)
+    document.getElementById(`otp-${nextFocusIndex}`)?.focus()
+  }
+
   return (
     <div className="min-h-screen bg-white flex flex-col relative overflow-hidden font-['Poppins'] text-[#202030]">
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
@@ -315,7 +354,7 @@ export default function UnifiedOTPFastLogin() {
               )}
             </div>
             <h1 className="text-4xl font-black italic tracking-tight text-[#ff1f1f] drop-shadow-sm">
-              {brand.companyName || "Indian Bites"}
+              {brand.companyName || "ZiggyBites"}
             </h1>
             <div className="mx-auto mt-2 h-1 w-16 rounded-full bg-[#ff1f1f]" />
           </div>
@@ -408,15 +447,14 @@ export default function UnifiedOTPFastLogin() {
                         required
                         autoFocus={index === 0}
                         value={otp[index] || ""}
-                        onChange={(e) => {
-                          const val = e.target.value.replace(/\D/g, "").slice(-1)
-                          if (!val) return
-                          const newOtp = otp.split("")
-                          newOtp[index] = val
-                          const combined = newOtp.join("").slice(0, 4)
-                          setOtp(combined)
-                          if (index < 3 && val) document.getElementById(`otp-${index + 1}`)?.focus()
+                        onChange={(e) => updateOtpDigit(index, e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Backspace") {
+                            e.preventDefault()
+                            handleOtpBackspace(index)
+                          }
                         }}
+                        onPaste={index === 0 ? handleOtpPaste : undefined}
                         className="h-14 w-full rounded-xl bg-white text-center text-2xl font-black text-[#202030] shadow-[0_8px_28px_rgba(15,23,42,0.08)] ring-1 ring-gray-100 outline-none focus:ring-[#ff2727]"
                       />
                     ))}
@@ -588,28 +626,14 @@ export default function UnifiedOTPFastLogin() {
                         required
                         autoFocus={index === 0}
                         value={otp[index] || ""}
-                        onChange={(e) => {
-                          const val = e.target.value.replace(/\D/g, "").slice(-1);
-                          if (!val) return;
-                          const newOtp = otp.split("");
-                          newOtp[index] = val;
-                          const combined = newOtp.join("").slice(0, 4);
-                          setOtp(combined);
-                          if (index < 3 && val) {
-                            document.getElementById(`otp-${index + 1}`)?.focus();
-                          }
-                        }}
+                        onChange={(e) => updateOtpDigit(index, e.target.value)}
                         onKeyDown={(e) => {
                           if (e.key === "Backspace") {
-                            if (!otp[index] && index > 0) {
-                              document.getElementById(`otp-${index - 1}`)?.focus();
-                            } else {
-                              const newOtp = otp.split("");
-                              newOtp[index] = "";
-                              setOtp(newOtp.join(""));
-                            }
+                            e.preventDefault()
+                            handleOtpBackspace(index)
                           }
                         }}
+                        onPaste={index === 0 ? handleOtpPaste : undefined}
                         className="w-full h-16 text-center text-3xl font-bold bg-gray-50 dark:bg-gray-900 border-2 border-transparent focus:border-[#7e3866]/50 rounded-2xl outline-none transition-all text-gray-900 dark:text-white shadow-sm"
                         placeholder="•"
                       />

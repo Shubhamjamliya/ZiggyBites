@@ -34,7 +34,7 @@ const carouselData = [
 
 export default function RestaurantWelcome() {
   const navigate = useNavigate()
-  const companyName = useCompanyName() || "Indian Bites"
+  const companyName = useCompanyName() || "ZiggyBites"
   const [currentIndex, setCurrentIndex] = useState(0)
   const [direction, setDirection] = useState(0) // 1 for next, -1 for previous
   const [touchStart, setTouchStart] = useState(null)
@@ -300,7 +300,7 @@ export default function RestaurantWelcome() {
           variant="outline"
           className="w-full border-2 border-primary text-primary hover:bg-primary hover:text-white font-bold py-6 md:py-7 text-base md:text-lg rounded-lg transition-all shadow-lg bg-transparent"
         >
-          Partner with Indian Bites
+          Partner with ZiggyBites
         </Button> */}
 
         {/* Terms and Conditions */}

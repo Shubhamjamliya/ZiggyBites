@@ -363,7 +363,7 @@ export default function RestaurantOTP() {
           </div>
 
           <p className="mt-8 text-[10px] font-black text-gray-300 dark:text-gray-600 text-center uppercase tracking-[0.25em]">
-            Secure Verification &bull; Indian Bites Partner
+            Secure Verification &bull; ZiggyBites Partner
           </p>
         </motion.div>
       </div>

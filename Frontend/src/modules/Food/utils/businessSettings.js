@@ -8,7 +8,7 @@ import { API_ENDPOINTS } from "@food/api/config";
 import { publicGetOnce } from "@food/api";
 
 const SETTINGS_KEY = 'food_business_settings';
-const KITCHEN_APP_NAME = "Indian Bites Kitchen";
+const KITCHEN_APP_NAME = "ZiggyBites Kitchen";
 
 export const normalizeKitchenAppName = (value) => {
   const text = String(value || "").trim();
@@ -145,22 +145,22 @@ export const getCachedSettings = () => {
 
 /**
  * Get company name from business settings with fallback
- * @returns {string} Company name or default "Indian Bites Food"
+ * @returns {string} Company name or default "ZiggyBites Food"
  */
 export const getCompanyName = () => {
   const settings = getCachedSettings();
-  return settings?.companyName || "Indian Bites";
+  return settings?.companyName || "ZiggyBites";
 };
 
 /**
  * Get company name asynchronously (loads if not cached)
- * @returns {Promise<string>} Company name or default "Indian Bites Food"
+ * @returns {Promise<string>} Company name or default "ZiggyBites Food"
  */
 export const getCompanyNameAsync = async () => {
   try {
     const settings = await loadBusinessSettings();
-    return settings?.companyName || "Indian Bites";
+    return settings?.companyName || "ZiggyBites";
   } catch (error) {
-    return "Indian Bites";
+    return "ZiggyBites";
   }
 };

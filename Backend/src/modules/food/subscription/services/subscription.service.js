@@ -760,28 +760,31 @@ export async function sendSubscriptionMealToDelivery(scheduleId, restaurantId) {
   if (schedule.status === 'sent_to_delivery' && schedule.orderId) {
     const existingOrder = await FoodOrder.findById(schedule.orderId);
     if (!existingOrder) {
-      throw new NotFoundError('Linked subscription order not found');
-    }
-
-    const dispatchResult = await dispatchService.resendDeliveryNotificationRestaurant(
-      existingOrder._id,
-      restaurantId,
-    );
-
-    const refreshedOrder = await FoodOrder.findById(existingOrder._id);
-    if (refreshedOrder) {
-      schedule.sentAt = new Date();
+      schedule.status = 'scheduled';
+      schedule.orderId = null;
+      schedule.sentAt = null;
       await schedule.save();
-    }
+    } else {
+      const dispatchResult = await dispatchService.resendDeliveryNotificationRestaurant(
+        existingOrder._id,
+        restaurantId,
+      );
 
-    return {
-      schedule,
-      order: normalizeOrderForClient(refreshedOrder || existingOrder),
-      alreadySent: true,
-      resent: true,
-      revivedDeadOrder: String(existingOrder.orderStatus || '').toLowerCase() === 'dead',
-      dispatch: dispatchResult,
-    };
+      const refreshedOrder = await FoodOrder.findById(existingOrder._id);
+      if (refreshedOrder) {
+        schedule.sentAt = new Date();
+        await schedule.save();
+      }
+
+      return {
+        schedule,
+        order: normalizeOrderForClient(refreshedOrder || existingOrder),
+        alreadySent: true,
+        resent: true,
+        revivedDeadOrder: String(existingOrder.orderStatus || '').toLowerCase() === 'dead',
+        dispatch: dispatchResult,
+      };
+    }
   }
   if (schedule.status !== 'scheduled') {
     throw new ValidationError(`Cannot send meal with status ${schedule.status}`);
@@ -933,7 +936,12 @@ export async function sendSubscriptionMealToDelivery(scheduleId, restaurantId) {
   await schedule.save();
 
   try {
-    await dispatchService.tryAutoAssign(order._id);
+    await FoodOrder.findByIdAndUpdate(order._id, {
+      $set: {
+        'dispatch.lastRequestedAt': new Date(),
+      },
+    });
+    await dispatchService.tryAutoAssign(order._id, { attempt: 2 });
   } catch {
     // Keep the created order visible; dispatch timeout job can retry.
   }

@@ -546,6 +546,8 @@ function showForegroundNotification(payload = {}, options = {}) {
   // When it IS a SW relay the service worker already showed the notification -
   // creating another one here would produce a duplicate.
   const isTabVisible = typeof document !== "undefined" && document.visibilityState === "visible";
+  const moduleName = normalizeModuleFromPath();
+  const isDeliveryModule = moduleName === "delivery";
 
   // Only show a system notification from the PAGE if:
   // 1. This is NOT a relay from the service worker (the SW already handles background alerts).
@@ -569,7 +571,8 @@ function showForegroundNotification(payload = {}, options = {}) {
               tag: notificationKey || undefined,
               data: payload?.data || {},
               requireInteraction: true,
-              vibrate: [200, 100, 200, 100, 300]
+              silent: !isDeliveryModule,
+              vibrate: isDeliveryModule ? [200, 100, 200, 100, 300] : []
             });
           } else {
             new Notification(title, {
@@ -577,7 +580,8 @@ function showForegroundNotification(payload = {}, options = {}) {
               icon: "/logo.png",
               image,
               tag: notificationKey || undefined,
-              requireInteraction: true
+              requireInteraction: true,
+              silent: !isDeliveryModule
             });
           }
         }).catch(() => {
@@ -586,6 +590,7 @@ function showForegroundNotification(payload = {}, options = {}) {
             icon: "/logo.png",
             image,
             tag: notificationKey || undefined,
+            silent: !isDeliveryModule,
           });
         });
       } else {
@@ -594,6 +599,7 @@ function showForegroundNotification(payload = {}, options = {}) {
           icon: "/logo.png",
           image,
           tag: notificationKey || undefined,
+          silent: !isDeliveryModule,
         });
       }
     } catch (error) {

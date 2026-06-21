@@ -129,7 +129,7 @@ async function loadFirebaseWebConfig() {
     
     const visibleClient = await hasVisibleClientForTarget(payload);
     
-    // 💡 IMPORTANT: If the payload contains a 'notification' object, the browser/FCM SDK
+    // IMPORTANT: If the payload contains a 'notification' object, the browser/FCM SDK
     // will often display a system notification automatically in the background.
     // To prevent double notifications (one from browser, one from our manual call),
     // we only call showNotification manually if 'notification' is missing (Data-only message)
@@ -142,6 +142,8 @@ async function loadFirebaseWebConfig() {
         payload?.data?.imageUrl ||
         undefined;
       const notificationKey = getNotificationKey(payload);
+      const targetPath = getTargetPathFromPayload(payload);
+      const isDeliveryTarget = String(targetPath || "").includes("/delivery");
       
       pushDebugLog(PUSH_DEBUG_PREFIX, "Showing manual service worker notification (Data-only message)", {
         title,
@@ -156,9 +158,9 @@ async function loadFirebaseWebConfig() {
         image,
         tag: notificationKey,
         renotify: true,
-        silent: false,
+        silent: !isDeliveryTarget,
         requireInteraction: true,
-        vibrate: [200, 100, 200, 100, 300],
+        vibrate: isDeliveryTarget ? [200, 100, 200, 100, 300] : [],
         data: payload?.data || {},
       });
     }

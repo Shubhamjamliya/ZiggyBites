@@ -24,7 +24,7 @@ const buildRestaurantOrderNotification = (orderData = {}) => {
   return {
     title: `New order #${orderId}`,
     body: itemCount > 0
-      ? `${itemCount} item${itemCount === 1 ? '' : 's'} - ₹${total.toFixed(2)}`
+      ? `${itemCount} item${itemCount === 1 ? '' : 's'} - Rs ${total.toFixed(2)}`
       : 'A new order is waiting for review',
     tag: `restaurant-order-${orderId}`,
     data: {
@@ -176,8 +176,8 @@ export const useRestaurantNotifications = () => {
             tag: notificationOptions.tag,
             renotify: true,
             requireInteraction: true,
-            silent: false,
-            vibrate: [200, 100, 200, 100, 300],
+            silent: true,
+            vibrate: [],
             icon: '/logo.png',
             data: notificationOptions.data,
           });
@@ -189,7 +189,7 @@ export const useRestaurantNotifications = () => {
         body: notificationOptions.body,
         tag: notificationOptions.tag,
         requireInteraction: true,
-        silent: false,
+        silent: true,
         icon: '/logo.png',
         data: notificationOptions.data,
       });

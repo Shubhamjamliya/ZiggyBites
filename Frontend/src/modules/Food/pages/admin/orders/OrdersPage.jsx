@@ -637,11 +637,9 @@ export default function OrdersPage({ statusKey = "all" }) {
       socket.emit("join-admin-orders")
     })
     socket.on("admin_new_order", handleIncomingRealtimeOrder)
-    socket.on("play_notification_sound", handleIncomingRealtimeOrder)
 
     return () => {
       socket.off("admin_new_order", handleIncomingRealtimeOrder)
-      socket.off("play_notification_sound", handleIncomingRealtimeOrder)
       socket.disconnect()
       socketRef.current = null
     }

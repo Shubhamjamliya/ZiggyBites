@@ -3,8 +3,7 @@ import io from 'socket.io-client';
 import { API_BASE_URL } from '@food/api/config';
 import { deliveryAPI } from '@food/api';
 import { toast } from 'sonner';
-import alertSound from '@food/assets/audio/alert.mp3';
-import originalSound from '@food/assets/audio/original.mp3';
+import notificationSound from '@food/assets/audio/alert.mp3';
 import { dispatchNotificationInboxRefresh } from '@food/hooks/useNotificationInbox';
 import { DeliveryNotificationContext } from '../context/DeliveryNotificationContext';
 
@@ -36,8 +35,7 @@ const debugError = (...args) => {
 };
 
 if (typeof window !== 'undefined') {
-  debugLog('alertSound URL:', alertSound);
-  debugLog('originalSound URL:', originalSound);
+  debugLog('notificationSound URL:', notificationSound);
 }
 
 const resolveAudioSource = (source) => {
@@ -131,7 +129,7 @@ const buildDeliveryOrderNotification = (orderData = {}) => {
   return {
     title: `New order #${orderId}`,
     body: itemCount > 0
-      ? `${itemCount} item${itemCount === 1 ? '' : 's'} - ₹${total.toFixed(2)}`
+      ? `${itemCount} item${itemCount === 1 ? '' : 's'} - Rs ${total.toFixed(2)}`
       : 'A new order is available to accept',
     tag: `delivery-order-${orderId}`,
     data: {
@@ -285,7 +283,7 @@ export const useDeliveryNotifications = () => {
       }
 
       // Always use original sound for delivery
-      const soundFile = resolveAudioSource(originalSound, 'delivery-original');
+      const soundFile = resolveAudioSource(notificationSound, 'delivery-zomato');
       
       // Update audio source if preference changed or initialize if not exists
       if (audioRef.current) {
@@ -558,7 +556,7 @@ export const useDeliveryNotifications = () => {
     const handleUserInteraction = async () => {
       userInteractedRef.current = true;
 
-      const soundFile = resolveAudioSource(originalSound, 'delivery-original');
+      const soundFile = resolveAudioSource(notificationSound, 'delivery-zomato');
 
       if (!audioRef.current) {
         audioRef.current = new Audio(soundFile);
@@ -572,7 +570,7 @@ export const useDeliveryNotifications = () => {
           audioRef.current.muted = true;
           // Ensure src is set even if it was just initialized
           if (!audioRef.current.src || audioRef.current.src === window.location.href) {
-             const soundFile = resolveAudioSource(originalSound);
+             const soundFile = resolveAudioSource(notificationSound);
              audioRef.current.src = soundFile;
           }
           audioRef.current.load();
@@ -617,7 +615,7 @@ export const useDeliveryNotifications = () => {
   // Initialize audio on mount - use selected preference from localStorage
   useEffect(() => {
     // Always use original sound for delivery
-    const soundFile = resolveAudioSource(originalSound, 'delivery-original');
+    const soundFile = resolveAudioSource(notificationSound, 'delivery-zomato');
     
     if (!audioRef.current) {
       audioRef.current = new Audio(soundFile);

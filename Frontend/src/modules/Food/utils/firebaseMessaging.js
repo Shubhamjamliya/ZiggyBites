@@ -41,11 +41,10 @@ function isRecord(value) {
 }
 
 function getPushSoundSources(moduleName = normalizeModuleFromPath()) {
-  // Delivery and restaurant should always use the alert tone for FCM pushes.
-  if (moduleName === "delivery" || moduleName === "restaurant") {
+  if (moduleName === "delivery") {
     return [fallbackNotificationSound];
   }
-  return [pushNotificationSoundPath, fallbackNotificationSound];
+  return [];
 }
 
 function isSupportedBrowser() {
@@ -129,6 +128,7 @@ function ensurePushSoundAudio() {
   if (typeof window === "undefined") return null;
   if (!pushSoundAudio) {
     const [primarySource] = getPushSoundSources();
+    if (!primarySource) return null;
     const audioUrl = primarySource.startsWith("/")
       ? new URL(primarySource, window.location.origin).toString()
       : primarySource;
@@ -143,7 +143,9 @@ function ensurePushSoundAudio() {
 
 function createPushPlaybackAudio() {
   const moduleName = normalizeModuleFromPath();
-  const audioSources = getPushSoundSources(moduleName).map((source) =>
+  const sources = getPushSoundSources(moduleName);
+  if (!sources.length) return [];
+  const audioSources = sources.map((source) =>
     typeof window === "undefined" || !source.startsWith("/")
       ? source
       : new URL(source, window.location.origin).toString(),
@@ -250,12 +252,20 @@ async function triggerWebViewNativeNotification(payload = {}) {
 
 async function playPushSound(payload = {}) {
   try {
+    const moduleName = normalizeModuleFromPath();
     pushDebugLog(PUSH_DEBUG_PREFIX, "playPushSound called", {
       notificationKey: getNotificationKey(payload),
       pushSoundUnlocked,
       notificationPermission: typeof Notification !== "undefined" ? Notification.permission : "unsupported",
       payload,
+      moduleName,
     });
+
+    if (moduleName !== "delivery") {
+      pushDebugLog(PUSH_DEBUG_PREFIX, "Skipping push sound for non-delivery module", { moduleName });
+      return;
+    }
+
     const usedNativeBridge = await triggerWebViewNativeNotification(payload);
 
     if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
@@ -533,7 +543,7 @@ function showForegroundNotification(payload = {}, options = {}) {
   playPushSound(payload);
 
   // Only show a system notification from the PAGE if this is NOT a SW relay.
-  // When it IS a SW relay the service worker already showed the notification —
+  // When it IS a SW relay the service worker already showed the notification -
   // creating another one here would produce a duplicate.
   const isTabVisible = typeof document !== "undefined" && document.visibilityState === "visible";
 
@@ -653,7 +663,7 @@ function attachServiceWorkerMessageListener() {
         return;
       }
       pushDebugLog(PUSH_DEBUG_PREFIX, "Received service worker message in page", { payload: data.payload });
-      // fromSwRelay: true — SW already showed the system notification; only show toast.
+      // fromSwRelay: true - SW already showed the system notification; only show toast.
       scheduleForegroundNotification(data.payload, { fromSwRelay: true });
     });
   }

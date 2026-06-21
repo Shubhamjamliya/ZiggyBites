@@ -38,6 +38,16 @@ const formatDateTime = (value) => {
   });
 };
 
+const isMealDueToday = (value) => {
+  if (!value) return false;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return false;
+
+  const endOfToday = new Date();
+  endOfToday.setHours(23, 59, 59, 999);
+  return date.getTime() <= endOfToday.getTime();
+};
+
 const formatAddress = (address = {}) =>
   [address?.street, address?.additionalDetails, address?.city, address?.state]
     .filter(Boolean)
@@ -68,6 +78,11 @@ const getSubscriptionGroupKey = (meal) =>
   meal?.groupId ||
   meal?._id;
 
+const formatStatusLabel = (value, fallback = "Scheduled") => {
+  const normalized = String(value || "").trim();
+  if (!normalized) return fallback;
+  return normalized.replace(/_/g, " ").replace(/\b\w/g, (ch) => ch.toUpperCase());
+};
 const getLinkedOrderStatus = (meal = {}) => {
   const dispatchStatus = String(meal?.order?.dispatch?.status || "").toLowerCase().trim();
   const orderStatus = String(meal?.order?.orderStatus || meal?.order?.status || "").toLowerCase().trim();
@@ -100,13 +115,27 @@ const getLinkedOrderStatusLabel = (meal = {}) => {
       return "Ready for pickup";
     case "confirmed":
       return "Confirmed";
+    case "created":
+      return "Request sent";
     case "scheduled":
       return "Scheduled";
     default:
-      return String(status || "Scheduled")
-        .replace(/_/g, " ")
-        .replace(/\b\w/g, (ch) => ch.toUpperCase());
+      return formatStatusLabel(status, "Scheduled");
   }
+};
+
+const getRestaurantOrderStatus = (meal = {}) => {
+  const mealStatus = String(meal?.status || "").toLowerCase().trim();
+  const orderStatus = String(meal?.order?.orderStatus || meal?.order?.status || "").toLowerCase().trim();
+
+  if (orderStatus) {
+    if (orderStatus === "picked_up") return "Picked up";
+    if (orderStatus === "reached_drop") return "Reached customer";
+    return formatStatusLabel(orderStatus, "Scheduled");
+  }
+
+  if (mealStatus === "sent_to_delivery") return "Sent to delivery";
+  return formatStatusLabel(mealStatus, "Scheduled");
 };
 
 const isAcceptedByDeliveryBoy = (meal = {}) =>
@@ -333,8 +362,6 @@ function SubscriptionOrdersPage() {
     }
   };
 
-  const now = Date.now();
-
   return (
     <div className="min-h-screen bg-gray-50 px-4 py-4">
       <div className="mx-auto max-w-3xl">
@@ -452,8 +479,7 @@ function SubscriptionOrdersPage() {
                       const scheduleId = meal.scheduleId || meal._id;
                       const sent = meal.status === "sent_to_delivery";
                       const cancelled = ["cancelled", "skipped"].includes(String(meal.status || "").toLowerCase());
-                      const serviceTime = meal.serviceDate ? new Date(meal.serviceDate).getTime() : 0;
-                      const canSend = !sent && !cancelled && serviceTime <= now;
+                      const canSend = !sent && !cancelled && isMealDueToday(meal.serviceDate);
                       const linkedOrderStatus = getLinkedOrderStatus(meal);
                       const linkedOrderStatusLabel = getLinkedOrderStatusLabel(meal);
                       const acceptedByDeliveryBoy = isAcceptedByDeliveryBoy(meal);
@@ -497,11 +523,9 @@ function SubscriptionOrdersPage() {
                           {meal.order && (
                             <div className="mt-3 grid grid-cols-2 gap-2">
                               <div className="rounded-2xl bg-slate-50 px-3 py-2">
-                                <p className="text-[10px] font-black uppercase tracking-wide text-slate-400">Restaurant status</p>
+                                <p className="text-[10px] font-black uppercase tracking-wide text-slate-400">Order status</p>
                                 <p className="mt-1 text-sm font-bold text-slate-900">
-                                  {String(meal.status || "scheduled")
-                                    .replace(/_/g, " ")
-                                    .replace(/\b\w/g, (ch) => ch.toUpperCase())}
+                                  {getRestaurantOrderStatus(meal)}
                                 </p>
                               </div>
                               <div className="rounded-2xl bg-slate-50 px-3 py-2">
@@ -529,7 +553,7 @@ function SubscriptionOrdersPage() {
                               ) : (
                                 <Send className="h-4 w-4" />
                               )}
-                              {sent ? "Already sent" : canSend ? "Send to delivery boy" : "Scheduled for later"}
+                              {sent ? "Already sent" : canSend ? "Send to delivery boy" : "Available on service day"}
                             </button>
                             {canResend ? (
                               <button

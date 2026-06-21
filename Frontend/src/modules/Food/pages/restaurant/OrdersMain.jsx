@@ -27,9 +27,7 @@ import {
 import { toast } from "sonner";
 import BottomNavOrders from "@food/components/restaurant/BottomNavOrders";
 import RestaurantNavbar from "@food/components/restaurant/RestaurantNavbar";
-const notificationSound = import.meta.env.DEV
-  ? "/alert.mp3?devcache=restaurant-popup"
-  : "/alert.mp3";
+const notificationSound = "";
 import { restaurantAPI, diningAPI } from "@food/api";
 import { useRestaurantNotifications } from "@food/hooks/useRestaurantNotifications";
 import { jsPDF } from "jspdf";
@@ -1812,6 +1810,7 @@ export default function OrdersMain() {
 
   // Initialize audio object for popup loop
   useEffect(() => {
+    if (!notificationSound) return;
     if (!audioRef.current) {
       audioRef.current = new Audio(notificationSound);
       audioRef.current.preload = "auto";

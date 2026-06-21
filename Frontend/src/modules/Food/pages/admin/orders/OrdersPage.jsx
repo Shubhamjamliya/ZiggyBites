@@ -17,7 +17,6 @@ import { Loader2 } from "lucide-react"
 import { OrdersDashboardSkeleton } from "@food/components/ui/loading-skeletons"
 import { useDelayedLoading } from "@food/hooks/useDelayedLoading"
 import alertSound from "@food/assets/audio/zomato_sms.mp3"
-import originalSound from "@food/assets/audio/original.mp3"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -612,7 +611,7 @@ export default function OrdersPage({ statusKey = "all" }) {
 
       const title = "New order received"
       const body = payload?.restaurantName
-        ? `${payload.restaurantName} • ${orderId || "New"}`
+        ? `${payload.restaurantName} - ${orderId || "New"}`
         : `Order ${orderId || "New"}`
 
       activeOrderAlertRef.current = payload || { orderId }

@@ -27,12 +27,13 @@ export default function PushSoundEnableButton() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isMobile, setIsMobile] = useState(() => isMobileDevice());
   const isAdminRoute = location.pathname.startsWith("/admin");
+  const isDeliveryRoute = location.pathname.startsWith("/food/delivery");
   const shouldShowPrompt = useMemo(() => {
-    if (isMobile) return false;
     if (isAdminRoute) return false;
     if (permission === "denied") return false;
+    if (isMobile && !isDeliveryRoute) return false;
     return permission !== "granted" || !enabled;
-  }, [enabled, isAdminRoute, isMobile, permission]);
+  }, [enabled, isAdminRoute, isDeliveryRoute, isMobile, permission]);
 
   useEffect(() => {
     const syncState = () => {
@@ -70,6 +71,9 @@ export default function PushSoundEnableButton() {
   if (!shouldShowPrompt) return null;
 
   const title = permission === "granted" ? "Enable push sound" : "Enable notifications";
+  const containerClassName = isDeliveryRoute
+    ? "fixed bottom-4 left-4 right-4 z-[100] max-w-[calc(100vw-2rem)] md:left-auto md:w-[22rem]"
+    : "fixed bottom-4 right-4 z-[100] hidden max-w-[calc(100vw-2rem)] md:block";
   const description =
     permission === "granted"
       ? "Click once to allow notification sound in this browser."
@@ -80,7 +84,7 @@ export default function PushSoundEnableButton() {
       : "Allow Notifications";
 
   return (
-    <div className="fixed bottom-4 right-4 z-[100] hidden max-w-[calc(100vw-2rem)] md:block">
+    <div className={containerClassName}>
       <div className="rounded-2xl border border-amber-200 bg-white/95 p-3 shadow-lg backdrop-blur">
         <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-900">
           <BellRing className="h-4 w-4 text-amber-600" />

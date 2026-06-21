@@ -162,11 +162,30 @@ function normalizeDeliveryAddress(address = {}, { customerName = '', customerPho
   };
 }
 
+const BUSINESS_TZ_OFFSET_MINUTES = Number(
+  process.env.FOOD_BUSINESS_TZ_OFFSET_MINUTES || 330,
+);
+
 function getDayBounds(dateInput = new Date()) {
-  const start = new Date(dateInput);
-  start.setHours(0, 0, 0, 0);
-  const end = new Date(start);
-  end.setHours(23, 59, 59, 999);
+  // Normalize subscription day boundaries to one business timezone so
+  // local/dev/prod servers do not disagree when their machine timezones differ.
+  const source = new Date(dateInput);
+  const shifted = new Date(
+    source.getTime() + BUSINESS_TZ_OFFSET_MINUTES * 60 * 1000,
+  );
+  const year = shifted.getUTCFullYear();
+  const month = shifted.getUTCMonth();
+  const day = shifted.getUTCDate();
+
+  const start = new Date(
+    Date.UTC(year, month, day, 0, 0, 0, 0) -
+      BUSINESS_TZ_OFFSET_MINUTES * 60 * 1000,
+  );
+  const end = new Date(
+    Date.UTC(year, month, day, 23, 59, 59, 999) -
+      BUSINESS_TZ_OFFSET_MINUTES * 60 * 1000,
+  );
+
   return { start, end };
 }
 

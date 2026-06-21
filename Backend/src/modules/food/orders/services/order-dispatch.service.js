@@ -377,13 +377,44 @@ export async function resendDeliveryNotificationRestaurant(orderId, restaurantId
 
   if (!order) throw new NotFoundError('Order not found');
 
+  const normalizedStatus = String(order.orderStatus || '').toLowerCase();
   const activeStatuses = ['confirmed', 'preparing', 'ready_for_pickup', 'ready'];
-  if (!activeStatuses.includes(order.orderStatus)) {
+  const canReviveForManualSend = normalizedStatus === 'dead';
+
+  if (!activeStatuses.includes(normalizedStatus) && !canReviveForManualSend) {
     throw new ValidationError(`Cannot resend notification for order in status: ${order.orderStatus}`);
   }
 
   if (order.dispatch?.status === 'accepted') {
     throw new ValidationError('A delivery partner has already accepted this order.');
+  }
+
+  if (canReviveForManualSend) {
+    order.orderStatus = 'preparing';
+    order.dispatch.status = 'unassigned';
+    order.dispatch.deliveryPartnerId = null;
+    order.dispatch.offeredTo = [];
+    order.dispatch.assignedAt = undefined;
+    order.dispatch.acceptedAt = undefined;
+    order.dispatch.dispatchingAt = undefined;
+    if (order.deliveryState) {
+      order.deliveryState.currentPhase = 'en_route_to_pickup';
+      order.deliveryState.status = '';
+      order.deliveryState.reachedPickupAt = null;
+      order.deliveryState.reachedDropAt = null;
+      order.deliveryState.pickedUpAt = null;
+      order.deliveryState.deliveredAt = null;
+    }
+    order.statusHistory = Array.isArray(order.statusHistory) ? order.statusHistory : [];
+    order.statusHistory.push({
+      at: new Date(),
+      byRole: 'RESTAURANT',
+      byId: new mongoose.Types.ObjectId(restaurantId),
+      from: normalizedStatus,
+      to: 'preparing',
+      note: 'Restaurant manually resent delivery request',
+    });
+    await order.save();
   }
 
   const paymentMethod = String(order.payment?.method || 'cash').toLowerCase();
@@ -396,12 +427,26 @@ export async function resendDeliveryNotificationRestaurant(orderId, restaurantId
   });
   const shortlistedCount = Array.isArray(preview?.partners) ? preview.partners.length : 0;
 
-  order.dispatch.status = 'unassigned';
-  order.dispatch.deliveryPartnerId = null;
-  order.dispatch.offeredTo = [];
-  await order.save();
+  // Force a truly fresh dispatch cycle when restaurant manually resends.
+  // This clears any stale in-flight dispatch lock or half-finished assignment state
+  // so delivery partners receive the new socket offer immediately.
+  await FoodOrder.findByIdAndUpdate(order._id, {
+    $set: {
+      'dispatch.status': 'unassigned',
+      'dispatch.offeredTo': [],
+      'dispatch.lastRequestedAt': new Date(),
+    },
+    $unset: {
+      'dispatch.deliveryPartnerId': '',
+      'dispatch.dispatchingAt': '',
+      'dispatch.assignedAt': '',
+      'dispatch.acceptedAt': '',
+    },
+  });
 
-  await tryAutoAssign(order._id);
+  // Manual resend should widen the initial search one tier so nearby riders
+  // immediately receive the request instead of waiting for timeout retries.
+  await tryAutoAssign(order._id, { attempt: 2 });
 
   const refreshed = await FoodOrder.findById(order._id)
     .select('dispatch.offeredTo dispatch.status dispatch.deliveryPartnerId')
@@ -432,3 +477,6 @@ export async function resendDeliveryNotificationRestaurant(orderId, restaurantId
     dispatchStatus: refreshed?.dispatch?.status || 'unassigned',
   };
 }
+
+
+

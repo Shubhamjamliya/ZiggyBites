@@ -27,21 +27,21 @@ export default function ResendNotificationButton({ orderId, mongoId, onSuccess }
         const connectedSocketCount = Number(response.data.data?.connectedSocketCount || 0);
         toast.success(
           notifiedCount > 0
-            ? `Notification sent to ${notifiedCount} delivery partners (live sockets: ${connectedSocketCount})`
-            : `Notification sent to 0 delivery partners${shortlistedCount > 0 ? ` (shortlisted: ${shortlistedCount}, live sockets: ${connectedSocketCount})` : ''}`,
+            ? `Request sent to ${notifiedCount} delivery partners (live sockets: ${connectedSocketCount})`
+            : `Request sent to 0 delivery partners${shortlistedCount > 0 ? ` (shortlisted: ${shortlistedCount}, live sockets: ${connectedSocketCount})` : ''}`,
         );
         // Refresh orders if onSuccess callback is provided
         if (onSuccess) {
            onSuccess();
         }
       } else {
-        toast.error(response.data?.message || "Failed to send notification");
+        toast.error(response.data?.message || "Failed to send request");
       }
     } catch (error) {
       debugError("Error resending notification:", error);
       toast.error(
         error.response?.data?.message ||
-          "Failed to send notification. Please try again.",
+          "Failed to send request. Please try again.",
       );
     } finally {
       setLoading(false);
@@ -54,7 +54,7 @@ export default function ResendNotificationButton({ orderId, mongoId, onSuccess }
       onClick={handleResend}
       disabled={loading}
       className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-100 text-blue-700 border border-blue-300 hover:bg-blue-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-      title="Resend notification to delivery partners">
+      title="Send request to delivery partners">
       {loading ? (
         <>
           <Loader2 className="w-3 h-3 animate-spin" />
@@ -63,9 +63,10 @@ export default function ResendNotificationButton({ orderId, mongoId, onSuccess }
       ) : (
         <>
           <Volume2 className="w-3 h-3" />
-          <span>Resend</span>
+          <span>Send request</span>
         </>
       )}
     </button>
   );
 }
+

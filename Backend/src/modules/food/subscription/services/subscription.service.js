@@ -30,6 +30,8 @@ import {
   getAppCustomizationSettings,
 } from '../../shared/appCustomization.service.js';
 import { FoodMealSlot } from '../../landing/models/mealSlot.model.js';
+import { FoodDeliveryCommissionRule } from '../../admin/models/deliveryCommissionRule.model.js';
+import { FoodFeeSettings } from '../../admin/models/feeSettings.model.js';
 
 function normalizeMeals(meals = []) {
   return meals
@@ -191,6 +193,67 @@ function roundMoney(value) {
   return Math.round((Number(value) || 0) * 100) / 100;
 }
 
+const SUBSCRIPTION_COMMISSION_CACHE_MS = 10 * 1000;
+let subscriptionCommissionRulesCache = null;
+let subscriptionCommissionRulesLoadedAt = 0;
+
+async function getActiveDeliveryCommissionRules() {
+  const now = Date.now();
+  if (
+    subscriptionCommissionRulesCache &&
+    now - subscriptionCommissionRulesLoadedAt < SUBSCRIPTION_COMMISSION_CACHE_MS
+  ) {
+    return subscriptionCommissionRulesCache;
+  }
+
+  const list = await FoodDeliveryCommissionRule.find({
+    status: { $ne: false },
+  }).lean();
+  subscriptionCommissionRulesCache = list || [];
+  subscriptionCommissionRulesLoadedAt = now;
+  return subscriptionCommissionRulesCache;
+}
+
+async function getSubscriptionRiderEarning(distanceKm) {
+  const d = Number(distanceKm);
+  if (!Number.isFinite(d) || d <= 0) return 0;
+
+  const rules = await getActiveDeliveryCommissionRules();
+  if (!rules.length) return 0;
+
+  const sorted = [...rules].sort(
+    (a, b) => (a.minDistance || 0) - (b.minDistance || 0),
+  );
+  const baseRule = sorted.find((rule) => Number(rule.minDistance || 0) === 0) || null;
+  if (!baseRule) return 0;
+
+  let earning = Number(baseRule.basePayout || 0);
+
+  for (const rule of sorted) {
+    const perKm = Number(rule.commissionPerKm || 0);
+    if (!Number.isFinite(perKm) || perKm <= 0) continue;
+
+    const min = Number(rule.minDistance || 0);
+    const max = rule.maxDistance == null ? null : Number(rule.maxDistance);
+    if (d <= min) continue;
+
+    const upper = max == null ? d : Math.min(d, max);
+    const kmInSlab = Math.max(0, upper - min);
+    if (kmInSlab > 0) {
+      earning += kmInSlab * perKm;
+    }
+  }
+
+  if (!Number.isFinite(earning) || earning <= 0) return 0;
+
+  const feeSettings = await FoodFeeSettings.findOne({ isActive: true }).lean();
+  const deliveryBonusAmount = Number(feeSettings?.deliveryBonusAmount || 0);
+  if (deliveryBonusAmount > 0) {
+    earning += deliveryBonusAmount;
+  }
+
+  return Math.round(earning);
+}
 function normalizeSubscriptionForClient(doc) {
   const subscription = doc?.toObject ? doc.toObject() : doc || {};
   const totalCredits =
@@ -705,11 +768,18 @@ export async function sendSubscriptionMealToDelivery(scheduleId, restaurantId) {
       restaurantId,
     );
 
+    const refreshedOrder = await FoodOrder.findById(existingOrder._id);
+    if (refreshedOrder) {
+      schedule.sentAt = new Date();
+      await schedule.save();
+    }
+
     return {
       schedule,
-      order: normalizeOrderForClient(existingOrder),
+      order: normalizeOrderForClient(refreshedOrder || existingOrder),
       alreadySent: true,
       resent: true,
+      revivedDeadOrder: String(existingOrder.orderStatus || '').toLowerCase() === 'dead',
       dispatch: dispatchResult,
     };
   }
@@ -788,7 +858,7 @@ export async function sendSubscriptionMealToDelivery(scheduleId, restaurantId) {
     distanceKm = Number.isFinite(d) ? d : null;
   }
 
-  const riderEarning = Number(process.env.SUBSCRIPTION_RIDER_EARNING || 0);
+  const riderEarning = await getSubscriptionRiderEarning(distanceKm);
   const order = new FoodOrder({
     userId: subscription.userId,
     restaurantId: subscription.restaurantId,
@@ -1646,3 +1716,4 @@ export async function getSubscriptionAdmin(subscriptionId) {
     })),
   };
 }
+

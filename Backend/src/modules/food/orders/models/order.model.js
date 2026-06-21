@@ -145,7 +145,8 @@ const dispatchSchema = new mongoose.Schema(
             allowOverLimit: { type: Boolean, default: false },
             requiredCashForOrder: { type: Number, default: 0 }
         }],
-        dispatchingAt: { type: Date }
+        dispatchingAt: { type: Date },
+        lastRequestedAt: { type: Date }
     },
     { _id: false }
 );
@@ -389,3 +390,4 @@ const settingsSchema = new mongoose.Schema(
 );
 
 export const FoodSettings = mongoose.model('FoodSettings', settingsSchema);
+

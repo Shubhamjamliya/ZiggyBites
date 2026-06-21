@@ -1993,6 +1993,18 @@ export const deliveryAPI = {
       { contextModule: "delivery" },
     ),
   /**
+   * Request pickup OTP from restaurant once rider reaches pickup.
+   * Backend endpoint: POST /food/delivery/orders/:orderId/request-pickup-otp
+   */
+  requestPickupOtp: (orderId) =>
+    apiClient.post(
+      `/food/delivery/orders/${String(orderId)}/request-pickup-otp`,
+      {},
+      {
+        contextModule: "delivery",
+      },
+    ),
+  /**
    * Confirm order ID and upload bill image (Picked Up slide).
    * Backend endpoint: PATCH /food/delivery/orders/:id/confirm-pickup
    */
@@ -2004,6 +2016,7 @@ export const deliveryAPI = {
         latitude: location.lat,
         longitude: location.lng,
         billImageUrl: data.billImageUrl,
+        otp: data.otp,
       },
       {
         contextModule: "delivery",
@@ -2563,7 +2576,6 @@ export const publicAPI = {
   getPrivacy: (key = "privacy") => apiClient.get(`/food/pages/${key}`),
   getTerms: (key = "terms") => apiClient.get(`/food/pages/${key}`),
 };
-
 
 
 

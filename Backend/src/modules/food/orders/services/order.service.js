@@ -707,9 +707,14 @@ export async function recoverStuckOrders() {
 
     // 4. Mark orders dead if not delivered within 1 hour
     const ONE_HOUR = 60 * 60 * 1000;
+    const expiryThreshold = new Date(now - ONE_HOUR);
     const deadOrders = await FoodOrder.find({
-      createdAt: { $lt: new Date(now - ONE_HOUR) },
-      orderStatus: { $nin: ['delivered', 'cancelled_by_user', 'cancelled_by_restaurant', 'cancelled_by_admin', 'dead'] }
+      createdAt: { $lt: expiryThreshold },
+      orderStatus: { $nin: ['delivered', 'cancelled_by_user', 'cancelled_by_restaurant', 'cancelled_by_admin', 'dead'] },
+      $or: [
+        { 'dispatch.lastRequestedAt': { $exists: false } },
+        { 'dispatch.lastRequestedAt': { $lt: expiryThreshold } }
+      ]
     });
 
     let deadCount = 0;
@@ -1818,4 +1823,5 @@ export async function deleteOrderAdmin(orderId, adminId) {
     orderMongoId: String(order._id),
   };
 }
+
 

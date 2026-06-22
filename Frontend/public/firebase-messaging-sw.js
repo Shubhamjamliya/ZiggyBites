@@ -170,6 +170,12 @@ async function loadFirebaseWebConfig() {
   });
 })();
 
+self.addEventListener("message", (event) => {
+  const data = event?.data || {};
+  if (data.type === "init-firebase-config") {
+    event.waitUntil(initializeFirebaseMessaging());
+  }
+});
 self.addEventListener("push", (event) => {
   if (!event.data) return;
 

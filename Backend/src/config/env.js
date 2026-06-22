@@ -60,7 +60,7 @@ export const config = {
     firebaseProjectId: process.env.FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID,
     firebaseDatabaseUrl: process.env.VITE_FIREBASE_DATABASE_URL,
     firebaseServiceAccountPath: process.env.FIREBASE_SERVICE_ACCOUNT_PATH,
-    firebaseServiceAccount: process.env.FIREBASE_SERVICE_ACCOUNT,
+    firebaseServiceAccount: process.env.FIREBASE_SERVICE_ACCOUNT || process.env.FIREBASE_SERVICE_ACCOUNT_JSON,
     firebaseWebApiKey: process.env.VITE_FIREBASE_API_KEY || process.env.FIREBASE_API_KEY,
     firebaseWebAuthDomain: process.env.VITE_FIREBASE_AUTH_DOMAIN || process.env.FIREBASE_AUTH_DOMAIN,
     firebaseWebStorageBucket: process.env.VITE_FIREBASE_STORAGE_BUCKET || process.env.FIREBASE_STORAGE_BUCKET,
@@ -126,7 +126,7 @@ export const updateConfig = () => {
     config.firebaseProjectId = process.env.FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID || config.firebaseProjectId;
     config.firebaseDatabaseUrl = process.env.VITE_FIREBASE_DATABASE_URL || config.firebaseDatabaseUrl;
     config.firebaseServiceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH || config.firebaseServiceAccountPath;
-    config.firebaseServiceAccount = process.env.FIREBASE_SERVICE_ACCOUNT || config.firebaseServiceAccount;
+    config.firebaseServiceAccount = process.env.FIREBASE_SERVICE_ACCOUNT || process.env.FIREBASE_SERVICE_ACCOUNT_JSON || config.firebaseServiceAccount;
     config.firebaseWebApiKey = process.env.VITE_FIREBASE_API_KEY || process.env.FIREBASE_API_KEY || config.firebaseWebApiKey;
     config.firebaseWebAuthDomain = process.env.VITE_FIREBASE_AUTH_DOMAIN || process.env.FIREBASE_AUTH_DOMAIN || config.firebaseWebAuthDomain;
     config.firebaseWebStorageBucket = process.env.VITE_FIREBASE_STORAGE_BUCKET || process.env.FIREBASE_STORAGE_BUCKET || config.firebaseWebStorageBucket;
@@ -147,3 +147,4 @@ export const updateConfig = () => {
     config.petpoojaAppKey = process.env.PETPOOJA_APP_KEY || config.petpoojaAppKey;
     config.petpoojaAppSecret = process.env.PETPOOJA_APP_SECRET || config.petpoojaAppSecret;
 };
+

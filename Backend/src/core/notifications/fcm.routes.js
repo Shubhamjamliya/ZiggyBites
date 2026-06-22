@@ -2,6 +2,7 @@ import express from 'express';
 import { authMiddleware } from '../auth/auth.middleware.js';
 import { sendError } from '../../utils/response.js';
 import {
+    listOwnerTokens,
     removeFirebaseDeviceToken,
     sendTestNotification,
     upsertFirebaseDeviceToken
@@ -155,7 +156,23 @@ router.post('/test', authMiddleware, async (req, res, next) => {
             return sendError(res, 401, 'Authentication required');
         }
 
+        const tokens = await listOwnerTokens({ ownerType, ownerId, platform });
+        if (!tokens.length) {
+            return sendError(
+                res,
+                400,
+                platform === 'mobile'
+                    ? 'No mobile push token registered for this account. Please sign in again on the app and allow notifications.'
+                    : 'No web push token registered for this account. Please allow notifications and refresh the page before testing again.'
+            );
+        }
+
         const result = await sendTestNotification({ ownerType, ownerId, platform });
+        if (!result?.successCount) {
+            const firstError = result?.results?.find((item) => !item.ok)?.error || result?.error || 'Push delivery failed';
+            return sendError(res, 502, firstError);
+        }
+
         return res.status(200).json({
             success: true,
             message: 'Test notification sent',
@@ -167,3 +184,5 @@ router.post('/test', authMiddleware, async (req, res, next) => {
 });
 
 export default router;
+
+

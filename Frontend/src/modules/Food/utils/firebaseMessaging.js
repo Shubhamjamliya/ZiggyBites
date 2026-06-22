@@ -29,6 +29,10 @@ const notificationDedupWindowMs = 8000;
 const pushDebugLog = (prefix, message, data = {}) => {};
 const pushDebugWarn = (prefix, message, data = {}) => {};
 
+function getApiBaseUrl() {
+  return sanitize(import.meta.env.VITE_API_BASE_URL) || "/api/v1";
+}
+
 function normalizeModuleFromPath(pathname = window.location.pathname) {
   if (pathname.includes("/restaurant") && !pathname.includes("/restaurants")) return "restaurant";
   if (pathname.includes("/delivery")) return "delivery";
@@ -406,25 +410,77 @@ async function getFirebasePublicEnv() {
   if (publicEnvPromise) return publicEnvPromise;
 
   publicEnvPromise = (async () => {
+    const envConfig = {
+      apiKey: sanitize(import.meta.env.VITE_FIREBASE_API_KEY) || DEFAULT_FIREBASE_CONFIG.apiKey,
+      authDomain: sanitize(import.meta.env.VITE_FIREBASE_AUTH_DOMAIN) || DEFAULT_FIREBASE_CONFIG.authDomain,
+      projectId: sanitize(import.meta.env.VITE_FIREBASE_PROJECT_ID) || DEFAULT_FIREBASE_CONFIG.projectId,
+      appId: sanitize(import.meta.env.VITE_FIREBASE_APP_ID) || DEFAULT_FIREBASE_CONFIG.appId,
+      messagingSenderId:
+        sanitize(import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID) || DEFAULT_FIREBASE_CONFIG.messagingSenderId,
+      storageBucket: sanitize(import.meta.env.VITE_FIREBASE_STORAGE_BUCKET),
+      measurementId: sanitize(import.meta.env.VITE_FIREBASE_MEASUREMENT_ID),
+      vapidKey: sanitize(import.meta.env.VITE_FIREBASE_VAPID_KEY),
+    };
+
     try {
-      return {
-        apiKey: sanitize(import.meta.env.VITE_FIREBASE_API_KEY) || DEFAULT_FIREBASE_CONFIG.apiKey,
-        authDomain: sanitize(import.meta.env.VITE_FIREBASE_AUTH_DOMAIN) || DEFAULT_FIREBASE_CONFIG.authDomain,
-        projectId: sanitize(import.meta.env.VITE_FIREBASE_PROJECT_ID) || DEFAULT_FIREBASE_CONFIG.projectId,
-        appId: sanitize(import.meta.env.VITE_FIREBASE_APP_ID) || DEFAULT_FIREBASE_CONFIG.appId,
-        messagingSenderId:
-          sanitize(import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID) || DEFAULT_FIREBASE_CONFIG.messagingSenderId,
-        storageBucket: sanitize(import.meta.env.VITE_FIREBASE_STORAGE_BUCKET),
-        measurementId: sanitize(import.meta.env.VITE_FIREBASE_MEASUREMENT_ID),
-        vapidKey: sanitize(import.meta.env.VITE_FIREBASE_VAPID_KEY),
-      };
+      const hasCompleteBuildConfig =
+        envConfig.apiKey &&
+        envConfig.projectId &&
+        envConfig.appId &&
+        envConfig.messagingSenderId &&
+        envConfig.vapidKey;
+
+      if (hasCompleteBuildConfig) {
+        return envConfig;
+      }
+
+      const apiBaseUrl = getApiBaseUrl().replace(/\/$/, "");
+      const candidateUrls = [
+        `${apiBaseUrl}/food/public/env`,
+        "/api/v1/food/public/env",
+        "/api/v1/env/public",
+        "/api/env/public",
+      ];
+
+      for (const url of candidateUrls) {
+        try {
+          const response = await fetch(url, { cache: "no-store" });
+          if (!response.ok) continue;
+
+          const json = await response.json();
+          const data = isRecord(json?.data) ? json.data : {};
+          const runtimeConfig = {
+            apiKey: sanitize(data.VITE_FIREBASE_API_KEY || data.FIREBASE_API_KEY) || envConfig.apiKey,
+            authDomain: sanitize(data.VITE_FIREBASE_AUTH_DOMAIN || data.FIREBASE_AUTH_DOMAIN) || envConfig.authDomain,
+            projectId: sanitize(data.VITE_FIREBASE_PROJECT_ID || data.FIREBASE_PROJECT_ID) || envConfig.projectId,
+            appId: sanitize(data.VITE_FIREBASE_APP_ID || data.FIREBASE_APP_ID) || envConfig.appId,
+            messagingSenderId:
+              sanitize(data.VITE_FIREBASE_MESSAGING_SENDER_ID || data.FIREBASE_MESSAGING_SENDER_ID) ||
+              envConfig.messagingSenderId,
+            storageBucket:
+              sanitize(data.VITE_FIREBASE_STORAGE_BUCKET || data.FIREBASE_STORAGE_BUCKET) || envConfig.storageBucket,
+            measurementId:
+              sanitize(data.VITE_FIREBASE_MEASUREMENT_ID || data.FIREBASE_MEASUREMENT_ID) || envConfig.measurementId,
+            vapidKey: sanitize(data.VITE_FIREBASE_VAPID_KEY || data.FIREBASE_VAPID_KEY) || envConfig.vapidKey,
+          };
+
+          if (
+            runtimeConfig.apiKey &&
+            runtimeConfig.projectId &&
+            runtimeConfig.appId &&
+            runtimeConfig.messagingSenderId &&
+            runtimeConfig.vapidKey
+          ) {
+            return runtimeConfig;
+          }
+        } catch {
+          // Try the next candidate URL.
+        }
+      }
+
+      return envConfig;
     } catch {
-      return {
-        ...DEFAULT_FIREBASE_CONFIG,
-        storageBucket: sanitize(import.meta.env.VITE_FIREBASE_STORAGE_BUCKET),
-        measurementId: sanitize(import.meta.env.VITE_FIREBASE_MEASUREMENT_ID),
-        vapidKey: sanitize(import.meta.env.VITE_FIREBASE_VAPID_KEY),
-      };
+      return envConfig;
     } finally {
       publicEnvPromise = null;
     }
@@ -794,7 +850,10 @@ export async function registerWebPushForCurrentModule(pathname = window.location
       const supported = await isSupported().catch(() => false);
       if (!supported) return;
 
-      const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js");
+      const apiBaseUrl = getApiBaseUrl();
+      const registration = await navigator.serviceWorker.register(
+        `/firebase-messaging-sw.js?apiBase=${encodeURIComponent(apiBaseUrl)}`,
+      );
       pushDebugLog(PUSH_DEBUG_PREFIX, "Service worker registered for push", {
         scope: registration.scope,
         moduleName,
@@ -840,3 +899,4 @@ export async function registerWebPushForCurrentModule(pathname = window.location
   await registerNativeWebViewFcmToken(moduleName);
   return null;
 }
+

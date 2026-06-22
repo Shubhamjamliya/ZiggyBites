@@ -126,10 +126,28 @@ export const ProfileV2 = () => {
       if (typeof window !== "undefined" && window.flutter_inappwebview) {
         platform = "mobile"
       }
+
+      await registerWebPushForCurrentModule()
+
+      if (platform === "web") {
+        const permission = typeof Notification !== "undefined" ? Notification.permission : "unsupported"
+        const savedToken = typeof localStorage !== "undefined"
+          ? localStorage.getItem("fcm_web_registered_token_delivery")
+          : null
+
+        if (permission !== "granted") {
+          throw new Error("Browser notification permission is not granted yet.")
+        }
+
+        if (!savedToken) {
+          throw new Error("Push token is not registered yet. Refresh once after allowing notifications and try again.")
+        }
+      }
+
       await notificationAPI.sendTestNotification(platform, { contextModule: "delivery" })
       toast.success("Test notification sent! Check your device.")
     } catch (err) {
-      toast.error(err?.response?.data?.message || "Failed to send test notification")
+      toast.error(err?.response?.data?.message || err?.message || "Failed to send test notification")
     } finally {
       setIsTestingNotification(false)
     }
@@ -423,3 +441,5 @@ export const ProfileV2 = () => {
 }
 
 export default ProfileV2;
+
+

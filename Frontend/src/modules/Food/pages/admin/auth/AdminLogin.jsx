@@ -12,6 +12,7 @@ export default function AdminLogin() {
   const navigate = useNavigate()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
+  const [error, setError] = useState("")
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [brand, setBrand] = useState(() => {
@@ -53,10 +54,15 @@ export default function AdminLogin() {
 
   const handleLogin = async (e) => {
     e.preventDefault()
+    setError("")
+
     if (!email || !password) {
-      toast.error("Please fill in all fields")
+      const message = "Please fill in all fields"
+      setError(message)
+      toast.error(message)
       return
     }
+
     if (submitting.current) return
     submitting.current = true
     setLoading(true)
@@ -77,8 +83,19 @@ export default function AdminLogin() {
       toast.success("Welcome, Administrator")
       navigate("/admin/food", { replace: true })
     } catch (err) {
-      const msg = err?.response?.data?.message || err?.message || "Login failed. Check your credentials."
-      toast.error(msg)
+      const status = err?.response?.status
+      const serverMessage = err?.response?.data?.message
+      const isInvalidCredentials =
+        status === 400 ||
+        status === 401 ||
+        /invalid|incorrect|wrong|credentials/i.test(String(serverMessage || err?.message || ""))
+
+      const message = isInvalidCredentials
+        ? "Invalid email or password"
+        : serverMessage || err?.message || "Login failed. Please try again."
+
+      setError(message)
+      toast.error(message)
     } finally {
       setLoading(false)
       submitting.current = false
@@ -166,7 +183,10 @@ export default function AdminLogin() {
                       required
                       autoFocus
                       value={email}
-                      onChange={(e) => setEmail(e.target.value)}
+                      onChange={(e) => {
+                        setEmail(e.target.value)
+                        if (error) setError("")
+                      }}
                       className="block w-full pl-12 pr-6 py-4 bg-gray-50 dark:bg-gray-900/50 text-gray-900 dark:text-white border-2 border-transparent focus:border-[#7e3866]/50 rounded-2xl outline-none transition-all placeholder:text-gray-300 font-bold"
                       placeholder="admin@indianbites.com"
                     />
@@ -184,9 +204,12 @@ export default function AdminLogin() {
                       type={showPassword ? "text" : "password"}
                       required
                       value={password}
-                      onChange={(e) => setPassword(e.target.value)}
+                      onChange={(e) => {
+                        setPassword(e.target.value)
+                        if (error) setError("")
+                      }}
                       className="block w-full pl-12 pr-12 py-4 bg-gray-50 dark:bg-gray-900/50 text-gray-900 dark:text-white border-2 border-transparent focus:border-[#7e3866]/50 rounded-2xl outline-none transition-all placeholder:text-gray-300 font-bold"
-                      placeholder="••••••••"
+                      placeholder="********"
                     />
                     <button
                       type="button"
@@ -198,6 +221,12 @@ export default function AdminLogin() {
                   </div>
                 </div>
               </div>
+
+              {error ? (
+                <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+                  {error}
+                </div>
+              ) : null}
 
               <button
                 type="submit"
@@ -236,5 +265,3 @@ export default function AdminLogin() {
     </div>
   )
 }
-
-

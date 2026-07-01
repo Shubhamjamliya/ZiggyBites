@@ -326,7 +326,7 @@ export const useHome = ({ effectiveLocation, effectiveZoneId, hasUsableUserCity 
       else if (filters.activeFilters?.has("trusted")) params.trusted = "true";
 
       if (effectiveZoneId) params.zoneId = effectiveZoneId;
-      if (hasUsableUserCity) params.city = String(effectiveLocation.city).trim();
+      if (!effectiveZoneId && hasUsableUserCity) params.city = String(effectiveLocation.city).trim();
 
       const response = await restaurantAPI.getRestaurants(params);
       if (requestSeq !== restaurantsRequestSeqRef.current) return;
@@ -452,3 +452,4 @@ export const useHome = ({ effectiveLocation, effectiveZoneId, hasUsableUserCity 
     recommendedRestaurantsFromSettings,
   };
 };
+

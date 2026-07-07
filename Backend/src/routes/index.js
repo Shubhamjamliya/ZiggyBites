@@ -13,7 +13,7 @@ import orderUserRoutes from '../modules/food/orders/routes/order.routes.user.js'
 import paymentRoutes from '../core/payments/payment.routes.js';
 import fcmRoutes from '../core/notifications/fcm.routes.js';
 import notificationRoutes from '../core/notifications/notification.routes.js';
-import { authMiddleware } from '../core/auth/auth.middleware.js';
+import { authMiddleware, optionalAuthMiddleware } from '../core/auth/auth.middleware.js';
 import * as businessSettingsController from '../modules/food/admin/controllers/businessSettings.controller.js';
 import { requireRoles } from '../core/roles/role.middleware.js';
 import { getQueuesController } from '../controllers/admin.controller.js';
@@ -23,6 +23,7 @@ import appConfigRoutes from '../core/appConfig/appConfig.routes.js';
 import promocodeRoutes from './promocodeRoutes.js';
 import { requireZone } from '../middlewares/zone.middleware.js';
 import envSettingRoutes from './admin/envSettingRoutes.js';
+import { uploadRateLimiter } from '../middleware/rateLimit.js';
 
 const router = express.Router();
 
@@ -58,7 +59,7 @@ router.post('/v1/food/dining/bookings/:bookingId/review', authMiddleware, requir
 router.get('/v1/food/dining/bookings/restaurant/:restaurantId', authMiddleware, requireRoles('RESTAURANT', 'ADMIN'), getRestaurantBookings);
 router.patch('/v1/food/dining/bookings/:bookingId/status', authMiddleware, requireRoles('RESTAURANT', 'ADMIN'), updateBookingStatus);
 
-router.use('/v1/uploads', uploadRoutes);
+router.use('/v1/uploads', optionalAuthMiddleware, uploadRateLimiter, uploadRoutes);
 
 // Mark business-settings/public as truly public
 router.get('/v1/food/admin/business-settings/public', businessSettingsController.getBusinessSettings);
@@ -76,5 +77,3 @@ router.use('/fcm-tokens', fcmRoutes);
 router.get('/v1/admin/queues', authMiddleware, requireRoles('ADMIN'), getQueuesController);
 
 export default router;
-
-

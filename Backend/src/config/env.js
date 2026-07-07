@@ -33,8 +33,10 @@ export const config = {
     smsDltTemplateId: process.env.SMS_INDIA_HUB_DLT_TEMPLATE_ID,
 
     // Rate limiting
+    rateLimitEnabled: process.env.RATE_LIMIT_ENABLED !== 'false',
     rateLimitWindowMinutes: Number(process.env.RATE_LIMIT_WINDOW || 15),
     rateLimitMaxRequests: Number(process.env.RATE_LIMIT_MAX || 100),
+    rateLimitDevMaxRequests: Number(process.env.RATE_LIMIT_DEV_MAX || process.env.RATE_LIMIT_MAX || 100),
     authRateLimitWindowMinutes: Number(process.env.AUTH_RATE_LIMIT_WINDOW || 15),
     authRateLimitMax: Number(process.env.AUTH_RATE_LIMIT_MAX || 30),
 
@@ -76,9 +78,9 @@ export const config = {
     // Razorpay (payments)
     razorpayKeyId: process.env.RAZORPAY_KEY_ID,
     razorpayKeySecret: process.env.RAZORPAY_KEY_SECRET,
-    razorpayWebhookSecret: process.env.RAZORPAY_WEBHOOK_SECRET, // ✅ NEW
+    razorpayWebhookSecret: process.env.RAZORPAY_WEBHOOK_SECRET, // NEW
 
-    // Email (SMTP) – for admin forgot password OTP etc.
+    // Email (SMTP) - for admin forgot password OTP etc.
     emailHost: process.env.EMAIL_HOST,
     emailPort: Number(process.env.EMAIL_PORT) || 587,
     emailUser: process.env.EMAIL_USER,
@@ -111,8 +113,10 @@ export const updateConfig = () => {
     config.smsApiKey = process.env.SMS_INDIA_HUB_API_KEY || config.smsApiKey;
     config.smsSenderId = process.env.SMS_INDIA_HUB_SENDER_ID || config.smsSenderId;
     config.smsDltTemplateId = process.env.SMS_INDIA_HUB_DLT_TEMPLATE_ID || config.smsDltTemplateId;
+    config.rateLimitEnabled = process.env.RATE_LIMIT_ENABLED !== 'false';
     config.rateLimitWindowMinutes = Number(process.env.RATE_LIMIT_WINDOW || config.rateLimitWindowMinutes);
     config.rateLimitMaxRequests = Number(process.env.RATE_LIMIT_MAX || config.rateLimitMaxRequests);
+    config.rateLimitDevMaxRequests = Number(process.env.RATE_LIMIT_DEV_MAX || process.env.RATE_LIMIT_MAX || config.rateLimitDevMaxRequests);
     config.authRateLimitWindowMinutes = Number(process.env.AUTH_RATE_LIMIT_WINDOW || config.authRateLimitWindowMinutes);
     config.authRateLimitMax = Number(process.env.AUTH_RATE_LIMIT_MAX || config.authRateLimitMax);
     config.bcryptSaltRounds = Number(process.env.BCRYPT_SALT_ROUNDS || config.bcryptSaltRounds);
@@ -147,4 +151,3 @@ export const updateConfig = () => {
     config.petpoojaAppKey = process.env.PETPOOJA_APP_KEY || config.petpoojaAppKey;
     config.petpoojaAppSecret = process.env.PETPOOJA_APP_SECRET || config.petpoojaAppSecret;
 };
-

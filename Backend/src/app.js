@@ -6,7 +6,7 @@ import mongoSanitize from 'mongo-sanitize';
 import xssClean from 'xss-clean';
 import routes from './routes/index.js';
 import errorHandler from './middleware/errorHandler.js';
-import { apiRateLimiter } from './middleware/rateLimit.js';
+import { privateRateLimiter } from './middleware/rateLimit.js';
 import { responseTimeLogger } from './middleware/responseTimeLogger.js';
 import { requestIdMiddleware } from './middleware/requestId.js';
 import { healthCheck } from './config/health.js';
@@ -49,7 +49,7 @@ app.use(cors());
 app.use(morgan('dev'));
 app.use(express.json({
     verify: (req, res, buf) => {
-        // ✅ Store rawBody for signature verification (Razorpay Webhooks)
+        // Store rawBody for signature verification (Razorpay Webhooks)
         if (req.originalUrl && req.originalUrl.includes('/webhook/razorpay')) {
             req.rawBody = buf;
         }
@@ -66,8 +66,8 @@ app.use((req, _res, next) => {
 });
 app.use(xssClean());
 
-// Global rate limiting for API routes
-app.use('/api', apiRateLimiter);
+// Apply private-route rate limiting only. Public and auth-only routes are skipped in middleware.
+app.use('/api', privateRateLimiter);
 
 // Optional: log API response time (method, path, status, duration) - no sensitive data
 app.use('/api', responseTimeLogger);

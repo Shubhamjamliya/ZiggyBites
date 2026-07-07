@@ -20,8 +20,6 @@ import { authRateLimiter } from '../../middleware/rateLimit.js';
 
 const router = express.Router();
 
-// router.use(authRateLimiter); // Removed global application to avoid rate-limiting /me or /refresh-token too strictly
-
 // User OTP login
 router.post('/user/request-otp', authRateLimiter, requestUserOtpController);
 router.post('/user/verify-otp', authRateLimiter, verifyUserOtpController);
@@ -42,10 +40,10 @@ router.post('/admin/forgot-password/request-otp', authRateLimiter, requestAdminF
 router.post('/admin/forgot-password/reset', authRateLimiter, resetAdminPasswordWithOtpController);
 
 // Refresh token
-router.post('/refresh-token', refreshTokenController);
+router.post('/refresh-token', authRateLimiter, refreshTokenController);
 
 // Logout (invalidates refresh token)
-router.post('/logout', logoutController);
+router.post('/logout', authRateLimiter, logoutController);
 
 // Authenticated user profile (requires Bearer token)
 router.get('/me', authMiddleware, getMeController);
@@ -55,4 +53,3 @@ router.patch('/admin/profile', authMiddleware, requireAdmin, updateAdminProfileC
 router.post('/admin/change-password', authMiddleware, requireAdmin, changeAdminPasswordController);
 
 export default router;
-

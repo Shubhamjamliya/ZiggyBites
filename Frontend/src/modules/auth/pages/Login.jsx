@@ -2,8 +2,7 @@ import React, { useEffect, useState, useRef } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Link, useNavigate } from "react-router-dom"
 import { Phone, ArrowRight, Loader2, ShieldCheck, Heart, ShieldQuestion } from "lucide-react"
-import { FcGoogle } from "react-icons/fc"
-import { SiGmail } from "react-icons/si"
+
 import { toast } from "sonner"
 import { authAPI, userAPI } from "@food/api"
 import { setAuthData } from "@food/utils/auth"
@@ -408,22 +407,7 @@ export default function UnifiedOTPFastLogin() {
                     {!loading && <ArrowRight className="absolute right-5 h-4 w-4" />}
                   </button>
 
-                  <div className="grid grid-cols-2 gap-3 pt-1">
-                    <button
-                      type="button"
-                      className="flex h-11 items-center justify-center gap-2 rounded-xl border border-gray-100 bg-white text-xs font-black text-[#202030] shadow-[0_8px_20px_rgba(15,23,42,0.06)] transition active:scale-[0.98]"
-                    >
-                      <FcGoogle className="h-5 w-5 shrink-0" />
-                      <span>Google</span>
-                    </button>
-                    <button
-                      type="button"
-                      className="flex h-11 items-center justify-center gap-2 rounded-xl border border-gray-100 bg-white text-xs font-black text-[#202030] shadow-[0_8px_20px_rgba(15,23,42,0.06)] transition active:scale-[0.98]"
-                    >
-                      <SiGmail className="h-5 w-5 shrink-0 text-[#ea4335]" />
-                      <span>Gmail</span>
-                    </button>
-                  </div>
+
                 </motion.form>
               ) : (
                 <motion.form

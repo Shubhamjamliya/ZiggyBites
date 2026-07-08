@@ -1,5 +1,6 @@
 import rateLimit from 'express-rate-limit';
 import { config } from '../config/env.js';
+import { verifyAccessToken } from '../core/auth/token.util.js';
 
 const windowMs = config.rateLimitWindowMinutes * 60 * 1000;
 const authWindowMs = config.authRateLimitWindowMinutes * 60 * 1000;
@@ -67,6 +68,25 @@ const publicPathMatchers = [
 ];
 
 const getRequestPath = (req) => req.path;
+const getAuthenticatedRateLimitKey = (req) => {
+    const authHeader = req.headers?.authorization || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.substring(7) : null;
+
+    if (!token) {
+        return null;
+    }
+
+    try {
+        const decoded = verifyAccessToken(token);
+        if (decoded?.userId && decoded?.role) {
+            return `user:${decoded.role}:${decoded.userId}`;
+        }
+    } catch (_error) {
+        // Ignore invalid tokens here and fall back to IP-based limiting.
+    }
+
+    return null;
+};
 
 const isAuthOnlyPath = (req) => authOnlyPaths.includes(getRequestPath(req));
 const isPublicPath = (req) => publicPathMatchers.some((pattern) => pattern.test(getRequestPath(req)));
@@ -80,6 +100,7 @@ export const privateRateLimiter = rateLimit({
     max: getPrivateMax,
     standardHeaders: true,
     legacyHeaders: false,
+    keyGenerator: (req) => getAuthenticatedRateLimitKey(req) || `ip:${req.ip}`,
     skip: (req) => isRateLimitDisabled() || isPublicPath(req) || isAuthOnlyPath(req),
     message: {
         success: false,

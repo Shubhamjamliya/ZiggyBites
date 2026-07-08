@@ -377,6 +377,7 @@ export default function SubscriptionCheckout() {
           console.warn("[SubscriptionCheckout] Razorpay modal closed by user");
           toast.info("Payment was not completed.");
           setIsPlacingOrder(false);
+          navigate("/food/user/checkout", { replace: true });
         },
       });
     } catch (error) {

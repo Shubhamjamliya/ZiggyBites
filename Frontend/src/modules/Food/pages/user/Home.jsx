@@ -134,6 +134,18 @@ const normalizeHealthyFlag = (value) => {
   return false;
 };
 
+const normalizeCategoryFoodScope = (value) => {
+  const normalized = String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_]+/g, "-");
+
+  if (normalized === "veg" || normalized === "vegetarian") return "veg";
+  if (normalized === "non-veg" || normalized === "nonveg" || normalized === "non-vegetarian") return "non-veg";
+  if (normalized === "both" || normalized === "all") return "both";
+  return "unknown";
+};
+
 const isVegFoodItem = (item) => {
   const foodType = String(item?.foodType || item?.type || item?.category || "")
     .trim()
@@ -672,10 +684,22 @@ export default function Home() {
   }, [landingCategories, normalizeImageUrl, slugifyCategory]);
 
   const displayCategories = useMemo(() => {
-    if (realCategories.length > 0) return realCategories;
-    if (menuCategories.length > 0) return menuCategories;
-    return normalizedLandingCategories;
-  }, [menuCategories, realCategories, normalizedLandingCategories]);
+    const source = realCategories.length > 0
+      ? realCategories
+      : menuCategories.length > 0
+        ? menuCategories
+        : normalizedLandingCategories;
+
+    if (!vegMode) return source;
+
+    return source.filter((category) => {
+      const scope = normalizeCategoryFoodScope(
+        category?.foodTypeScope || category?.type || category?.dietType || "",
+      );
+
+      return scope !== "non-veg";
+    });
+  }, [menuCategories, normalizedLandingCategories, realCategories, vegMode]);
 
   // Swipe functionality for hero banner carousel
   const touchStartX = useRef(0);
@@ -1282,6 +1306,14 @@ export default function Home() {
               }
             }
 
+            const categoryScope = hasVeg && hasNonVeg
+              ? "Both"
+              : hasVeg
+                ? "Veg"
+                : hasNonVeg
+                  ? "Non-Veg"
+                  : "Both";
+
             if (!categoryMap.has(slug)) {
               categoryMap.set(slug, {
                 id: slug,
@@ -1289,9 +1321,20 @@ export default function Home() {
                 slug,
                 label: categoryName,
                 image: image || "",
+                foodTypeScope: categoryScope,
               });
-            } else if (image && !categoryMap.get(slug).image) {
-              categoryMap.get(slug).image = image;
+            } else {
+              const existingCategory = categoryMap.get(slug);
+              if (image && !existingCategory.image) {
+                existingCategory.image = image;
+              }
+              const existingScope = normalizeCategoryFoodScope(existingCategory.foodTypeScope);
+              const nextScope = normalizeCategoryFoodScope(categoryScope);
+              if (existingScope !== nextScope) {
+                existingCategory.foodTypeScope = "Both";
+              } else if (!existingCategory.foodTypeScope || existingScope === "unknown") {
+                existingCategory.foodTypeScope = categoryScope;
+              }
             }
           });
 

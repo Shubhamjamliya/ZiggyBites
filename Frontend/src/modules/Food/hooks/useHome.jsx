@@ -270,6 +270,7 @@ export const useHome = ({ effectiveLocation, effectiveZoneId, hasUsableUserCity 
                 slug: cat?.slug || String(cat?.name || "").toLowerCase().replace(/\s+/g, "-"),
                 image: normalizeImageUrl(cat?.image || cat?.imageUrl) || "",
                 type: cat?.type || "",
+                foodTypeScope: cat?.foodTypeScope || cat?.type || "Both",
                 healthy: normalizeHealthyFlag(cat?.healthy),
               }))
             : [];

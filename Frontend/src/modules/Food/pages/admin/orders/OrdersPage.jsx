@@ -16,7 +16,6 @@ import { useOrdersManagement } from "@food/components/admin/orders/useOrdersMana
 import { Loader2 } from "lucide-react"
 import { OrdersDashboardSkeleton } from "@food/components/ui/loading-skeletons"
 import { useDelayedLoading } from "@food/hooks/useDelayedLoading"
-import alertSound from "@food/assets/audio/zomato_sms.mp3"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -70,101 +69,8 @@ export default function OrdersPage({ statusKey = "all" }) {
     const separator = source.includes("?") ? "&" : "?"
     return `${source}${separator}devcache=${cacheKey}`
   }, [])
-
-  const playDeliveryStyleBuzz = useCallback(async () => {
-    const soundFile = resolveAudioSource(alertSound, "admin-alert")
-
-    try {
-      if (!notificationAudioRef.current) {
-        notificationAudioRef.current = new Audio(soundFile)
-        notificationAudioRef.current.preload = "auto"
-        notificationAudioRef.current.volume = 1
-      } else if (!notificationAudioRef.current.src.includes(soundFile.split("/").pop())) {
-        notificationAudioRef.current.pause()
-        notificationAudioRef.current.src = soundFile
-        notificationAudioRef.current.load()
-      }
-
-      if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
-        navigator.vibrate([200, 100, 200, 100, 300])
-      }
-
-      notificationAudioRef.current.muted = false
-      notificationAudioRef.current.volume = 1
-      notificationAudioRef.current.currentTime = 0
-      await notificationAudioRef.current.play()
-      return true
-    } catch (_) {
-      return false
-    }
-  }, [resolveAudioSource])
-
-  const playDefaultRing = useCallback(() => {
-    playDeliveryStyleBuzz().then((played) => {
-      if (played) return
-
-      try {
-        if (!fallbackAudioRef.current) {
-          fallbackAudioRef.current = new Audio(alertSound)
-          fallbackAudioRef.current.preload = "auto"
-          fallbackAudioRef.current.volume = 1
-        }
-
-        fallbackAudioRef.current.muted = false
-        fallbackAudioRef.current.volume = 1
-        fallbackAudioRef.current.currentTime = 0
-        fallbackAudioRef.current.play().catch(() => {})
-      } catch (_) {}
-
-      const AudioCtx = window.AudioContext || window.webkitAudioContext
-      if (AudioCtx) {
-        if (!audioContextRef.current) {
-          audioContextRef.current = new AudioCtx()
-        }
-        const ctx = audioContextRef.current
-        const playWithContext = async () => {
-          if (ctx.state === "suspended") {
-            await ctx.resume()
-          }
-
-          const beep = (startAt, frequency = 880, duration = 0.2) => {
-            const osc = ctx.createOscillator()
-            const gain = ctx.createGain()
-            osc.type = "sine"
-            osc.frequency.value = frequency
-            gain.gain.value = 0.0001
-            osc.connect(gain)
-            gain.connect(ctx.destination)
-
-            const start = ctx.currentTime + startAt
-            osc.start(start)
-            gain.gain.exponentialRampToValueAtTime(0.25, start + 0.02)
-            gain.gain.exponentialRampToValueAtTime(0.0001, start + duration)
-            osc.stop(start + duration + 0.02)
-          }
-
-          beep(0, 880, 0.2)
-          beep(0.26, 880, 0.2)
-          beep(0.52, 988, 0.26)
-
-          setTimeout(() => {
-            if (ctx.state === "running") {
-              ctx.suspend().catch(() => {})
-            }
-          }, 1200)
-        }
-        playWithContext().catch(async () => {
-          if (fallbackAudioRef.current) {
-            fallbackAudioRef.current.currentTime = 0
-            await fallbackAudioRef.current.play()
-          }
-        })
-        return
-      }
-    }).catch((error) => {
-      debugWarn("Ring sound could not be played:", error)
-    })
-  }, [playDeliveryStyleBuzz])
+  const playDeliveryStyleBuzz = useCallback(async () => false, [])
+  const playDefaultRing = useCallback(() => {}, [])
 
   const stopAlertLoop = useCallback(() => {
     if (alertLoopTimerRef.current) {
@@ -201,8 +107,8 @@ export default function OrdersPage({ statusKey = "all" }) {
         tag: tag || undefined,
         renotify: true,
         requireInteraction: true,
-        silent: false,
-        vibrate: [200, 100, 200, 100, 300],
+        silent: true,
+        vibrate: [],
         icon: "/logo.png",
         data: { targetUrl: "/admin/orders/all" },
       }
@@ -221,70 +127,6 @@ export default function OrdersPage({ statusKey = "all" }) {
         notification.close()
       }
     } catch (_) {}
-  }, [])
-
-  // Unlock audio on first user gesture so rings can play reliably later
-  useEffect(() => {
-    const unlockAudio = async () => {
-      if (audioUnlockedRef.current) return
-
-      try {
-        if (!fallbackAudioRef.current) {
-          fallbackAudioRef.current = new Audio(alertSound)
-          fallbackAudioRef.current.preload = "auto"
-          fallbackAudioRef.current.volume = 1
-        }
-
-        // Prime media element playback permission
-        fallbackAudioRef.current.muted = true
-        await fallbackAudioRef.current.play()
-        fallbackAudioRef.current.pause()
-        fallbackAudioRef.current.currentTime = 0
-        fallbackAudioRef.current.muted = false
-
-        if (!notificationAudioRef.current) {
-          const soundFile = resolveAudioSource(alertSound, "admin-alert")
-          notificationAudioRef.current = new Audio(soundFile)
-          notificationAudioRef.current.preload = "auto"
-          notificationAudioRef.current.volume = 1
-        }
-        notificationAudioRef.current.muted = true
-        await notificationAudioRef.current.play()
-        notificationAudioRef.current.pause()
-        notificationAudioRef.current.currentTime = 0
-        notificationAudioRef.current.muted = false
-
-        // Prime WebAudio permission
-        const AudioCtx = window.AudioContext || window.webkitAudioContext
-        if (AudioCtx && !audioContextRef.current) {
-          audioContextRef.current = new AudioCtx()
-        }
-        if (audioContextRef.current?.state === "suspended") {
-          await audioContextRef.current.resume()
-        }
-        if (audioContextRef.current?.state === "running") {
-          await audioContextRef.current.suspend()
-        }
-
-        audioUnlockedRef.current = true
-      } catch {
-        // Ignore unlock errors; we'll retry on next gesture implicitly
-      }
-    }
-
-    window.addEventListener("pointerdown", unlockAudio, { passive: true })
-    window.addEventListener("keydown", unlockAudio)
-    window.addEventListener("touchstart", unlockAudio, { passive: true })
-    document.addEventListener("click", unlockAudio, { passive: true })
-    document.addEventListener("touchstart", unlockAudio, { passive: true })
-
-    return () => {
-      window.removeEventListener("pointerdown", unlockAudio)
-      window.removeEventListener("keydown", unlockAudio)
-      window.removeEventListener("touchstart", unlockAudio)
-      document.removeEventListener("click", unlockAudio)
-      document.removeEventListener("touchstart", unlockAudio)
-    }
   }, [])
 
   useEffect(() => {
@@ -983,4 +825,5 @@ export default function OrdersPage({ statusKey = "all" }) {
     </div>
   )
 }
+
 

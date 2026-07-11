@@ -1386,10 +1386,6 @@ export default function OrdersMain() {
             // If new pending booking found, maybe show toast
             if (pending > pendingBookingsCount) {
               toast.info(`New table booking request! Check the "Table Booking" tab.`);
-              // Optional: Play sound
-              if (audioRef.current && !isMutedRef.current) {
-                audioRef.current.play().catch(() => {});
-              }
             }
             setPendingBookingsCount(pending);
           }
@@ -1731,7 +1727,6 @@ export default function OrdersMain() {
 
   useEffect(() => {
     if (!newOrder || isSubscriptionPopupAlert(newOrder)) return;
-    playNotificationSound?.(newOrder);
   }, [newOrder, playNotificationSound]);
 
   useEffect(() => {
@@ -1952,32 +1947,13 @@ export default function OrdersMain() {
 
     return () => clearInterval(intervalId);
   }, [normalOrderFlowEnabled]);
-
-  // Play audio when popup opens
+  // Keep restaurant order popups visual-only.
   useEffect(() => {
     if (showNewOrderPopup && !isMuted) {
-      if (audioRef.current) {
-        audioRef.current.loop = false;
-        audioRef.current.muted = false;
-        audioRef.current.volume = 1;
-        audioRef.current.currentTime = 0;
-        audioRef.current
-          .play()
-          .catch((err) => {
-            debugLog("Audio play failed:", err);
-            try {
-              const fallbackAudio = new Audio(
-                import.meta.env.DEV
-                  ? `/alert.mp3?devcache=restaurant-popup-${Date.now()}`
-                  : "/alert.mp3",
-              );
-              fallbackAudio.preload = "auto";
-              fallbackAudio.volume = 1;
-              fallbackAudio.play().catch(() => {});
-            } catch (_) {}
-          });
-      }
-    } else if (audioRef.current) {
+      return;
+    }
+
+    if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current.currentTime = 0;
     }
@@ -4757,3 +4733,6 @@ function EmptyState({ message = "Temporarily closed" }) {
     </div>
   );
 }
+
+
+

@@ -254,11 +254,6 @@ const restaurantSchema = new mongoose.Schema(
       maxGuests: { type: Number, default: 6 },
       diningType: { type: [String], default: ["family-dining"] },
     },
-    // NEW: Petpooja Mapping Configuration
-    petpoojaSettings: {
-      enabled: { type: Boolean, default: false },
-      restID: { type: String, trim: true },
-    },
     menu: {
       sections: { type: Array, default: [] },
     },
@@ -439,3 +434,4 @@ export const FoodRestaurant = mongoose.model(
   "FoodRestaurant",
   restaurantSchema,
 );
+

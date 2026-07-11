@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Cookie, CupSoda, IceCreamBowl, Pizza, ShoppingBag } from 'lucide-react';
 import { getCachedSettings, loadBusinessSettings, normalizeKitchenAppName } from '@/modules/Food/utils/businessSettings';
 
-const riderSplashImage = '/Rider.jpeg';
+const riderSplashImage = '/Loading Logo.png';
 
 export default function SplashScreen({ onFinish }) {
   const [isFinishing, setIsFinishing] = useState(false);
@@ -96,7 +96,7 @@ export default function SplashScreen({ onFinish }) {
                 <div className="absolute left-6 top-1/2 h-0.5 w-12 translate-y-2 rounded-full bg-gray-800/25" />
                 <img
                   src={riderSplashImage}
-                  alt={`${brand.companyName} rider`}
+                  alt={`${brand.companyName} loading logo`}
                   className="relative z-10 h-44 w-44 object-contain"
                 />
               </motion.div>
@@ -129,3 +129,4 @@ export default function SplashScreen({ onFinish }) {
     </div>
   );
 }
+

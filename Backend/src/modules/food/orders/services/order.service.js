@@ -24,7 +24,6 @@ import {
     initiateRazorpayRefund
 } from '../helpers/razorpay.helper.js';
 import { getIO, rooms } from '../../../../config/socket.js';
-import { addOrderJob } from '../../../../queues/producers/order.producer.js';
 import { fetchPolyline } from '../utils/googleMaps.js';
 import { getFirebaseDB } from '../../../../config/firebase.js';
 import * as foodTransactionService from './foodTransaction.service.js';
@@ -368,13 +367,6 @@ export async function createOrder(userId, dto) {
     // duplicate FCM push to the restaurant for the same order.
     if (!isAwaitingOnlinePayment) {
       await notifyRestaurantNewOrder(order);
-      
-      // Enqueue async Petpooja sync
-      addOrderJob({ 
-        action: 'SYNC_PETPOOJA', 
-        orderId: order.order_id || order._id.toString(), 
-        orderMongoId: order._id.toString() 
-      }, { jobId: `petpooja-${order._id.toString()}`, delay: 1000 });
     }
   } catch {
     // Don't block order placement on socket failures.
@@ -469,13 +461,6 @@ export async function verifyPayment(userId, dto) {
 
   // After online payment is verified, now notify restaurant about the new order.
   await notifyRestaurantNewOrder(order);
-
-  // Enqueue async Petpooja sync
-  addOrderJob({ 
-    action: 'SYNC_PETPOOJA', 
-    orderId: order.order_id || order._id.toString(), 
-    orderMongoId: order._id.toString() 
-  }, { jobId: `petpooja-${order._id.toString()}`, delay: 1000 });
 
   // Notify Customer about payment success
   await notifyOwnersSafely([{ ownerType: "USER", ownerId: userId }], {
@@ -1823,5 +1808,4 @@ export async function deleteOrderAdmin(orderId, adminId) {
     orderMongoId: String(order._id),
   };
 }
-
 

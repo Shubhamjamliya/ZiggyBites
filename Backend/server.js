@@ -1,4 +1,5 @@
 import http from 'http';
+import dns from 'node:dns';
 import app from './src/app.js';
 import { config } from './src/config/env.js';
 import { validateConfig } from './src/config/validateEnv.js';
@@ -20,6 +21,16 @@ let expireOffersInterval = null;
 let fssaiExpiryInterval = null;
 let subscriptionReminderInterval = null;
 
+const configureMongoDns = () => {
+    const mongoUri = String(config.mongodbUri || '');
+    if (!mongoUri.startsWith('mongodb+srv://')) {
+        return;
+    }
+
+    // Prefer public resolvers for Atlas SRV lookups when the local resolver is flaky.
+    dns.setServers(['8.8.8.8', '1.1.1.1']);
+    logger.info('Configured DNS fallback servers for MongoDB Atlas SRV resolution');
+};
 const gracefulShutdown = async (signal) => {
     logger.info(`${signal} received, starting graceful shutdown`);
     if (!server) {
@@ -50,6 +61,7 @@ const gracefulShutdown = async (signal) => {
 const startServer = async () => {
     try {
         validateConfig();
+        configureMongoDns();
         initializeFirebaseRealtime();
 
         // 1. Connect to Database (MongoDB)
@@ -161,4 +173,5 @@ const startServer = async () => {
 };
 
 startServer();
+
 

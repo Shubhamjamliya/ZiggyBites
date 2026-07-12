@@ -127,6 +127,67 @@ const placeholders = [
 ];
 
 const WEBVIEW_SESSION_CACHE_BUSTER = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+const HOME_MENU_CACHE = new Map();
+const HOME_MENU_REQUESTS = new Map();
+const HOME_MENU_META_CACHE = new Map();
+const HOME_CATEGORY_ITEMS_CACHE = new Map();
+const HOME_RECOMMENDED_ITEMS_CACHE = new Map();
+
+const readMenuFromResponse = (response) =>
+  response?.data?.data?.menu || response?.data?.menu || null;
+
+const getHomeMenuCacheKey = (restaurantId) => String(restaurantId || "").trim();
+
+const loadRestaurantMenuCached = async (restaurantId) => {
+  const cacheKey = getHomeMenuCacheKey(restaurantId);
+  if (!cacheKey) return null;
+
+  if (HOME_MENU_CACHE.has(cacheKey)) {
+    return HOME_MENU_CACHE.get(cacheKey);
+  }
+
+  if (HOME_MENU_REQUESTS.has(cacheKey)) {
+    return HOME_MENU_REQUESTS.get(cacheKey);
+  }
+
+  const request = restaurantAPI
+    .getMenuByRestaurantId(cacheKey)
+    .then((response) => {
+      const menu = readMenuFromResponse(response);
+      HOME_MENU_CACHE.set(cacheKey, menu);
+      return menu;
+    })
+    .catch(() => {
+      HOME_MENU_CACHE.set(cacheKey, null);
+      return null;
+    })
+    .finally(() => {
+      HOME_MENU_REQUESTS.delete(cacheKey);
+    });
+
+  HOME_MENU_REQUESTS.set(cacheKey, request);
+  return request;
+};
+
+const loadMenusInChunks = async (restaurantIds, chunkSize = 6) => {
+  const menusByRestaurantId = new Map();
+
+  for (let index = 0; index < restaurantIds.length; index += chunkSize) {
+    const batchIds = restaurantIds.slice(index, index + chunkSize);
+    const batchMenus = await Promise.all(
+      batchIds.map(async (restaurantId) => [
+        restaurantId,
+        await loadRestaurantMenuCached(restaurantId),
+      ]),
+    );
+
+    batchMenus.forEach(([restaurantId, menu]) => {
+      menusByRestaurantId.set(String(restaurantId), menu);
+    });
+  }
+
+  return menusByRestaurantId;
+};
 const normalizeHealthyFlag = (value) => {
   if (typeof value === "boolean") return value;
   if (typeof value === "number") return value === 1;
@@ -1187,6 +1248,7 @@ export default function Home() {
       ? menuUnionRestaurantIdsKey.split(",").filter(Boolean)
       : [];
     const shouldFetchMenuMeta = vegMode || realCategories.length === 0;
+    const menuMetaCacheKey = shouldFetchMenuMeta ? menuUnionRestaurantIdsKey : "";
 
     const fetchMenuCategories = async () => {
       const requestSeq = ++menuUnionRequestSeqRef.current;
@@ -1198,39 +1260,26 @@ export default function Home() {
         return;
       }
 
+      const cachedMenuMeta = HOME_MENU_META_CACHE.get(menuMetaCacheKey);
+      if (cachedMenuMeta) {
+        setMenuCategories(cachedMenuMeta.categories);
+        setRestaurantDietMeta(cachedMenuMeta.restaurantDietMeta);
+        setLoadingMenuCategories(false);
+        return;
+      }
+
       setLoadingMenuCategories(true);
       try {
         const categoryMap = new Map();
-        const menuCache = menuUnionCacheRef.current;
         const menuResponses = [];
-
-        for (let index = 0; index < restaurantIds.length; index += 4) {
-          const batchIds = restaurantIds.slice(index, index + 4);
-          const batchResponses = await Promise.all(
-            batchIds.map(async (id) => {
-              if (!id) return { id: null, menu: null };
-
-              if (menuCache.has(id)) {
-                return { id, menu: menuCache.get(id) };
-              }
-
-              try {
-                const response = await restaurantAPI.getMenuByRestaurantId(id);
-                const menu = response?.data?.data?.menu || null;
-                menuCache.set(id, menu);
-                return { id, menu };
-              } catch {
-                menuCache.set(id, null);
-                return { id, menu: null };
-              }
-            }),
-          );
-
-          if (requestSeq !== menuUnionRequestSeqRef.current) return;
-          menuResponses.push(...batchResponses);
-        }
+        const menusByRestaurantId = await loadMenusInChunks(restaurantIds, 4);
 
         if (requestSeq !== menuUnionRequestSeqRef.current) return;
+
+        menusByRestaurantId.forEach((menu, id) => {
+          menuUnionCacheRef.current.set(String(id), menu);
+          menuResponses.push({ id, menu });
+        });
 
         const nextDietMeta = {};
 
@@ -1349,6 +1398,10 @@ export default function Home() {
               foodImages[0],
           }));
 
+        HOME_MENU_META_CACHE.set(menuMetaCacheKey, {
+          categories,
+          restaurantDietMeta: nextDietMeta,
+        });
         setMenuCategories(categories);
         setRestaurantDietMeta(nextDietMeta);
       } finally {
@@ -1541,26 +1594,36 @@ export default function Home() {
         return;
       }
 
+      const categoryItemsCacheKey = [
+        menuUnionRestaurantIdsKey,
+        String(selectedHomeCategory?.slug || ""),
+        String(selectedHomeCategory?.categoryId || ""),
+        vegMode ? "veg" : "all",
+      ].join("|");
+      const cachedCategoryItems = HOME_CATEGORY_ITEMS_CACHE.get(categoryItemsCacheKey);
+      if (cachedCategoryItems) {
+        setCategoryFoodItems(cachedCategoryItems);
+        setLoadingCategoryFoodItems(false);
+        return;
+      }
+
       setLoadingCategoryFoodItems(true);
       try {
         const restaurants = restaurantsData.slice(0, 48);
         const nextItems = [];
+        const restaurantsWithIds = restaurants
+          .map((restaurant) => ({
+            restaurant,
+            restaurantId: restaurant.restaurantId || restaurant.id || restaurant.mongoId,
+          }))
+          .filter((entry) => entry.restaurantId);
+        const menusByRestaurantId = await loadMenusInChunks(
+          restaurantsWithIds.map((entry) => entry.restaurantId),
+        );
 
-        for (const restaurant of restaurants) {
-          const restaurantId = restaurant.restaurantId || restaurant.id || restaurant.mongoId;
-          if (!restaurantId) continue;
-
-          let menu = null;
-          try {
-            const response = await restaurantAPI.getMenuByRestaurantId(restaurantId, {
-              noCache: true,
-              params: { _ts: Date.now() },
-            });
-            menu = response?.data?.data?.menu || response?.data?.menu || null;
-            menuUnionCacheRef.current.set(String(restaurantId), menu);
-          } catch {
-            menu = menuUnionCacheRef.current.get(String(restaurantId)) || null;
-          }
+        for (const { restaurant, restaurantId } of restaurantsWithIds) {
+          const menu = menusByRestaurantId.get(String(restaurantId)) || null;
+          menuUnionCacheRef.current.set(String(restaurantId), menu);
 
           if (cancelled) return;
 
@@ -1583,10 +1646,7 @@ export default function Home() {
           }
 
           try {
-            const response = await restaurantAPI.getPublicDishes(fallbackParams, {
-              noCache: true,
-              params: { ...fallbackParams, _ts: Date.now() },
-            });
+            const response = await restaurantAPI.getPublicDishes(fallbackParams);
             const dishes = response?.data?.data?.dishes || response?.data?.dishes || [];
             (Array.isArray(dishes) ? dishes : []).forEach((dish, index) => {
               const restaurant = dish.restaurant || {};
@@ -1629,7 +1689,9 @@ export default function Home() {
           return list.findIndex((entry) => `${entry.restaurantSlug}-${entry.id}-${entry.name}` === key) === index;
         });
 
-        if (!cancelled) setCategoryFoodItems(dedupedItems.slice(0, 20));
+        const nextCategoryItems = dedupedItems.slice(0, 20);
+        HOME_CATEGORY_ITEMS_CACHE.set(categoryItemsCacheKey, nextCategoryItems);
+        if (!cancelled) setCategoryFoodItems(nextCategoryItems);
       } finally {
         if (!cancelled) setLoadingCategoryFoodItems(false);
       }
@@ -1641,6 +1703,7 @@ export default function Home() {
       cancelled = true;
     };
   }, [
+    menuUnionRestaurantIdsKey,
     restaurantsData,
     getRestaurantSlug,
     normalizeImageUrl,
@@ -1651,6 +1714,7 @@ export default function Home() {
 
   useEffect(() => {
     let cancelled = false;
+    const recommendedItemsCacheKey = `${menuUnionRestaurantIdsKey}|${vegMode ? "veg" : "all"}`;
 
     const normalizeRecommendedItem = (item, restaurant, itemIndex, categoryName = "") => {
       const itemName = String(item?.name || item?.itemName || item?.title || "").trim();
@@ -1733,26 +1797,30 @@ export default function Home() {
     };
 
     const fetchRecommendedItems = async () => {
+      const cachedRecommendedItems = HOME_RECOMMENDED_ITEMS_CACHE.get(recommendedItemsCacheKey);
+      if (cachedRecommendedItems) {
+        setRecommendedFoodItems(cachedRecommendedItems);
+        setLoadingRecommendedFoodItems(false);
+        return;
+      }
+
       setLoadingRecommendedFoodItems(true);
       try {
         const restaurants = restaurantsData.slice(0, 48);
         const nextItems = [];
+        const restaurantsWithIds = restaurants
+          .map((restaurant) => ({
+            restaurant,
+            restaurantId: restaurant.restaurantId || restaurant.id || restaurant.mongoId,
+          }))
+          .filter((entry) => entry.restaurantId);
+        const menusByRestaurantId = await loadMenusInChunks(
+          restaurantsWithIds.map((entry) => entry.restaurantId),
+        );
 
-        for (const restaurant of restaurants) {
-          const restaurantId = restaurant.restaurantId || restaurant.id || restaurant.mongoId;
-          if (!restaurantId) continue;
-
-          let menu = menuUnionCacheRef.current.get(String(restaurantId));
-          if (!menu) {
-            try {
-              const response = await restaurantAPI.getMenuByRestaurantId(restaurantId);
-              menu = response?.data?.data?.menu || response?.data?.menu || null;
-              menuUnionCacheRef.current.set(String(restaurantId), menu);
-            } catch {
-              menuUnionCacheRef.current.set(String(restaurantId), null);
-              menu = null;
-            }
-          }
+        for (const { restaurant, restaurantId } of restaurantsWithIds) {
+          const menu = menusByRestaurantId.get(String(restaurantId)) || null;
+          menuUnionCacheRef.current.set(String(restaurantId), menu);
 
           if (cancelled) return;
           nextItems.push(...collectRecommendedItemsFromMenu(menu, restaurant));
@@ -1763,7 +1831,9 @@ export default function Home() {
           return list.findIndex((entry) => `${entry.restaurantSlug}-${entry.id}-${entry.name}` === key) === index;
         });
 
-        if (!cancelled) setRecommendedFoodItems(dedupedItems.slice(0, 20));
+        const nextRecommendedItems = dedupedItems.slice(0, 20);
+        HOME_RECOMMENDED_ITEMS_CACHE.set(recommendedItemsCacheKey, nextRecommendedItems);
+        if (!cancelled) setRecommendedFoodItems(nextRecommendedItems);
       } finally {
         if (!cancelled) setLoadingRecommendedFoodItems(false);
       }
@@ -1775,6 +1845,7 @@ export default function Home() {
       cancelled = true;
     };
   }, [
+    menuUnionRestaurantIdsKey,
     restaurantsData,
     getRestaurantSlug,
     normalizeImageUrl,
@@ -2964,7 +3035,4 @@ export default function Home() {
     </div>
   );
 }
-
-
-
 

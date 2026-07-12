@@ -3,7 +3,11 @@ import { orderAPI } from "@food/api"
 
 const OrdersContext = createContext(null)
 const ORDERS_STORAGE_KEY = "userOrders"
+const ORDERS_SYNC_STORAGE_KEY = "userOrdersLastSyncedAt"
 const FETCH_LIMIT = 100
+const ORDERS_STALE_MS = 2 * 60 * 1000
+const ACTIVE_POLL_INTERVAL_MS = 20000
+const IDLE_POLL_INTERVAL_MS = 2 * 60 * 1000
 
 const isUserAuthenticated = () =>
   localStorage.getItem("user_authenticated") === "true" ||
@@ -18,6 +22,33 @@ const getOrderStatus = (order) => {
   if (status === "dead") return "dead"
   return status || "confirmed"
 }
+
+const isTerminalOrderStatus = (status) => {
+  const normalized = String(status || "").trim().toLowerCase()
+  return [
+    "delivered",
+    "completed",
+    "cancelled",
+    "canceled",
+    "restaurant_cancelled",
+    "cancelled_by_user",
+    "cancelled_by_restaurant",
+    "cancelled_by_admin",
+    "dead",
+    "failed",
+  ].includes(normalized)
+}
+
+const getLastOrdersSyncTime = () => {
+  try {
+    return Number(localStorage.getItem(ORDERS_SYNC_STORAGE_KEY) || 0)
+  } catch {
+    return 0
+  }
+}
+
+const hasFreshOrdersCache = (orders = []) =>
+  orders.length > 0 && Date.now() - getLastOrdersSyncTime() < ORDERS_STALE_MS
 
 const transformOrders = (ordersData = []) => {
   const transformedOrders = ordersData.map((order) => {
@@ -193,6 +224,7 @@ export function OrdersProvider({ children }) {
       setLoading(false)
       try {
         localStorage.removeItem(ORDERS_STORAGE_KEY)
+        localStorage.removeItem(ORDERS_SYNC_STORAGE_KEY)
       } catch {
         // ignore storage errors
       }
@@ -207,6 +239,11 @@ export function OrdersProvider({ children }) {
       const ordersData = await fetchAllOrders()
       const transformedOrders = transformOrders(ordersData)
       setOrders(transformedOrders)
+      try {
+        localStorage.setItem(ORDERS_SYNC_STORAGE_KEY, String(Date.now()))
+      } catch {
+        // ignore storage errors
+      }
       return transformedOrders
     } catch (error) {
       if (!silent) {
@@ -220,10 +257,20 @@ export function OrdersProvider({ children }) {
     }
   }, [])
 
+  const hasActiveOrders = useMemo(
+    () => orders.some((order) => !isTerminalOrderStatus(order?.status || order?.originalStatus)),
+    [orders],
+  )
+
   useEffect(() => {
-    const hydrateOrders = () => {
+    const hydrateOrders = ({ force = false } = {}) => {
       if (!isUserAuthenticated()) {
         setOrders([])
+        setLoading(false)
+        return
+      }
+
+      if (!force && hasFreshOrdersCache(orders)) {
         setLoading(false)
         return
       }
@@ -236,22 +283,34 @@ export function OrdersProvider({ children }) {
     hydrateOrders()
 
     const pollInterval = setInterval(() => {
-      if (isUserAuthenticated()) {
-        refreshOrders({ silent: true }).catch(() => {})
-      }
-    }, 20000)
+      if (!isUserAuthenticated()) return
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return
+      refreshOrders({ silent: true }).catch(() => {})
+    }, hasActiveOrders ? ACTIVE_POLL_INTERVAL_MS : IDLE_POLL_INTERVAL_MS)
 
     const handleAuthChange = () => {
-      hydrateOrders()
+      hydrateOrders({ force: true })
+    }
+
+    const handleVisibilityChange = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        hydrateOrders()
+      }
     }
 
     window.addEventListener("userAuthChanged", handleAuthChange)
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", handleVisibilityChange)
+    }
 
     return () => {
       clearInterval(pollInterval)
       window.removeEventListener("userAuthChanged", handleAuthChange)
+      if (typeof document !== "undefined") {
+        document.removeEventListener("visibilitychange", handleVisibilityChange)
+      }
     }
-  }, [orders.length, refreshOrders])
+  }, [orders, hasActiveOrders, refreshOrders])
 
   const createOrder = (orderData) => {
     const newOrder = {
@@ -332,3 +391,4 @@ export function useOrders() {
   }
   return context
 }
+

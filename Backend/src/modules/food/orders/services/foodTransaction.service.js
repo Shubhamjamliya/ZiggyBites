@@ -41,7 +41,6 @@ export function computeRestaurantCommissionAmount(baseAmount, rule) {
     commissionAmount = commissionValue;
   }
 
-  // Round to 2 decimals and clamp to [0, base]
   commissionAmount = Math.round((commissionAmount || 0) * 100) / 100;
   commissionAmount = Math.max(0, Math.min(commissionAmount, safeBase));
 
@@ -67,14 +66,12 @@ export async function getRestaurantCommissionSnapshot(orderDoc) {
   }
 
   const rules = await getActiveRestaurantCommissionRules();
-  const rule =
+  let rule =
     rules.find((r) => String(r.restaurantId) === String(restaurantIdRaw)) ||
-    // Fallback: accept legacy docs where restaurantId may be stored under `restaurant` / `restaurant_id`
     rules.find((r) => String(r.restaurant || r.restaurant_id || '') === String(restaurantIdRaw)) ||
     null;
 
   if (!rule) {
-    // If no specific rule, try to use global default
     const globalSettings = await FoodFeeSettings.findOne({ isActive: true }).sort({ createdAt: -1 }).lean() || {};
     if (globalSettings.globalRestaurantCommission > 0) {
         rule = {
@@ -94,16 +91,14 @@ export async function getRestaurantCommissionSnapshot(orderDoc) {
   };
 
   const globalSettings = await FoodFeeSettings.findOne({ isActive: true }).sort({ createdAt: -1 }).lean() || {};
-  
   const applyTaxes = globalSettings.applyGlobalTaxes !== false;
-  
   const gstOnItemRate = applyTaxes ? (Number(globalSettings.globalGstOnItem) || 0) : 0;
   const gstOnCommission = applyTaxes ? (Number(globalSettings.globalGstOnCommission) || 0) : 0;
   const pgFee = applyTaxes ? (Number(globalSettings.globalPaymentGatewayFee) || 0) : 0;
   const tcs = applyTaxes ? (Number(globalSettings.globalTcs) || 0) : 0;
 
   const totalPaid = Number(orderDoc?.pricing?.total) || 0;
-  
+
   result.gstOnItem = Math.round(baseAmount * (gstOnItemRate / 100) * 100) / 100;
   result.gstOnCommission = Math.round(result.commissionAmount * (gstOnCommission / 100) * 100) / 100;
   result.paymentGatewayFee = Math.round(totalPaid * (pgFee / 100) * 100) / 100;
@@ -112,25 +107,20 @@ export async function getRestaurantCommissionSnapshot(orderDoc) {
   return result;
 }
 
-/**
- * Creates an initial 'pending' transaction when an order is created.
- */
 export async function createInitialTransaction(order) {
     const commissionSnapshot = await getRestaurantCommissionSnapshot(order);
-    
-    // Split logic
     const totalCustomerPaid = order.pricing?.total || 0;
     const riderShare = order.riderEarning || 0;
-    
+
     const restaurantCommissionFromOrder = Number(order.pricing?.restaurantCommission);
     const restaurantCommission =
         Number.isFinite(restaurantCommissionFromOrder) && restaurantCommissionFromOrder > 0
             ? restaurantCommissionFromOrder
             : (commissionSnapshot.commissionAmount || 0);
-            
+
     const gstOnItemFromOrder = Number(order.pricing?.gstOnItem);
-    const gstOnItem = Number.isFinite(gstOnItemFromOrder) 
-        ? gstOnItemFromOrder 
+    const gstOnItem = Number.isFinite(gstOnItemFromOrder)
+        ? gstOnItemFromOrder
         : (commissionSnapshot.gstOnItem || 0);
 
     const gstOnCommission = commissionSnapshot.gstOnCommission || 0;
@@ -138,15 +128,14 @@ export async function createInitialTransaction(order) {
     const tcs = commissionSnapshot.tcs || 0;
 
     const restaurantNet = (order.pricing?.subtotal || 0) + (order.pricing?.packagingFee || 0) - restaurantCommission - gstOnItem - gstOnCommission - paymentGatewayFee - tcs;
-    
+
     const calculatedPlatformNetProfit = (order.pricing?.platformFee || 0) + (order.pricing?.deliveryFee || 0) + restaurantCommission + gstOnItem + paymentGatewayFee + tcs - riderShare;
-    const platformNetProfit = order.platformProfit !== undefined 
-        ? order.platformProfit 
+    const platformNetProfit = order.platformProfit !== undefined
+        ? order.platformProfit
         : Math.max(0, calculatedPlatformNetProfit);
 
     const transaction = new FoodTransaction({
         orderId: order._id,
-
         userId: order.userId,
         restaurantId: order.restaurantId,
         deliveryPartnerId: order.dispatch?.deliveryPartnerId,
@@ -206,32 +195,37 @@ export async function createInitialTransaction(order) {
 
     await transaction.save();
 
-    // Link back to the order
     try {
         await mongoose.model('FoodOrder').updateOne(
             { _id: order._id },
             { $set: { transactionId: transaction._id } }
         );
-    } catch (err) {
-        // Log but don't fail transaction if the backlink fails
+    } catch (_err) {
     }
 
     return transaction;
 }
 
-/**
- * Updates transaction status (captured, settled, etc) and appends to history.
- */
 export async function updateTransactionStatus(orderId, kind, details = {}) {
     const query = { orderId };
     const transaction = await FoodTransaction.findOne(query);
     if (!transaction) return null;
 
-    if (details.status) transaction.status = details.status;
-    if (details.razorpayPaymentId) transaction.gateway.razorpayPaymentId = details.razorpayPaymentId;
-    if (details.razorpaySignature) transaction.gateway.razorpaySignature = details.razorpaySignature;
-    
-    // Sync payment method if provided (e.g. switching from cash to QR)
+    if (details.status) {
+        transaction.status = details.status;
+        if (details.status === 'captured') transaction.payment.status = 'paid';
+        if (details.status === 'failed') transaction.payment.status = 'failed';
+        if (details.status === 'refunded') transaction.payment.status = 'refunded';
+    }
+    if (details.razorpayPaymentId) {
+        transaction.gateway.razorpayPaymentId = details.razorpayPaymentId;
+        transaction.payment.razorpay.paymentId = details.razorpayPaymentId;
+    }
+    if (details.razorpaySignature) {
+        transaction.gateway.razorpaySignature = details.razorpaySignature;
+        transaction.payment.razorpay.signature = details.razorpaySignature;
+    }
+
     if (details.paymentMethod) {
         transaction.paymentMethod = details.paymentMethod;
         transaction.payment.method = details.paymentMethod;
@@ -247,17 +241,20 @@ export async function updateTransactionStatus(orderId, kind, details = {}) {
 
     await transaction.save();
 
-    // Sync back to order as well
     if (details.paymentMethod || details.status) {
         try {
             const updateFields = {};
             if (details.paymentMethod) updateFields['payment.method'] = details.paymentMethod;
             if (details.status === 'captured') updateFields['payment.status'] = 'paid';
-            
-            await mongoose.model('FoodOrder').updateOne(
-                { _id: orderId },
-                { $set: updateFields }
-            );
+            if (details.status === 'failed') updateFields['payment.status'] = 'failed';
+            if (details.status === 'refunded') updateFields['payment.status'] = 'refunded';
+
+            if (Object.keys(updateFields).length > 0) {
+                await mongoose.model('FoodOrder').updateOne(
+                    { _id: orderId },
+                    { $set: updateFields }
+                );
+            }
         } catch (err) {
             console.error('Failed to sync transaction status to order:', err.message);
         }
@@ -266,9 +263,6 @@ export async function updateTransactionStatus(orderId, kind, details = {}) {
     return transaction;
 }
 
-/**
- * Updates the rider in the transaction when an order is accepted.
- */
 export async function updateTransactionRider(orderId, riderId) {
     const query = { orderId };
     return await FoodTransaction.findOneAndUpdate(
@@ -278,12 +272,9 @@ export async function updateTransactionRider(orderId, riderId) {
     );
 }
 
-/**
- * Marks restaurant as settled in the finance record.
- */
 export async function settleRestaurant(orderId, adminId) {
     return await updateTransactionStatus(orderId, 'settled', {
-        status: 'captured', // Ensure it's marked as captured if it was pending cash
+        status: 'captured',
         note: 'Restaurant payout settled by admin',
         recordedByRole: 'ADMIN',
         recordedById: adminId

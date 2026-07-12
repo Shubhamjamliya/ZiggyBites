@@ -4,6 +4,7 @@ import { ProfileProvider } from "@food/context/ProfileContext"
 import LocationPrompt from "./LocationPrompt"
 import { CartProvider } from "@food/context/CartContext"
 import { OrdersProvider } from "@food/context/OrdersContext"
+import { SubscriptionsProvider } from "@food/context/SubscriptionsContext"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -12,8 +13,6 @@ import SearchOverlay from "./SearchOverlay"
 import BottomNavigation from "./BottomNavigation"
 import DesktopNavbar from "./DesktopNavbar"
 import { useUserNotifications } from "../../hooks/useUserNotifications"
-import { useLocation as useFoodLocation } from "@food/hooks/useLocation"
-import { useZone } from "@food/hooks/useZone"
 import LocationGuard from "./LocationGuard"
 
 // Create SearchOverlay context with default value
@@ -123,12 +122,38 @@ export default function UserLayout() {
   const normalizedPath =
     path.length > 1 ? path.replace(/\/+$/, "") : path
 
-  const isProfileRoot =
+  const isProfileSection =
     normalizedPath === "/profile" ||
-    normalizedPath === "/user/profile"
+    normalizedPath.startsWith("/profile/") ||
+    normalizedPath === "/user/profile" ||
+    normalizedPath.startsWith("/user/profile/")
 
-  const { location: foodLocation } = useFoodLocation()
-  const { isOutOfService } = useZone(foodLocation)
+  const [isOutOfService, setIsOutOfService] = useState(() => {
+    try {
+      return localStorage.getItem("outOfService") === "true"
+    } catch {
+      return false
+    }
+  })
+
+  useEffect(() => {
+    const syncZoneState = () => {
+      try {
+        setIsOutOfService(localStorage.getItem("outOfService") === "true")
+      } catch {
+        setIsOutOfService(false)
+      }
+    }
+
+    syncZoneState()
+    window.addEventListener("userZoneUpdated", syncZoneState)
+    window.addEventListener("userAuthChanged", syncZoneState)
+
+    return () => {
+      window.removeEventListener("userZoneUpdated", syncZoneState)
+      window.removeEventListener("userAuthChanged", syncZoneState)
+    }
+  }, [])
 
   const showBottomNav = !isOutOfService && (normalizedPath === "/" ||
     normalizedPath === "/user" ||
@@ -138,7 +163,7 @@ export default function UserLayout() {
     normalizedPath === "/user/under-250" ||
     normalizedPath === "/orders" ||
     normalizedPath === "/user/orders" ||
-    isProfileRoot ||
+    isProfileSection ||
     normalizedPath === "") // Handle empty string case for root relative to /food
 
   const isUnder250 = normalizedPath === "/under-250" || normalizedPath === "/user/under-250"
@@ -149,13 +174,13 @@ export default function UserLayout() {
       <CartProvider>
         <ProfileProvider>
           <OrdersProvider>
-            <SearchOverlayProvider>
-              <LocationSelectorProvider>
+            <SubscriptionsProvider>
+              <SearchOverlayProvider>
+                <LocationSelectorProvider>
                 {/* Desktop Navbar - Hidden on mobile, visible on medium+ screens */}
                 <div className="hidden md:block">
                   {showBottomNav && <DesktopNavbar showLogo={!isUnder250} />}
-                </div>
-                {/* <LocationPrompt /> */}
+                </div>
                 <LocationGuard>
                   <main className={showBottomNav ? "md:pt-40" : ""}>
                     <Outlet />
@@ -163,10 +188,12 @@ export default function UserLayout() {
                 </LocationGuard>
                 {showBottomNav && <BottomNavigation />}
               </LocationSelectorProvider>
-            </SearchOverlayProvider>
+              </SearchOverlayProvider>
+            </SubscriptionsProvider>
           </OrdersProvider>
         </ProfileProvider>
       </CartProvider>
     </div>
   )
 }
+

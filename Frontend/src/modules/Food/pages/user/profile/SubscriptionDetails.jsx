@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, CalendarDays, Clock3, CreditCard, MapPin, Store, Utensils } from "lucide-react";
 import AnimatedPage from "@food/components/user/AnimatedPage";
 import { Card, CardContent } from "@food/components/ui/card";
 import { Button } from "@food/components/ui/button";
-import { subscriptionAPI } from "@food/api";
+import { useSubscriptions } from "@food/context/SubscriptionsContext";
 
 const formatDate = (value) => {
   if (!value) return "-";
@@ -43,48 +43,21 @@ const getAddressText = (address = {}) =>
 export default function SubscriptionDetails() {
   const navigate = useNavigate();
   const { subscriptionId } = useParams();
-  const [subscription, setSubscription] = useState(null);
-  const [schedules, setSchedules] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const {
+    loading,
+    getSubscriptionById,
+    getSchedulesForSubscription,
+    refreshSubscriptions,
+  } = useSubscriptions();
 
-  const loadDetails = async () => {
-    setLoading(true);
-    try {
-      const [subscriptionResponse, scheduleResponse] = await Promise.all([
-        subscriptionAPI.getMySubscriptions(),
-        subscriptionAPI.getUpcomingSchedules().catch(() => null),
-      ]);
-
-      const list =
-        subscriptionResponse?.data?.data?.subscriptions ||
-        subscriptionResponse?.data?.subscriptions ||
-        [];
-      const current = (Array.isArray(list) ? list : []).find(
-        (item) => String(item.subscriptionId || item._id) === String(subscriptionId),
-      );
-      const upcoming =
-        scheduleResponse?.data?.data?.schedules ||
-        scheduleResponse?.data?.schedules ||
-        [];
-      setSubscription(current || null);
-      setSchedules(
-        (Array.isArray(upcoming) ? upcoming : []).filter(
-          (schedule) =>
-            String(schedule.subscriptionId?._id || schedule.subscriptionId || schedule.subscription?.subscriptionId || "") ===
-            String(subscriptionId),
-        ),
-      );
-    } catch {
-      setSubscription(null);
-      setSchedules([]);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const subscription = getSubscriptionById(subscriptionId);
+  const schedules = getSchedulesForSubscription(subscriptionId);
 
   useEffect(() => {
-    loadDetails();
-  }, [subscriptionId]);
+    if (!subscription && subscriptionId) {
+      refreshSubscriptions({ silent: false }).catch(() => {});
+    }
+  }, [subscription, subscriptionId, refreshSubscriptions]);
 
   const nextSchedule = useMemo(() => schedules[0] || null, [schedules]);
 
@@ -182,90 +155,71 @@ export default function SubscriptionDetails() {
                   </p>
                 </div>
               </div>
+            </CardContent>
+          </Card>
 
-              <div className="mt-4 space-y-2 text-sm text-gray-600 dark:text-gray-300">
-                <p>
-                  Meals: <span className="font-medium">{Array.isArray(subscription.meals) ? subscription.meals.join(", ") : "-"}</span>
+          <Card className="rounded-2xl border-0 bg-white shadow-sm dark:bg-[#1a1a1a]">
+            <CardContent className="p-4 space-y-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Duration</p>
+                <p className="mt-1 flex items-center gap-2 text-sm text-gray-900 dark:text-white">
+                  <Clock3 className="h-4 w-4 text-[#55254b]" />
+                  {formatDate(subscription.startDate)} to {formatDate(subscription.endDate)}
                 </p>
-                <p>
-                  Active: <span className="font-medium">{formatDate(subscription.startDate)} to {formatDate(subscription.endDate)}</span>
+              </div>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Meals</p>
+                <p className="mt-1 text-sm text-gray-900 dark:text-white">
+                  {Array.isArray(subscription.meals) && subscription.meals.length > 0
+                    ? subscription.meals.join(", ")
+                    : "-"}
                 </p>
+              </div>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Delivery address</p>
+                <p className="mt-1 flex items-start gap-2 text-sm text-gray-900 dark:text-white">
+                  <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-[#55254b]" />
+                  <span>{getAddressText(subscription.deliveryAddress || subscription.address || {}) || "No address selected"}</span>
+                </p>
+                <Button variant="outline" className="mt-3 rounded-xl" onClick={openAddressSelector}>
+                  Change address
+                </Button>
               </div>
             </CardContent>
           </Card>
 
           <Card className="rounded-2xl border-0 bg-white shadow-sm dark:bg-[#1a1a1a]">
             <CardContent className="p-4">
-              <div className="mb-3 flex items-center gap-2">
-                <MapPin className="h-4 w-4 text-[#55254b]" />
-                <h2 className="text-sm font-bold text-gray-900 dark:text-white">Delivery address</h2>
-              </div>
-              <p className="text-sm text-gray-600 dark:text-gray-300">
-                {getAddressText(subscription.deliveryAddress) || "No address available"}
-              </p>
-              <p className="mt-2 text-xs text-gray-500">
-                {nextSchedule?.canChangeAddress
-                  ? `Change before ${formatDateTime(nextSchedule.addressChangeDeadline)}`
-                  : "Address change is closed for the next meal"}
-              </p>
-              <Button
-                type="button"
-                disabled={!nextSchedule?.canChangeAddress}
-                onClick={openAddressSelector}
-                className="mt-3 h-11 w-full rounded-xl bg-[#55254b] text-sm font-bold text-white hover:bg-[#6f3461] disabled:bg-gray-100 disabled:text-gray-400"
-              >
-                <MapPin className="mr-2 h-4 w-4" />
-                Change address
-              </Button>
-            </CardContent>
-          </Card>
-
-          <Card className="rounded-2xl border-0 bg-white shadow-sm dark:bg-[#1a1a1a]">
-            <CardContent className="p-4">
-              <div className="mb-3 flex items-center gap-2">
-                <Clock3 className="h-4 w-4 text-[#55254b]" />
-                <h2 className="text-sm font-bold text-gray-900 dark:text-white">Next subscription meals</h2>
-              </div>
-
-              {schedules.length === 0 ? (
-                <p className="text-sm text-gray-500">No upcoming meals found.</p>
-              ) : (
-                <div className="space-y-3">
-                  {schedules.map((schedule) => {
-                    const scheduleId = schedule.scheduleId || schedule._id;
-                    const dishes = Array.isArray(schedule.availableDishes) ? schedule.availableDishes : [];
-                    return (
-                      <div key={scheduleId} className="rounded-xl border border-gray-100 p-3 dark:border-gray-800">
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <p className="text-sm font-bold text-gray-900 dark:text-white">
-                              {schedule.mealName} - {formatDate(schedule.serviceDate)}
-                            </p>
-                            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                              Current: {schedule.dishName}
-                            </p>
-                          </div>
-                          <span className={`rounded-full px-3 py-1 text-[11px] font-bold ${schedule.canChangeDish ? "bg-green-50 text-green-700" : "bg-gray-100 text-gray-500"}`}>
-                            {schedule.canChangeDish ? "Open" : "Closed"}
-                          </span>
-                        </div>
-                        <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
-                          Change before {formatDateTime(schedule.dishChangeDeadline)}
-                        </p>
-                        <Button
-                          type="button"
-                          disabled={!schedule.canChangeDish || dishes.length === 0}
-                          onClick={() =>
-                            navigate(`/food/user/profile/subscriptions/${subscriptionId}/change-dish/${scheduleId}`)
-                          }
-                          className="mt-3 h-11 w-full rounded-xl bg-[#55254b] text-sm font-bold text-white hover:bg-[#6f3461] disabled:bg-gray-100 disabled:text-gray-400"
-                        >
-                          Change dish
-                        </Button>
-                      </div>
-                    );
-                  })}
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Next delivery</p>
+                  <p className="mt-1 text-sm font-semibold text-gray-900 dark:text-white">
+                    {nextSchedule ? formatDateTime(nextSchedule.deliveryDate || nextSchedule.scheduledFor) : "No upcoming delivery"}
+                  </p>
                 </div>
+                <div className="rounded-full bg-[#55254b]/10 px-3 py-1 text-xs font-semibold text-[#55254b]">
+                  {subscription.status || "pending"}
+                </div>
+              </div>
+
+              {schedules.length > 0 ? (
+                <div className="mt-4 space-y-2">
+                  {schedules.map((schedule) => (
+                    <div
+                      key={schedule._id || schedule.scheduleId || `${schedule.deliveryDate}-${schedule.slot}`}
+                      className="rounded-xl bg-gray-50 p-3 text-sm dark:bg-gray-900/60"
+                    >
+                      <p className="font-medium text-gray-900 dark:text-white">
+                        {formatDateTime(schedule.deliveryDate || schedule.scheduledFor)}
+                      </p>
+                      <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                        {schedule.dishName || subscription.dishName || "Meal"}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-4 text-sm text-gray-500 dark:text-gray-400">No upcoming schedules available.</p>
               )}
             </CardContent>
           </Card>

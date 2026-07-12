@@ -1,10 +1,27 @@
-import { useState, useEffect, useCallback, useRef, useMemo, startTransition } from "react";
-import api, { publicGetOnce, adminAPI, restaurantAPI } from "@food/api";
+import { useState, useEffect, useCallback, useRef, startTransition } from "react";
+import { publicGetOnce, adminAPI, restaurantAPI } from "@food/api";
 import { getRestaurantAvailabilityStatus } from "@food/utils/restaurantAvailability";
 import { API_BASE_URL } from "@food/api/config";
-import { foodImages } from "@food/constants/images";
 
 const BACKEND_ORIGIN = API_BASE_URL.replace(/\/api\/?$/, "");
+
+const homeDataCache = {
+  heroBanners: null,
+  landingConfig: null,
+  categoriesByZone: new Map(),
+  restaurantsByQuery: new Map(),
+};
+
+const getRestaurantQueryCacheKey = ({ effectiveLocation, effectiveZoneId, hasUsableUserCity, filters = {} }) =>
+  JSON.stringify({
+    zoneId: effectiveZoneId || null,
+    city: !effectiveZoneId && hasUsableUserCity ? String(effectiveLocation?.city || "").trim().toLowerCase() : "",
+    lat: Number.isFinite(effectiveLocation?.latitude) ? Number(effectiveLocation.latitude).toFixed(4) : "",
+    lng: Number.isFinite(effectiveLocation?.longitude) ? Number(effectiveLocation.longitude).toFixed(4) : "",
+    sortBy: filters.sortBy || "",
+    selectedCuisine: filters.selectedCuisine || "",
+    activeFilters: Array.from(filters.activeFilters || []).sort(),
+  });
 
 const normalizeHealthyFlag = (value) => {
   if (typeof value === "boolean") return value;
@@ -12,12 +29,6 @@ const normalizeHealthyFlag = (value) => {
   if (typeof value === "string") return ["true", "1", "yes", "healthy"].includes(value.trim().toLowerCase());
   return false;
 };
-
-const slugifyCategory = (value) =>
-  String(value || "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/(^-|-$)/g, "");
 
 export const normalizeImageUrl = (imageUrl) => {
   if (typeof imageUrl !== "string") return "";
@@ -155,34 +166,47 @@ const getRestaurantDisplayName = (restaurant) => {
 };
 
 export const useHome = ({ effectiveLocation, effectiveZoneId, hasUsableUserCity }) => {
-  // Hero Banners State
-  const [heroBannerImages, setHeroBannerImages] = useState([]);
-  const [heroBannersData, setHeroBannersData] = useState([]);
-  const [loadingBanners, setLoadingBanners] = useState(true);
+  const zoneKey = String(effectiveZoneId || "global");
+  const defaultRestaurantCacheKey = getRestaurantQueryCacheKey({
+    effectiveLocation,
+    effectiveZoneId,
+    hasUsableUserCity,
+    filters: {},
+  });
 
-  // Landing Config & Explore More
-  const [landingExploreMore, setLandingExploreMore] = useState([]);
-  const [exploreMoreHeading, setExploreMoreHeading] = useState("Explore More");
-  const [festBannerVideoUrl, setFestBannerVideoUrl] = useState("");
-  const [loadingLandingConfig, setLoadingLandingConfig] = useState(true);
-  const [recommendedRestaurantIds, setRecommendedRestaurantIds] = useState([]);
-  const [under250PriceLimit, setUnder250PriceLimit] = useState(250);
-  const [recommendedRestaurantsFromSettings, setRecommendedRestaurantsFromSettings] = useState([]);
+  const [heroBannerImages, setHeroBannerImages] = useState(() => homeDataCache.heroBanners?.images || []);
+  const [heroBannersData, setHeroBannersData] = useState(() => homeDataCache.heroBanners?.data || []);
+  const [loadingBanners, setLoadingBanners] = useState(() => !homeDataCache.heroBanners);
 
-  // Categories State
-  const [realCategories, setRealCategories] = useState([]);
-  const [loadingRealCategories, setLoadingRealCategories] = useState(true);
+  const [landingExploreMore, setLandingExploreMore] = useState(() => homeDataCache.landingConfig?.landingExploreMore || []);
+  const [exploreMoreHeading, setExploreMoreHeading] = useState(() => homeDataCache.landingConfig?.exploreMoreHeading || "Explore More");
+  const [festBannerVideoUrl, setFestBannerVideoUrl] = useState(() => homeDataCache.landingConfig?.festBannerVideoUrl || "");
+  const [loadingLandingConfig, setLoadingLandingConfig] = useState(() => !homeDataCache.landingConfig);
+  const [recommendedRestaurantIds, setRecommendedRestaurantIds] = useState(() => homeDataCache.landingConfig?.recommendedRestaurantIds || []);
+  const [under250PriceLimit, setUnder250PriceLimit] = useState(() => homeDataCache.landingConfig?.under250PriceLimit || 250);
+  const [recommendedRestaurantsFromSettings, setRecommendedRestaurantsFromSettings] = useState(() => homeDataCache.landingConfig?.recommendedRestaurantsFromSettings || []);
+
+  const [realCategories, setRealCategories] = useState(() => homeDataCache.categoriesByZone.get(zoneKey) || []);
+  const [loadingRealCategories, setLoadingRealCategories] = useState(() => !homeDataCache.categoriesByZone.has(zoneKey));
   const publicCategoriesCacheRef = useRef(new Map());
   const publicCategoriesInFlightRef = useRef(new Map());
 
-  // Restaurants State
-  const [restaurantsData, setRestaurantsData] = useState([]);
-  const [loadingRestaurants, setLoadingRestaurants] = useState(true);
+  const [restaurantsData, setRestaurantsData] = useState(() => homeDataCache.restaurantsByQuery.get(defaultRestaurantCacheKey) || []);
+  const [loadingRestaurants, setLoadingRestaurants] = useState(() => !homeDataCache.restaurantsByQuery.has(defaultRestaurantCacheKey));
   const restaurantsRequestSeqRef = useRef(0);
 
-  // Fetch Hero Banners
   useEffect(() => {
     let cancelled = false;
+
+    if (homeDataCache.heroBanners) {
+      setHeroBannerImages(homeDataCache.heroBanners.images);
+      setHeroBannersData(homeDataCache.heroBanners.data);
+      setLoadingBanners(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
     setLoadingBanners(true);
     publicGetOnce("/food/hero-banners/public")
       .then((response) => {
@@ -190,6 +214,7 @@ export const useHome = ({ effectiveLocation, effectiveZoneId, hasUsableUserCity 
         const data = response?.data?.data;
         const list = Array.isArray(data?.banners) ? data.banners : Array.isArray(data) ? data : [];
         const images = list.map((b) => (b && typeof b.imageUrl === "string" ? b.imageUrl : "")).filter(Boolean);
+        homeDataCache.heroBanners = { images, data: list };
         setHeroBannerImages(images);
         setHeroBannersData(list);
       })
@@ -201,12 +226,28 @@ export const useHome = ({ effectiveLocation, effectiveZoneId, hasUsableUserCity 
       .finally(() => {
         if (!cancelled) setLoadingBanners(false);
       });
-    return () => { cancelled = true; };
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  // Fetch Explore Icons & Landing Settings
   useEffect(() => {
     let cancelled = false;
+
+    if (homeDataCache.landingConfig) {
+      setLandingExploreMore(homeDataCache.landingConfig.landingExploreMore);
+      setExploreMoreHeading(homeDataCache.landingConfig.exploreMoreHeading);
+      setFestBannerVideoUrl(homeDataCache.landingConfig.festBannerVideoUrl);
+      setRecommendedRestaurantIds(homeDataCache.landingConfig.recommendedRestaurantIds);
+      setUnder250PriceLimit(homeDataCache.landingConfig.under250PriceLimit);
+      setRecommendedRestaurantsFromSettings(homeDataCache.landingConfig.recommendedRestaurantsFromSettings);
+      setLoadingLandingConfig(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
     setLoadingLandingConfig(true);
     Promise.all([
       publicGetOnce("/food/explore-icons/public").catch(() => ({ data: { data: {} } })),
@@ -216,13 +257,23 @@ export const useHome = ({ effectiveLocation, effectiveZoneId, hasUsableUserCity 
         if (cancelled) return;
         const exploreData = exploreRes?.data?.data;
         const items = Array.isArray(exploreData?.items) ? exploreData.items : Array.isArray(exploreData) ? exploreData : [];
-        setLandingExploreMore(items.map((it) => ({ ...it, imageUrl: it.imageUrl || it.iconUrl, label: it.label || it.name })));
+        const normalizedExploreItems = items.map((it) => ({ ...it, imageUrl: it.imageUrl || it.iconUrl, label: it.label || it.name }));
         const settings = settingsRes?.data?.data || {};
-        setExploreMoreHeading(settings.exploreMoreHeading || "Explore More");
-        setFestBannerVideoUrl(typeof settings.festBannerVideoUrl === "string" ? settings.festBannerVideoUrl : "");
-        setRecommendedRestaurantIds(settings.recommendedRestaurantIds || []);
-        setUnder250PriceLimit(Number(settings.under250PriceLimit) || 250);
-        setRecommendedRestaurantsFromSettings(settings.recommendedRestaurants || []);
+        const nextLandingConfig = {
+          landingExploreMore: normalizedExploreItems,
+          exploreMoreHeading: settings.exploreMoreHeading || "Explore More",
+          festBannerVideoUrl: typeof settings.festBannerVideoUrl === "string" ? settings.festBannerVideoUrl : "",
+          recommendedRestaurantIds: settings.recommendedRestaurantIds || [],
+          under250PriceLimit: Number(settings.under250PriceLimit) || 250,
+          recommendedRestaurantsFromSettings: settings.recommendedRestaurants || [],
+        };
+        homeDataCache.landingConfig = nextLandingConfig;
+        setLandingExploreMore(nextLandingConfig.landingExploreMore);
+        setExploreMoreHeading(nextLandingConfig.exploreMoreHeading);
+        setFestBannerVideoUrl(nextLandingConfig.festBannerVideoUrl);
+        setRecommendedRestaurantIds(nextLandingConfig.recommendedRestaurantIds);
+        setUnder250PriceLimit(nextLandingConfig.under250PriceLimit);
+        setRecommendedRestaurantsFromSettings(nextLandingConfig.recommendedRestaurantsFromSettings);
       })
       .catch(() => {
         if (!cancelled) {
@@ -237,25 +288,42 @@ export const useHome = ({ effectiveLocation, effectiveZoneId, hasUsableUserCity 
       .finally(() => {
         if (!cancelled) setLoadingLandingConfig(false);
       });
-    return () => { cancelled = true; };
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  // Fetch Categories
   useEffect(() => {
     let cancelled = false;
+
     const run = async () => {
-      const zoneKey = String(effectiveZoneId || "global");
       try {
+        const persistedCategories = homeDataCache.categoriesByZone.get(zoneKey);
+        if (persistedCategories) {
+          if (!cancelled) {
+            setRealCategories(persistedCategories);
+            setLoadingRealCategories(false);
+          }
+          return;
+        }
+
         const cached = publicCategoriesCacheRef.current.get(zoneKey);
         if (cached) {
-          if (!cancelled) setRealCategories(cached);
+          if (!cancelled) {
+            setRealCategories(cached);
+            setLoadingRealCategories(false);
+          }
           return;
         }
 
         const inFlight = publicCategoriesInFlightRef.current.get(zoneKey);
         if (inFlight) {
           const categories = await inFlight;
-          if (!cancelled) setRealCategories(categories);
+          if (!cancelled) {
+            setRealCategories(categories);
+            setLoadingRealCategories(false);
+          }
           return;
         }
 
@@ -276,6 +344,7 @@ export const useHome = ({ effectiveLocation, effectiveZoneId, hasUsableUserCity 
             : [];
 
           publicCategoriesCacheRef.current.set(zoneKey, categories);
+          homeDataCache.categoriesByZone.set(zoneKey, categories);
           return categories;
         })();
 
@@ -284,18 +353,39 @@ export const useHome = ({ effectiveLocation, effectiveZoneId, hasUsableUserCity 
         publicCategoriesInFlightRef.current.delete(zoneKey);
 
         if (!cancelled) setRealCategories(categories);
-      } catch (err) {
+      } catch {
         if (!cancelled) setRealCategories([]);
       } finally {
         if (!cancelled) setLoadingRealCategories(false);
       }
     };
-    run();
-    return () => { cancelled = true; };
-  }, [effectiveZoneId]);
 
-  // Fetch Restaurants Logic
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [effectiveZoneId, zoneKey]);
+
   const fetchRestaurants = useCallback(async (filters = {}) => {
+    const normalizedFilters = {
+      ...filters,
+      activeFilters: new Set(filters.activeFilters || []),
+    };
+
+    const requestCacheKey = getRestaurantQueryCacheKey({
+      effectiveLocation,
+      effectiveZoneId,
+      hasUsableUserCity,
+      filters: normalizedFilters,
+    });
+
+    const cachedRestaurants = homeDataCache.restaurantsByQuery.get(requestCacheKey);
+    if (cachedRestaurants) {
+      setRestaurantsData(cachedRestaurants);
+      setLoadingRestaurants(false);
+      return cachedRestaurants;
+    }
+
     const requestSeq = ++restaurantsRequestSeqRef.current;
     try {
       setLoadingRestaurants(true);
@@ -306,134 +396,141 @@ export const useHome = ({ effectiveLocation, effectiveZoneId, hasUsableUserCity 
         params.lng = effectiveLocation.longitude;
       }
 
-      if (filters.sortBy) params.sortBy = filters.sortBy;
-      if (filters.selectedCuisine) params.cuisine = filters.selectedCuisine;
+      if (normalizedFilters.sortBy) params.sortBy = normalizedFilters.sortBy;
+      if (normalizedFilters.selectedCuisine) params.cuisine = normalizedFilters.selectedCuisine;
 
-      if (filters.activeFilters?.has("rating-45-plus")) params.minRating = 4.5;
-      else if (filters.activeFilters?.has("rating-4-plus")) params.minRating = 4.0;
-      else if (filters.activeFilters?.has("rating-35-plus")) params.minRating = 3.5;
+      if (normalizedFilters.activeFilters?.has("rating-45-plus")) params.minRating = 4.5;
+      else if (normalizedFilters.activeFilters?.has("rating-4-plus")) params.minRating = 4.0;
+      else if (normalizedFilters.activeFilters?.has("rating-35-plus")) params.minRating = 3.5;
 
-      if (filters.activeFilters?.has("delivery-under-30")) params.maxDeliveryTime = 30;
-      else if (filters.activeFilters?.has("delivery-under-45")) params.maxDeliveryTime = 45;
+      if (normalizedFilters.activeFilters?.has("delivery-under-30")) params.maxDeliveryTime = 30;
+      else if (normalizedFilters.activeFilters?.has("delivery-under-45")) params.maxDeliveryTime = 45;
 
-      if (filters.activeFilters?.has("distance-under-1km")) params.radiusKm = 1.0;
-      else if (filters.activeFilters?.has("distance-under-2km")) params.radiusKm = 2.0;
+      if (normalizedFilters.activeFilters?.has("distance-under-1km")) params.radiusKm = 1.0;
+      else if (normalizedFilters.activeFilters?.has("distance-under-2km")) params.radiusKm = 2.0;
 
-      if (filters.activeFilters?.has("price-under-200")) params.maxPrice = 200;
-      else if (filters.activeFilters?.has("price-under-500")) params.maxPrice = 500;
+      if (normalizedFilters.activeFilters?.has("price-under-200")) params.maxPrice = 200;
+      else if (normalizedFilters.activeFilters?.has("price-under-500")) params.maxPrice = 500;
 
-      if (filters.activeFilters?.has("has-offers")) params.hasOffers = "true";
-      if (filters.activeFilters?.has("top-rated")) params.topRated = "true";
-      else if (filters.activeFilters?.has("trusted")) params.trusted = "true";
+      if (normalizedFilters.activeFilters?.has("has-offers")) params.hasOffers = "true";
+      if (normalizedFilters.activeFilters?.has("top-rated")) params.topRated = "true";
+      else if (normalizedFilters.activeFilters?.has("trusted")) params.trusted = "true";
 
       if (effectiveZoneId) params.zoneId = effectiveZoneId;
       if (!effectiveZoneId && hasUsableUserCity) params.city = String(effectiveLocation.city).trim();
 
       const response = await restaurantAPI.getRestaurants(params);
-      if (requestSeq !== restaurantsRequestSeqRef.current) return;
+      if (requestSeq !== restaurantsRequestSeqRef.current) return [];
 
-      if (response.data?.success && response.data?.data?.restaurants) {
-        const restaurantsArray = response.data.data.restaurants;
+      if (!(response.data?.success && response.data?.data?.restaurants)) {
+        homeDataCache.restaurantsByQuery.set(requestCacheKey, []);
+        setRestaurantsData([]);
+        return [];
+      }
 
-        if (restaurantsArray.length === 0) {
-          setRestaurantsData([]);
-          return;
+      const restaurantsArray = response.data.data.restaurants;
+      if (restaurantsArray.length === 0) {
+        homeDataCache.restaurantsByQuery.set(requestCacheKey, []);
+        setRestaurantsData([]);
+        return [];
+      }
+
+      const calculateDistance = (lat1, lng1, lat2, lng2) => {
+        const R = 6371;
+        const dLat = ((lat2 - lat1) * Math.PI) / 180;
+        const dLng = ((lng2 - lng1) * Math.PI) / 180;
+        const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return R * c;
+      };
+
+      const userLat = effectiveLocation?.latitude;
+      const userLng = effectiveLocation?.longitude;
+
+      const transformedRestaurants = restaurantsArray.map((restaurant) => {
+        const deliveryTime = restaurant.estimatedDeliveryTime || "25-30 mins";
+        let distance = restaurant.distance || "1.2 km";
+        let distanceInKm = null;
+
+        const restaurantLat = restaurant.location?.latitude || (restaurant.location?.coordinates ? restaurant.location.coordinates[1] : null);
+        const restaurantLng = restaurant.location?.longitude || (restaurant.location?.coordinates ? restaurant.location.coordinates[0] : null);
+
+        if (userLat && userLng && restaurantLat && restaurantLng) {
+          distanceInKm = calculateDistance(userLat, userLng, restaurantLat, restaurantLng);
+          if (distanceInKm >= 1) distance = `${distanceInKm.toFixed(1)} km`;
+          else distance = `${Math.round(distanceInKm * 1000)} m`;
         }
 
-        const calculateDistance = (lat1, lng1, lat2, lng2) => {
-          const R = 6371;
-          const dLat = ((lat2 - lat1) * Math.PI) / 180;
-          const dLng = ((lng2 - lng1) * Math.PI) / 180;
-          const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
-          const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-          return R * c;
+        const coverImages = extractImages([...(Array.isArray(restaurant.coverImages) ? restaurant.coverImages : [restaurant.coverImages]).filter(Boolean), restaurant.coverImage]);
+        const profileImageCandidates = extractImages([
+          ...buildRestaurantImageCandidates(restaurant.profileImage),
+          ...buildRestaurantImageCandidates(restaurant.onboarding?.step2?.profileImageUrl),
+          ...buildRestaurantImageCandidates(restaurant.image),
+          ...buildRestaurantImageCandidates(restaurant.imageUrl),
+        ]);
+        const allImages = Array.from(new Set([...coverImages, ...profileImageCandidates].filter(Boolean)));
+
+        return {
+          id: restaurant.restaurantId || restaurant._id,
+          mongoId: restaurant._id || null,
+          name: getRestaurantDisplayName(restaurant),
+          cuisine: (restaurant.cuisines && restaurant.cuisines.length > 0) ? restaurant.cuisines[0] : "Multi-cuisine",
+          cuisines: Array.isArray(restaurant.cuisines) ? restaurant.cuisines : [],
+          rating: Number(restaurant.rating) || 0,
+          deliveryTime: restaurant.deliveryTime || restaurant.estimatedDeliveryTime || (restaurant.estimatedDeliveryTimeMinutes ? `${restaurant.estimatedDeliveryTimeMinutes} mins` : deliveryTime),
+          distance,
+          distanceInKm,
+          image: allImages[0] || profileImageCandidates[0] || "",
+          images: allImages,
+          priceRange: restaurant.priceRange || "",
+          featuredDish: restaurant.featuredDish || "",
+          featuredPrice: Number.isFinite(Number(restaurant.featuredPrice)) ? Number(restaurant.featuredPrice) : null,
+          offer: restaurant.offer || null,
+          slug: restaurant.slug,
+          restaurantId: restaurant.restaurantId,
+          pureVegRestaurant: restaurant.pureVegRestaurant === true,
+          location: restaurant.location,
+          isActive: restaurant.isActive !== false,
+          isAcceptingOrders: restaurant.isAcceptingOrders !== false,
+          openDays: Array.isArray(restaurant.openDays) ? restaurant.openDays : [],
+          deliveryTimings: restaurant.deliveryTimings || null,
+          outletTimings: restaurant.outletTimings || null,
         };
+      });
 
-        const userLat = effectiveLocation?.latitude;
-        const userLng = effectiveLocation?.longitude;
-
-        const transformedRestaurants = restaurantsArray.map((restaurant) => {
-          const deliveryTime = restaurant.estimatedDeliveryTime || "25-30 mins";
-          let distance = restaurant.distance || "1.2 km";
-          let distanceInKm = null;
-          
-          const restaurantLat = restaurant.location?.latitude || (restaurant.location?.coordinates ? restaurant.location.coordinates[1] : null);
-          const restaurantLng = restaurant.location?.longitude || (restaurant.location?.coordinates ? restaurant.location.coordinates[0] : null);
-
-          if (userLat && userLng && restaurantLat && restaurantLng) {
-            distanceInKm = calculateDistance(userLat, userLng, restaurantLat, restaurantLng);
-            if (distanceInKm >= 1) distance = `${distanceInKm.toFixed(1)} km`;
-            else distance = `${Math.round(distanceInKm * 1000)} m`;
-          }
-
-          const coverImages = extractImages([...(Array.isArray(restaurant.coverImages) ? restaurant.coverImages : [restaurant.coverImages]).filter(Boolean), restaurant.coverImage]);
-          const profileImageCandidates = extractImages([
-            ...buildRestaurantImageCandidates(restaurant.profileImage),
-            ...buildRestaurantImageCandidates(restaurant.onboarding?.step2?.profileImageUrl),
-            ...buildRestaurantImageCandidates(restaurant.image),
-            ...buildRestaurantImageCandidates(restaurant.imageUrl),
-          ]);
-          const allImages = Array.from(new Set([...coverImages, ...profileImageCandidates].filter(Boolean)));
-
-          return {
-            id: restaurant.restaurantId || restaurant._id,
-            mongoId: restaurant._id || null,
-            name: getRestaurantDisplayName(restaurant),
-            cuisine: (restaurant.cuisines && restaurant.cuisines.length > 0) ? restaurant.cuisines[0] : "Multi-cuisine",
-            cuisines: Array.isArray(restaurant.cuisines) ? restaurant.cuisines : [],
-            rating: Number(restaurant.rating) || 0,
-            deliveryTime: restaurant.deliveryTime || restaurant.estimatedDeliveryTime || (restaurant.estimatedDeliveryTimeMinutes ? `${restaurant.estimatedDeliveryTimeMinutes} mins` : deliveryTime),
-            distance,
-            distanceInKm,
-            image: allImages[0] || profileImageCandidates[0] || "",
-            images: allImages,
-            priceRange: restaurant.priceRange || "",
-            featuredDish: restaurant.featuredDish || "",
-            featuredPrice: Number.isFinite(Number(restaurant.featuredPrice)) ? Number(restaurant.featuredPrice) : null,
-            offer: restaurant.offer || null,
-            slug: restaurant.slug,
-            restaurantId: restaurant.restaurantId,
-            pureVegRestaurant: restaurant.pureVegRestaurant === true,
-            location: restaurant.location,
-            isActive: restaurant.isActive !== false,
-            isAcceptingOrders: restaurant.isAcceptingOrders !== false,
-            openDays: Array.isArray(restaurant.openDays) ? restaurant.openDays : [],
-            deliveryTimings: restaurant.deliveryTimings || null,
-            outletTimings: restaurant.outletTimings || null,
-          };
+      const sortRestaurantsForDisplay = (restaurants) => {
+        if (!userLat || !userLng) return restaurants;
+        return [...restaurants].sort((a, b) => {
+          const aAvailable = getRestaurantAvailabilityStatus(a, new Date(), { ignoreOperationalStatus: true }).isOpen;
+          const bAvailable = getRestaurantAvailabilityStatus(b, new Date(), { ignoreOperationalStatus: true }).isOpen;
+          if (aAvailable !== bAvailable) return aAvailable ? -1 : 1;
+          if (normalizedFilters.sortBy === "price-low") return (a.featuredPrice || 0) - (b.featuredPrice || 0);
+          if (normalizedFilters.sortBy === "price-high") return (b.featuredPrice || 0) - (a.featuredPrice || 0);
+          if (normalizedFilters.sortBy === "rating-high") return (b.rating || 0) - (a.rating || 0);
+          if (normalizedFilters.sortBy === "rating-low") return (a.rating || 0) - (b.rating || 0);
+          const aDistance = a.distanceInKm !== null ? a.distanceInKm : Infinity;
+          const bDistance = b.distanceInKm !== null ? b.distanceInKm : Infinity;
+          return aDistance - bDistance;
         });
+      };
 
-        const sortRestaurantsForDisplay = (restaurants) => {
-          if (!userLat || !userLng) return restaurants;
-          return [...restaurants].sort((a, b) => {
-            const aAvailable = getRestaurantAvailabilityStatus(a, new Date(), { ignoreOperationalStatus: true }).isOpen;
-            const bAvailable = getRestaurantAvailabilityStatus(b, new Date(), { ignoreOperationalStatus: true }).isOpen;
-            if (aAvailable !== bAvailable) return aAvailable ? -1 : 1;
-            if (filters.sortBy === "price-low") return (a.featuredPrice || 0) - (b.featuredPrice || 0);
-            if (filters.sortBy === "price-high") return (b.featuredPrice || 0) - (a.featuredPrice || 0);
-            if (filters.sortBy === "rating-high") return (b.rating || 0) - (a.rating || 0);
-            if (filters.sortBy === "rating-low") return (a.rating || 0) - (b.rating || 0);
-            const aDistance = a.distanceInKm !== null ? a.distanceInKm : Infinity;
-            const bDistance = b.distanceInKm !== null ? b.distanceInKm : Infinity;
-            return aDistance - bDistance;
-          });
-        };
+      const sortedRestaurants = sortRestaurantsForDisplay(transformedRestaurants);
+      homeDataCache.restaurantsByQuery.set(requestCacheKey, sortedRestaurants);
 
-        startTransition(() => {
-          setRestaurantsData(sortRestaurantsForDisplay(transformedRestaurants));
-        });
+      startTransition(() => {
+        setRestaurantsData(sortedRestaurants);
+      });
 
-      } else {
-        setRestaurantsData([]);
-      }
+      return sortedRestaurants;
     } catch (error) {
       setRestaurantsData([]);
+      throw error;
     } finally {
       if (requestSeq === restaurantsRequestSeqRef.current) {
         setLoadingRestaurants(false);
       }
     }
-  }, [effectiveLocation?.latitude, effectiveLocation?.longitude, effectiveZoneId, hasUsableUserCity]);
+  }, [effectiveLocation?.latitude, effectiveLocation?.longitude, effectiveLocation?.city, effectiveZoneId, hasUsableUserCity]);
 
   return {
     heroBannerImages,
@@ -453,4 +550,3 @@ export const useHome = ({ effectiveLocation, effectiveZoneId, hasUsableUserCity 
     recommendedRestaurantsFromSettings,
   };
 };
-

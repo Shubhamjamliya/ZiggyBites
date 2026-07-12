@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom"
 import { ArrowLeft, Search, MoreVertical, ChevronRight, Star, RotateCcw, AlertCircle, Loader2, Clock, X, Share2, MessageCircle, Send, Copy, Mail, MessagesSquare, Link2, Phone } from "lucide-react"
 import { orderAPI } from "@food/api"
 import { useCart } from "@food/context/CartContext"
+import { useOrders } from "@food/context/OrdersContext"
 import { toast } from "sonner"
 import { getCompanyNameAsync } from "@food/utils/businessSettings"
 const debugLog = (...args) => {}
@@ -13,8 +14,7 @@ const debugError = (...args) => {}
 export default function Orders() {
   const navigate = useNavigate()
   const { replaceCart } = useCart()
-  const [orders, setOrders] = useState([])
-  const [loading, setLoading] = useState(true)
+  const { orders, loading, patchOrder } = useOrders()
   const [searchQuery, setSearchQuery] = useState("")
   const [activeTab, setActiveTab] = useState('today') // 'today' or 'past'
   const [ratingModal, setRatingModal] = useState({ open: false, order: null })
@@ -83,17 +83,6 @@ export default function Orders() {
 
     return () => clearInterval(interval)
   }, [orders])
-
-  // Get order status text
-  const getOrderStatus = (order) => {
-    const status = order.status
-    if (status === 'delivered' || status === 'completed') return 'delivered'
-    if (status === 'out_for_delivery' || status === 'outForDelivery') return 'outForDelivery'
-    if (status === 'ready' || status === 'preparing') return 'preparing'
-    if (String(status).toLowerCase().includes('cancel')) return 'cancelled'
-    if (status === 'dead') return 'dead'
-    return status || 'confirmed'
-  }
 
   // Auto-show rating popup when order is delivered (only once per order)
   useEffect(() => {
@@ -184,202 +173,6 @@ export default function Orders() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orders, shownRatingForOrders, ratingModal.open])
-
-  // Fetch orders from backend API
-  useEffect(() => {
-    const FETCH_LIMIT = 100
-
-    const fetchAllOrders = async () => {
-      const firstResponse = await orderAPI.getOrders({
-        limit: FETCH_LIMIT,
-        page: 1,
-      })
-
-      // Check multiple possible response structures
-      let firstPageOrders = []
-      let totalPages = 1
-
-      if (firstResponse?.data?.success && firstResponse?.data?.data?.orders) {
-        firstPageOrders = firstResponse.data.data.orders || []
-        totalPages = firstResponse.data.data?.pagination?.pages || 1
-      } else if (firstResponse?.data?.orders) {
-        firstPageOrders = firstResponse.data.orders || []
-        totalPages = firstResponse.data?.pagination?.pages || 1
-      } else if (
-        firstResponse?.data?.data &&
-        Array.isArray(firstResponse.data.data)
-      ) {
-        firstPageOrders = firstResponse.data.data || []
-      }
-
-      if (totalPages <= 1) {
-        return firstPageOrders
-      }
-
-      const pagePromises = []
-      for (let p = 2; p <= totalPages; p += 1) {
-        pagePromises.push(orderAPI.getOrders({ limit: FETCH_LIMIT, page: p }))
-      }
-
-      const pageResponses = await Promise.all(pagePromises)
-      const remainingOrders = pageResponses.flatMap((resp) => {
-        if (resp?.data?.success && resp?.data?.data?.orders) {
-          return resp.data.data.orders || []
-        }
-        if (resp?.data?.orders) {
-          return resp.data.orders || []
-        }
-        if (resp?.data?.data && Array.isArray(resp.data.data)) {
-          return resp.data.data || []
-        }
-        return []
-      })
-
-      return [...firstPageOrders, ...remainingOrders]
-    }
-
-    const fetchOrders = async () => {
-      try {
-        setLoading(true)
-        const ordersData = await fetchAllOrders()
-
-        if (ordersData.length > 0) {
-          debugLog('?? Raw orders from API:', ordersData.slice(0, 3).map(o => ({
-            id: o.orderId || o._id,
-            status: o.orderStatus || o.status,
-            restaurantRating: o.ratings?.restaurant?.rating || null,
-            deliveryPartnerRating: o.ratings?.deliveryPartner?.rating || null,
-            deliveredAt: o.deliveredAt,
-            restaurant: o.restaurantId?.restaurantName || o.restaurantId?.name || o.restaurantName
-          })))
-
-          // Transform API orders to match UI structure
-          const transformedOrders = ordersData.map(order => {
-            const createdAt = order.createdAt ? new Date(order.createdAt) : new Date()
-
-            // Check if cancelled by restaurant or user
-            const backendStatus = order.orderStatus || order.status
-            const isCancelled =
-              backendStatus === 'cancelled' ||
-              backendStatus === 'cancelled_by_user' ||
-              backendStatus === 'cancelled_by_restaurant' ||
-              backendStatus === 'cancelled_by_admin' ||
-              backendStatus === 'dead'
-            const cancellationReason = order.cancellationReason || ''
-            // Check cancelledBy field first, then fallback to cancellation reason pattern
-            const isRestaurantCancelled = isCancelled && (
-              order.cancelledBy === 'restaurant' ||
-              /rejected by restaurant|restaurant rejected|restaurant cancelled|restaurant is too busy|item not available|outside delivery area|kitchen closing|technical issue|order not accepted within time limit|restaurant did not respond/i.test(cancellationReason)
-            )
-            const isUserCancelled = isCancelled && order.cancelledBy === 'user'
-            const isDead = backendStatus === 'dead'
-
-            // Get original status from backend before transformation
-            const originalStatus = backendStatus
-            const restaurantRating = order.ratings?.restaurant?.rating || null
-            const deliveryPartnerRating = order.ratings?.deliveryPartner?.rating || null
-
-            return {
-              id: order._id?.toString() || order.orderId || `ORD-${order._id}`,
-              mongoId: order._id,
-              orderId: order.orderId || order._id?.toString(), // Keep orderId for display
-              status: isRestaurantCancelled ? 'restaurant_cancelled' : getOrderStatus({ ...order, status: backendStatus }),
-              originalStatus: originalStatus, // Keep original status for reference
-              createdAt: createdAt.toISOString(),
-              address: order.address || order.deliveryAddress || {},
-              items: (order.items || []).map(item => ({
-                itemId: item.itemId || item._id || item.id,
-                name: item.name || item.foodName || 'Item',
-                variantName: item.variantName || '',
-                quantity: item.quantity || 1,
-                price: item.price || 0,
-                image: item.image || null,
-                description: item.description || null,
-                isVeg: item.isVeg === true || item.foodType === 'Veg' || item.category === 'veg' || item.type === 'veg',
-                _id: item._id || item.id,
-                id: item.id || item._id
-              })),
-              total: order.pricing?.total || order.total || 0,
-              subtotal: order.pricing?.subtotal || 0,
-              deliveryFee: order.pricing?.deliveryFee || 0,
-              tax: order.pricing?.tax || 0,
-              pricing: order.pricing || {}, // Keep full pricing object for discounts, coupons
-              payment: order.payment || {},
-              paymentMethod: order.payment?.method || order.paymentMethod,
-              restaurant: order.restaurantId?.restaurantName || order.restaurantId?.name || order.restaurantName || 'Restaurant',
-              restaurantId: order.restaurantId?._id || order.restaurantId,
-              restaurantSlug: order.restaurantId?.slug || null,
-              restaurantImage: order.restaurantId?.profileImage?.url || order.restaurantId?.profileImage || null,
-              restaurantLocation: order.restaurantId?.location?.area || order.restaurantId?.location?.city || order.address?.city || order.deliveryAddress?.city || '',
-              restaurantRating,
-              deliveryPartnerRating,
-              ratings: order.ratings || {},
-              rating: restaurantRating || null,
-              review: order.review || null,
-              tracking: order.tracking || {},
-              cancellationReason: cancellationReason,
-              isRestaurantCancelled: isRestaurantCancelled,
-              isUserCancelled: isUserCancelled,
-              isDead: isDead,
-              cancelledBy: order.cancelledBy,
-              eta: order.eta || { min: order.estimatedDeliveryTime || 30, max: order.estimatedDeliveryTime || 30 },
-              estimatedDeliveryTime: order.estimatedDeliveryTime || 30,
-              preparationTime: order.preparationTime || 0,
-              deliveredAt: order.deliveredAt || null,
-              deliveryPartnerId: order.deliveryPartnerId?._id || order.deliveryPartnerId || null,
-              deliveryPartnerName: order.deliveryPartnerId?.name || order.deliveryPartnerName || null,
-              deliveryPartnerPhone: order.deliveryPartnerId?.phone || order.deliveryPartnerPhone || null,
-              note: order.note || null
-            }
-          })
-
-          // Sort by date (newest first)
-          transformedOrders.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-
-          debugLog('? Orders fetched and transformed:', {
-            total: transformedOrders.length,
-            delivered: transformedOrders.filter(o => o.status === 'delivered' || o.originalStatus === 'delivered').length,
-            withRating: transformedOrders.filter(o => o.restaurantRating && (!o.deliveryPartnerId || o.deliveryPartnerRating)).length,
-            sample: transformedOrders.slice(0, 2).map(o => ({
-              id: o.id,
-              status: o.status,
-              originalStatus: o.originalStatus,
-              restaurantRating: o.restaurantRating,
-              deliveryPartnerRating: o.deliveryPartnerRating,
-              deliveredAt: o.deliveredAt
-            }))
-          })
-
-          setOrders(transformedOrders)
-        } else {
-          debugLog('?? No orders data in response')
-          setOrders([])
-        }
-      } catch (error) {
-        debugError('Error fetching user orders:', error)
-        let errorMessage = 'Failed to load orders'
-        if (error?.response?.status === 401) {
-          errorMessage = 'Please login to view your orders'
-        } else if (error?.response?.data?.message) {
-          errorMessage = error.response.data.message
-        }
-        toast.error(errorMessage)
-        setOrders([])
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    fetchOrders()
-
-    // Poll for order updates every 20 seconds to detect delivered orders
-    // This ensures rating popup shows quickly when order is delivered
-    const pollInterval = setInterval(() => {
-      fetchOrders()
-    }, 20000) // Poll every 20 seconds
-
-    return () => clearInterval(pollInterval)
-  }, [])
 
   // Format date helper
   const formatDate = (dateString) => {
@@ -649,22 +442,20 @@ Order again from this restaurant in the ${companyName} app.`
         deliveryPartnerComment: hasDeliveryPartner ? (deliveryFeedbackText || undefined) : undefined,
       })
       const updatedOrder = response?.data?.data?.order || response?.data?.order || null
-
-      // Update local state so UI shows "You rated"
-      setOrders(prev =>
-        prev.map(o =>
-          o.id === order.id ? {
-            ...o,
-            restaurantRating: updatedOrder?.ratings?.restaurant?.rating ?? selectedRestaurantRating,
-            deliveryPartnerRating: updatedOrder?.ratings?.deliveryPartner?.rating ?? (hasDeliveryPartner ? selectedDeliveryRating : null),
-            ratings: updatedOrder?.ratings || {
-              restaurant: { rating: selectedRestaurantRating, comment: restaurantFeedbackText || "" },
-              deliveryPartner: hasDeliveryPartner ? { rating: selectedDeliveryRating, comment: deliveryFeedbackText || "" } : undefined
-            },
-            rating: updatedOrder?.ratings?.restaurant?.rating ?? selectedRestaurantRating
-          } : o
-        )
-      )
+      // Update cached state so UI shows "You rated"
+      patchOrder(order.id, {
+        restaurantRating: updatedOrder?.ratings?.restaurant?.rating ?? selectedRestaurantRating,
+        deliveryPartnerRating:
+          updatedOrder?.ratings?.deliveryPartner?.rating ??
+          (hasDeliveryPartner ? selectedDeliveryRating : null),
+        ratings: updatedOrder?.ratings || {
+          restaurant: { rating: selectedRestaurantRating, comment: restaurantFeedbackText || "" },
+          deliveryPartner: hasDeliveryPartner
+            ? { rating: selectedDeliveryRating, comment: deliveryFeedbackText || "" }
+            : undefined
+        },
+        rating: updatedOrder?.ratings?.restaurant?.rating ?? selectedRestaurantRating
+      })
 
       toast.success("Thanks for rating your order!")
 

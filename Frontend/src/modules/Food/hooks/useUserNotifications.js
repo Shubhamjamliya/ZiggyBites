@@ -2,7 +2,6 @@ import { useEffect, useRef, useState, useContext } from 'react';
 import io from 'socket.io-client';
 import { toast } from 'sonner';
 import { API_BASE_URL } from '@food/api/config';
-import { userAPI } from '@food/api';
 import { dispatchNotificationInboxRefresh } from '@food/hooks/useNotificationInbox';
 import { UserNotificationContext } from '../context/UserNotificationContext';
 
@@ -29,22 +28,38 @@ export const useUserNotifications = () => {
   const DROP_OTP_DEDUPE_MS = 15000;
   const ORDER_STATUS_TOAST_ID = 'user-order-status-update';
   const ORDER_STATUS_DEDUPE_MS = 4000;
-
-  // Fetch current user ID
   useEffect(() => {
-    const fetchUserId = async () => {
+    const resolveUserId = () => {
       try {
-        const response = await userAPI.getProfile();
-        if (response.data?.success && response.data.data?.user) {
-          const user = response.data.data.user;
-          const id = user._id?.toString() || user.userId || user.id;
-          setUserId(id);
+        const candidates = [
+          localStorage.getItem('user_user'),
+          localStorage.getItem('userProfile'),
+        ].filter(Boolean)
+
+        for (const raw of candidates) {
+          try {
+            const user = JSON.parse(raw)
+            const id = user?._id?.toString?.() || user?.userId || user?.id || null
+            if (id) {
+              setUserId(String(id))
+              return
+            }
+          } catch {
+            // ignore malformed cache
+          }
         }
-      } catch (error) {
-        // Not logged in or error
+      } catch {
+        // ignore storage errors
       }
-    };
-    fetchUserId();
+
+      setUserId(null)
+    }
+
+    resolveUserId()
+    window.addEventListener('userAuthChanged', resolveUserId)
+    return () => {
+      window.removeEventListener('userAuthChanged', resolveUserId)
+    }
   }, []);
 
   useEffect(() => {

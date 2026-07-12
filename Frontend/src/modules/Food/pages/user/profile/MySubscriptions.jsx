@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ArrowLeft, CalendarDays, CheckCircle2, ChevronRight, Clock3, CreditCard, Store } from "lucide-react";
 import AnimatedPage from "@food/components/user/AnimatedPage";
 import { Card, CardContent } from "@food/components/ui/card";
 import { Button } from "@food/components/ui/button";
-import { subscriptionAPI } from "@food/api";
+import { useSubscriptions } from "@food/context/SubscriptionsContext";
 
 const formatDate = (value) => {
   if (!value) return "-";
@@ -26,33 +26,7 @@ const getStatusClasses = (status) => {
 
 export default function MySubscriptions() {
   const navigate = useNavigate();
-  const [subscriptions, setSubscriptions] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let mounted = true;
-
-    const loadSubscriptions = async () => {
-      setLoading(true);
-      try {
-        const response = await subscriptionAPI.getMySubscriptions();
-        const list =
-          response?.data?.data?.subscriptions ||
-          response?.data?.subscriptions ||
-          [];
-        if (mounted) setSubscriptions(Array.isArray(list) ? list : []);
-      } catch {
-        if (mounted) setSubscriptions([]);
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    };
-
-    loadSubscriptions();
-    return () => {
-      mounted = false;
-    };
-  }, []);
+  const { subscriptions, loading } = useSubscriptions();
 
   const activeCount = useMemo(
     () =>

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef, useCallback, memo } from "react";
+import { useState, useEffect, useMemo, useRef, memo } from "react";
 import { useNavigate } from "react-router-dom";
 import { UtensilsCrossed, ChevronRight, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -121,78 +121,20 @@ const getTimeRemaining = (order) => {
   return Math.max(0, Math.floor((deliveryTime - new Date()) / 60000));
 };
 
-/** Cheap fingerprint so we skip setState when list content is unchanged (fewer re-renders). */
-function ordersFingerprint(orders) {
-  if (!Array.isArray(orders) || orders.length === 0) return "";
-  return orders
-    .map((o) => `${getOrderKey(o)}:${getOrderStatus(o)}`)
-    .join("|");
-}
-
 function OrderTrackingCardInner({ hasBottomNav = true }) {
   const navigate = useNavigate();
-  const { orders: contextOrders } = useOrders();
+  const { orders: contextOrders, refreshOrders } = useOrders();
   const [timeRemaining, setTimeRemaining] = useState(null);
-  const [apiOrders, setApiOrders] = useState([]);
-  const [hasFetchedApi, setHasFetchedApi] = useState(false);
   const [activeOrderOverride, setActiveOrderOverride] = useState(null);
   const lastRefreshRef = useRef(0);
-  const lastApiFingerprintRef = useRef("");
   const activeOrderKeyRef = useRef("");
   const activeOrderSnapshotRef = useRef(null);
   const [invalidOrderIds, setInvalidOrderIds] = useState(new Set());
 
-  const fetchOrders = useCallback(async () => {
-    try {
-      const response = await orderAPI.getOrders({ limit: 10, page: 1 });
-      let nextOrders = [];
-
-      if (response?.data?.success && response?.data?.data?.orders) {
-        nextOrders = response.data.data.orders;
-      } else if (response?.data?.orders) {
-        nextOrders = response.data.orders;
-      } else if (response?.data?.data?.data && Array.isArray(response.data.data.data)) {
-        nextOrders = response.data.data.data;
-      } else if (response?.data?.data?.docs && Array.isArray(response.data.data.docs)) {
-        nextOrders = response.data.data.docs;
-      } else if (response?.data?.data && Array.isArray(response.data.data)) {
-        nextOrders = response.data.data;
-      }
-
-      const list = Array.isArray(nextOrders) ? nextOrders : [];
-      const fp = ordersFingerprint(list);
-      if (fp !== lastApiFingerprintRef.current) {
-        lastApiFingerprintRef.current = fp;
-        setApiOrders(list);
-      }
-    } catch (error) {
-      if (error?.response?.status === 401) {
-        localStorage.removeItem("user_accessToken");
-        localStorage.removeItem("accessToken");
-      }
-      if (lastApiFingerprintRef.current !== "") {
-        lastApiFingerprintRef.current = "";
-        setApiOrders([]);
-      }
-    } finally {
-      setHasFetchedApi(true);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchOrders();
-    const interval = setInterval(fetchOrders, 30000);
-    return () => clearInterval(interval);
-  }, [fetchOrders]);
-
   const uniqueOrders = useMemo(() => {
-    const isMongoObjectId = (value) => /^[a-f0-9]{24}$/i.test(String(value || ""));
-    const serverKeys = new Set(
-      (apiOrders || []).map((o) => String(getOrderKey(o) || "")).filter(Boolean),
-    );
     const seen = new Set();
 
-    return [...apiOrders, ...contextOrders].filter((order) => {
+    return [...contextOrders].filter((order) => {
       const key = getOrderKey(order);
       if (!key || seen.has(key)) {
         return false;
@@ -200,19 +142,10 @@ function OrderTrackingCardInner({ hasBottomNav = true }) {
       if (invalidOrderIds.has(key)) {
         return false;
       }
-      // After first API sync, ignore stale local Mongo-like ids that are absent server-side.
-      // This prevents repeated verification calls for already-deleted orders.
-      if (
-        hasFetchedApi &&
-        isMongoObjectId(key) &&
-        !serverKeys.has(String(key))
-      ) {
-        return false;
-      }
       seen.add(key);
       return true;
     });
-  }, [contextOrders, apiOrders, invalidOrderIds, hasFetchedApi]);
+  }, [contextOrders, invalidOrderIds]);
 
   const activeOrder = useMemo(() => {
     const candidate = uniqueOrders.find((order) => isActiveOrder(order)) || null;
@@ -268,7 +201,7 @@ function OrderTrackingCardInner({ hasBottomNav = true }) {
     };
 
     const handleOrderPlaced = () => {
-      fetchOrders();
+      refreshOrders({ silent: true }).catch(() => {});
     };
 
     window.addEventListener("orderStatusNotification", handleOrderStatusNotification);
@@ -278,7 +211,7 @@ function OrderTrackingCardInner({ hasBottomNav = true }) {
       window.removeEventListener("orderStatusNotification", handleOrderStatusNotification);
       window.removeEventListener("order-placed", handleOrderPlaced);
     };
-  }, [fetchOrders]);
+  }, [refreshOrders]);
 
   useEffect(() => {
     if (!activeOrder) {
@@ -296,32 +229,6 @@ function OrderTrackingCardInner({ hasBottomNav = true }) {
 
     return () => clearInterval(interval);
   }, [activeOrder]);
-
-  // Proactive verification for active orders not found in recent API list
-  useEffect(() => {
-    const key = getOrderKey(activeOrder);
-    if (!key || invalidOrderIds.has(key)) return;
-
-    // If order is present in the recent server-provided list, we consider it valid without extra check
-    const isRecentlyConfirmed = apiOrders.some((o) => getOrderKey(o) === key);
-    if (isRecentlyConfirmed) return;
-
-    const verifyOrderExists = async () => {
-      try {
-        await orderAPI.getOrderDetails(key);
-      } catch (error) {
-        if (error?.response?.status === 404 || error?.response?.status === 400) {
-          setInvalidOrderIds((prev) => {
-            const next = new Set(prev);
-            next.add(key);
-            return next;
-          });
-        }
-      }
-    };
-
-    verifyOrderExists();
-  }, [activeOrder, apiOrders, invalidOrderIds]);
 
   const [dismissedKey, setDismissedKey] = useState(null);
 

@@ -1812,40 +1812,6 @@ export default function OrdersMain() {
     }
   }, []);
 
-  // Best-effort unlock for popup buzzer so it can keep playing when tab is backgrounded.
-  useEffect(() => {
-    const unlockAudio = async () => {
-      if (audioUnlockedRef.current || !audioRef.current) return;
-      try {
-        audioRef.current.muted = true;
-        await audioRef.current.play();
-        audioRef.current.pause();
-        audioRef.current.currentTime = 0;
-        audioRef.current.muted = false;
-        audioRef.current.volume = 1;
-        audioUnlockedRef.current = true;
-
-        // If an order popup is already open, start buzzing immediately after unlock.
-        if (showNewOrderPopupRef.current && !isMutedRef.current) {
-          audioRef.current.loop = false;
-          audioRef.current.currentTime = 0;
-          audioRef.current.play().catch(() => {});
-        }
-      } catch (_) {
-        audioRef.current.muted = false;
-      }
-    };
-
-    window.addEventListener("pointerdown", unlockAudio, {
-      once: true,
-      passive: true,
-    });
-    window.addEventListener("keydown", unlockAudio, { once: true });
-    return () => {
-      window.removeEventListener("pointerdown", unlockAudio);
-      window.removeEventListener("keydown", unlockAudio);
-    };
-  }, []);
 
   // Ensure audio stops when user comes to the page
   useEffect(() => {
@@ -4733,6 +4699,7 @@ function EmptyState({ message = "Temporarily closed" }) {
     </div>
   );
 }
+
 
 
 

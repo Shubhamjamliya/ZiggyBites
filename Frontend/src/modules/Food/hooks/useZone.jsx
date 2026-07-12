@@ -26,20 +26,41 @@ const zoneKeyFromCoords = (lat, lng) => {
 }
 
 const applyZonePayload = (data, { setZoneId, setZone, setZoneStatus }) => {
-  if (data?.status === 'IN_SERVICE' && data.zoneId) {
-    setZoneId(data.zoneId)
-    setZone(data.zone || null)
-    setZoneStatus('IN_SERVICE')
-    localStorage.setItem('userZoneId', data.zoneId)
-    localStorage.setItem('userZone', JSON.stringify(data.zone))
+  const nextPayload =
+    data?.status === 'IN_SERVICE' && data.zoneId
+      ? {
+          zoneId: data.zoneId,
+          zone: data.zone || null,
+          zoneStatus: 'IN_SERVICE',
+          isOutOfService: false,
+        }
+      : {
+          zoneId: null,
+          zone: null,
+          zoneStatus: 'OUT_OF_SERVICE',
+          isOutOfService: true,
+        }
+
+  setZoneId(nextPayload.zoneId)
+  setZone(nextPayload.zone)
+  setZoneStatus(nextPayload.zoneStatus)
+
+  if (nextPayload.zoneId) {
+    localStorage.setItem('userZoneId', nextPayload.zoneId)
+    localStorage.setItem('userZone', JSON.stringify(nextPayload.zone))
     localStorage.removeItem('outOfService')
   } else {
-    setZoneId(null)
-    setZone(null)
-    setZoneStatus('OUT_OF_SERVICE')
     localStorage.removeItem('userZoneId')
     localStorage.removeItem('userZone')
     localStorage.setItem('outOfService', 'true')
+  }
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(
+      new CustomEvent('userZoneUpdated', {
+        detail: nextPayload,
+      }),
+    )
   }
 }
 

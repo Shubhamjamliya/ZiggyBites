@@ -28,6 +28,11 @@ import { validateAdminChangePasswordDto } from "../../dtos/auth/adminChangePassw
 import { validateAdminForgotPasswordRequestDto } from "../../dtos/auth/adminForgotPasswordRequest.dto.js";
 import { validateAdminForgotPasswordResetDto } from "../../dtos/auth/adminForgotPasswordReset.dto.js";
 import { sendResponse } from "../../utils/response.js";
+import {
+  attachRefreshTokenCookie,
+  clearRefreshTokenCookie,
+  getRefreshTokenFromRequest,
+} from "./auth.cookies.js";
 
 export const requestUserOtpController = async (req, res, next) => {
   try {
@@ -55,6 +60,7 @@ export const verifyUserOtpController = async (req, res, next) => {
       platform,
       name,
     );
+    attachRefreshTokenCookie(req, res, result.refreshToken);
     return sendResponse(res, 200, "Login successful", result);
   } catch (error) {
     next(error);
@@ -65,6 +71,7 @@ export const adminLoginController = async (req, res, next) => {
   try {
     const { email, password } = validateAdminLoginDto(req.body);
     const result = await adminLogin(email, password);
+    attachRefreshTokenCookie(req, res, result.refreshToken);
     return sendResponse(res, 200, "Admin login successful", result);
   } catch (error) {
     next(error);
@@ -73,8 +80,11 @@ export const adminLoginController = async (req, res, next) => {
 
 export const refreshTokenController = async (req, res, next) => {
   try {
-    const { refreshToken } = validateRefreshTokenDto(req.body);
+    const { refreshToken } = validateRefreshTokenDto({
+      refreshToken: getRefreshTokenFromRequest(req),
+    });
     const result = await refreshAccessToken(refreshToken);
+    attachRefreshTokenCookie(req, res, result.refreshToken);
     return sendResponse(res, 200, "Access token refreshed", result);
   } catch (error) {
     next(error);
@@ -98,6 +108,9 @@ export const verifyRestaurantOtpController = async (req, res, next) => {
   try {
     const { phone, otp, fcmToken, platform } = validateRestaurantOtpVerifyDto(req.body);
     const result = await verifyRestaurantOtpAndLogin(phone, otp, fcmToken, platform);
+    if (result?.refreshToken) {
+      attachRefreshTokenCookie(req, res, result.refreshToken);
+    }
     return sendResponse(res, 200, "Authentication successful", result);
   } catch (error) {
     next(error);
@@ -121,6 +134,9 @@ export const verifyDeliveryOtpController = async (req, res, next) => {
   try {
     const { phone, otp, fcmToken, platform } = validateDeliveryOtpVerifyDto(req.body);
     const result = await verifyDeliveryOtpAndLogin(phone, otp, fcmToken, platform);
+    if (result?.refreshToken) {
+      attachRefreshTokenCookie(req, res, result.refreshToken);
+    }
     return sendResponse(res, 200, "Login successful", result);
   } catch (error) {
     next(error);
@@ -129,8 +145,12 @@ export const verifyDeliveryOtpController = async (req, res, next) => {
 
 export const logoutController = async (req, res, next) => {
   try {
-    const { refreshToken, fcmToken, platform } = validateLogoutDto(req.body);
-    const result = await logout(refreshToken, fcmToken, platform);
+    const parsed = validateLogoutDto({
+      ...req.body,
+      refreshToken: getRefreshTokenFromRequest(req),
+    });
+    const result = await logout(parsed.refreshToken, parsed.fcmToken, parsed.platform);
+    clearRefreshTokenCookie(req, res);
     return sendResponse(
       res,
       200,

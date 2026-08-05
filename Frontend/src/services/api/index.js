@@ -5,6 +5,7 @@
 import apiClient from "./axios.js";
 import { API_ENDPOINTS } from "./config.js";
 import * as authService from "./auth.js";
+import { getCachedEntry, setCachedEntry } from "../../modules/Food/utils/indexedDbCache.js";
 
 const stub = () =>
   Promise.resolve({
@@ -106,14 +107,7 @@ export const authAPI = {
   },
   getCurrentUser: () => getUserMeOnce(),
   refreshToken: (token) => authService.refreshToken(token),
-  logout: (refreshToken, fcmToken = null, platform = "web") => {
-    const token =
-      refreshToken ||
-      (typeof localStorage !== "undefined"
-        ? localStorage.getItem("user_refreshToken")
-        : null);
-    return authService.logout(token, fcmToken, platform);
-  },
+  logout: (_refreshToken, fcmToken = null, platform = "web") => authService.logout(null, fcmToken, platform),
 };
 
 export const supportAPI = {
@@ -202,14 +196,9 @@ export const adminAPI = {
       { currentPassword, newPassword },
       { contextModule: "admin" },
     ),
-  logout: (refreshToken) => {
-    const token =
-      refreshToken ||
-      (typeof localStorage !== "undefined"
-        ? localStorage.getItem("admin_refreshToken")
-        : null);
+  logout: () => {
     const fcmToken = typeof localStorage !== "undefined" ? localStorage.getItem("fcm_web_registered_token_admin") : null;
-    return authService.logout(token, fcmToken, "web");
+    return authService.logout(null, fcmToken, "web");
   },
   // Restaurant approvals and join requests
   getPendingRestaurants: () =>
@@ -632,7 +621,7 @@ export const adminAPI = {
       contextModule: "admin",
       ...config,
     }),
-  /** Dispatch settings – auto vs manual assign (global) */
+  /** Dispatch settings ï¿½ auto vs manual assign (global) */
   /** Create restaurant (admin). Single API: POST /food/admin/restaurants. Body: JSON with image URLs. */
   createRestaurant: (body) =>
     apiClient.post("/food/admin/restaurants", body ?? {}, {
@@ -1583,6 +1572,46 @@ const publicRestaurantMenuCache = createInFlightCache({ ttlMs: 3000 });
 const publicRestaurantOutletTimingsCache = createInFlightCache({ ttlMs: 3000 });
 const publicGenericGetCache = createInFlightCache({ ttlMs: 3000 });
 
+const PUBLIC_PERSISTENT_CACHE_TTLS = {
+  generic: 2 * 60 * 1000,
+  restaurants: 5 * 60 * 1000,
+  menu: 10 * 60 * 1000,
+  outletTimings: 10 * 60 * 1000,
+};
+
+const toCacheableResponse = (response) => ({
+  data: response?.data ?? null,
+  status: response?.status ?? 200,
+  statusText: response?.statusText ?? 'OK',
+  headers: response?.headers ?? {},
+});
+
+const fromCacheableResponse = (cachedValue) => ({
+  data: cachedValue?.data ?? null,
+  status: cachedValue?.status ?? 200,
+  statusText: cachedValue?.statusText ?? 'OK',
+  headers: cachedValue?.headers ?? {},
+  config: {},
+  cached: true,
+});
+
+const resolvePersistentPublicGet = async ({ storeName, cacheKey, ttlMs, loader, backgroundRefresh = true }) => {
+  const cachedEntry = await getCachedEntry(storeName, cacheKey, ttlMs);
+  if (cachedEntry?.value) {
+    if (backgroundRefresh) {
+      void loader()
+        .then((freshResponse) => setCachedEntry(storeName, cacheKey, toCacheableResponse(freshResponse)))
+        .catch(() => {});
+    }
+    return fromCacheableResponse(cachedEntry.value);
+  }
+
+  const response = await loader();
+  void setCachedEntry(storeName, cacheKey, toCacheableResponse(response));
+  return response;
+};
+
+
 export const publicGetOnce = (url, config = {}) => {
   const safeUrl = typeof url === "string" ? url.trim() : "";
   const { noCache, params, ...axiosConfig } = config || {};
@@ -1595,13 +1624,17 @@ export const publicGetOnce = (url, config = {}) => {
   const keyParams =
     params && typeof params === "object" ? { ...params } : params;
   if (keyParams && typeof keyParams === "object") {
-    // `_ts` is used as a cache-buster in some call sites; ignore it for dedupe purposes.
     delete keyParams._ts;
   }
 
   const key = `GET:${safeUrl}:${stableStringify(keyParams)}`;
   return publicGenericGetCache.getOrCreate(key, () =>
-    apiClient.get(safeUrl, { params, ...axiosConfig }),
+    resolvePersistentPublicGet({
+      storeName: 'publicResponses',
+      cacheKey: key,
+      ttlMs: PUBLIC_PERSISTENT_CACHE_TTLS.generic,
+      loader: () => apiClient.get(safeUrl, { params, ...axiosConfig }),
+    }),
   );
 };
 
@@ -1614,15 +1647,20 @@ const getPublicRestaurantsOnce = (params = {}, config = {}) => {
     });
   }
   const keyParams = { limit: 1000, ...params };
-  // `_ts` is an explicit cache-buster in many call sites; ignore it for dedupe purposes.
   if (keyParams && typeof keyParams === "object") {
     delete keyParams._ts;
   }
   const key = `restaurants:${stableStringify(keyParams)}`;
   return publicRestaurantsCache.getOrCreate(key, () =>
-    apiClient.get("/food/restaurant/restaurants", {
-      params: { limit: 1000, ...params },
-      ...axiosConfig,
+    resolvePersistentPublicGet({
+      storeName: 'publicRestaurants',
+      cacheKey: key,
+      ttlMs: PUBLIC_PERSISTENT_CACHE_TTLS.restaurants,
+      loader: () =>
+        apiClient.get("/food/restaurant/restaurants", {
+          params: { limit: 1000, ...params },
+          ...axiosConfig,
+        }),
     }),
   );
 };
@@ -1646,8 +1684,14 @@ const getPublicRestaurantMenuOnce = (id, config = {}) => {
   }
   const key = `menu:${safeId}`;
   return publicRestaurantMenuCache.getOrCreate(key, () =>
-    apiClient.get(`/food/restaurant/restaurants/${safeId}/menu`, {
-      ...axiosConfig,
+    resolvePersistentPublicGet({
+      storeName: 'publicRestaurantMenus',
+      cacheKey: key,
+      ttlMs: PUBLIC_PERSISTENT_CACHE_TTLS.menu,
+      loader: () =>
+        apiClient.get(`/food/restaurant/restaurants/${safeId}/menu`, {
+          ...axiosConfig,
+        }),
     }),
   );
 };
@@ -1672,8 +1716,14 @@ const getPublicRestaurantOutletTimingsOnce = (id, config = {}) => {
   }
   const key = `outletTimings:${safeId}`;
   return publicRestaurantOutletTimingsCache.getOrCreate(key, () =>
-    apiClient.get(`/food/restaurant/restaurants/${safeId}/outlet-timings`, {
-      ...axiosConfig,
+    resolvePersistentPublicGet({
+      storeName: 'publicRestaurantTimings',
+      cacheKey: key,
+      ttlMs: PUBLIC_PERSISTENT_CACHE_TTLS.outletTimings,
+      loader: () =>
+        apiClient.get(`/food/restaurant/restaurants/${safeId}/outlet-timings`, {
+          ...axiosConfig,
+        }),
     }),
   );
 };

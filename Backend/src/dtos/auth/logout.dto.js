@@ -8,7 +8,7 @@ const schema = z.object({
 });
 
 export const validateLogoutDto = (body) => {
-    const result = schema.safeParse(body);
+    const result = schema.safeParse(body || {});
     if (!result.success) {
         throw new ValidationError(result.error.errors[0].message);
     }

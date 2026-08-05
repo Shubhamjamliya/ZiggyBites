@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { Toaster } from 'sonner'
 import App from './app/App.jsx'
+import './core/auth/tokenStore.js'
 import { isModuleAuthenticated } from './modules/Food/utils/auth.js'
 import './shared/styles/global.css'
 
@@ -188,3 +189,4 @@ createRoot(rootElement).render(
     <App />
   </AppProviders>
 )
+

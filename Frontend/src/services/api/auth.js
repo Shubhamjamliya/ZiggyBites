@@ -1,97 +1,49 @@
-/**
- * Auth API – new backend (USER, ADMIN, RESTAURANT, DELIVERY).
- * Food-prefixed: POST /food/auth/...
- */
-
-import apiClient, { userClient, restaurantClient, deliveryClient, adminClient } from "./axios.js";
-import { EMAIL_REGEX } from "@/shared/utils/emailValidation";
+import apiClient, { userClient, restaurantClient, deliveryClient, adminClient } from './axios.js';
+import { EMAIL_REGEX } from '@/shared/utils/emailValidation';
 
 const AUTH = {
-  USER_REQUEST_OTP: "/food/auth/user/request-otp",
-  USER_VERIFY_OTP: "/food/auth/user/verify-otp",
-  ADMIN_LOGIN: "/food/auth/admin/login",
-  RESTAURANT_REQUEST_OTP: "/food/auth/restaurant/request-otp",
-  RESTAURANT_VERIFY_OTP: "/food/auth/restaurant/verify-otp",
-  DELIVERY_REQUEST_OTP: "/food/auth/delivery/request-otp",
-  DELIVERY_VERIFY_OTP: "/food/auth/delivery/verify-otp",
-  REFRESH_TOKEN: "/food/auth/refresh-token",
-  LOGOUT: "/food/auth/logout",
-  ME: "/food/auth/me",
+  USER_REQUEST_OTP: '/food/auth/user/request-otp',
+  USER_VERIFY_OTP: '/food/auth/user/verify-otp',
+  ADMIN_LOGIN: '/food/auth/admin/login',
+  RESTAURANT_REQUEST_OTP: '/food/auth/restaurant/request-otp',
+  RESTAURANT_VERIFY_OTP: '/food/auth/restaurant/verify-otp',
+  DELIVERY_REQUEST_OTP: '/food/auth/delivery/request-otp',
+  DELIVERY_VERIFY_OTP: '/food/auth/delivery/verify-otp',
+  REFRESH_TOKEN: '/food/auth/refresh-token',
+  LOGOUT: '/food/auth/logout',
+  ME: '/food/auth/me',
 };
 
-/**
- * Normalize phone to digits only (for backend 8–15 digits).
- * @param {string} phone - e.g. "+91 9876543210" or "9876543210"
- */
 function normalizePhone(phone) {
-  if (!phone) return "";
-  const digits = String(phone).replace(/\D/g, "");
+  if (!phone) return '';
+  const digits = String(phone).replace(/\D/g, '');
   return digits.slice(-15);
 }
 
-/** User phone: exactly 10 digits, numeric only. */
 const USER_PHONE_LENGTH = 10;
 
-/**
- * Request OTP for user login.
- * Validation: phone required, numeric only, exactly 10 digits (last 10 if country code included).
- * @param {string} phone - Phone (with or without country code, e.g. "+91 9876543210")
- * @returns {Promise<{ data }>}
- */
 export function requestUserOtp(phone) {
   const digits = normalizePhone(phone);
-  if (!digits) {
-    return Promise.reject(new Error("Phone number is required"));
-  }
-  if (!/^\d+$/.test(digits)) {
-    return Promise.reject(new Error("Phone must contain only digits"));
-  }
-  const normalized =
-    digits.length > USER_PHONE_LENGTH
-      ? digits.slice(-USER_PHONE_LENGTH)
-      : digits;
+  if (!digits) return Promise.reject(new Error('Phone number is required'));
+  if (!/^\d+$/.test(digits)) return Promise.reject(new Error('Phone must contain only digits'));
+  const normalized = digits.length > USER_PHONE_LENGTH ? digits.slice(-USER_PHONE_LENGTH) : digits;
   if (normalized.length !== USER_PHONE_LENGTH) {
-    return Promise.reject(new Error("Phone number must be exactly 10 digits"));
+    return Promise.reject(new Error('Phone number must be exactly 10 digits'));
   }
   return userClient.post(AUTH.USER_REQUEST_OTP, { phone: normalized });
 }
 
-/**
- * Verify OTP and login (user).
- * Validation: phone 10 digits, OTP required, exactly 4 digits numeric.
- * Backend returns { accessToken, refreshToken, user }.
- * @param {string} phone - Same format as request
- * @param {string} otp - 4-digit OTP only
- */
-export function verifyUserOtp(
-  phone,
-  otp,
-  ref,
-  name = null,
-  fcmToken = null,
-  platform = "web",
-) {
+export function verifyUserOtp(phone, otp, ref, name = null, fcmToken = null, platform = 'web') {
   const digits = normalizePhone(phone);
-  if (!digits) {
-    return Promise.reject(new Error("Phone number is required"));
-  }
-  const normalized =
-    digits.length > USER_PHONE_LENGTH
-      ? digits.slice(-USER_PHONE_LENGTH)
-      : digits;
+  if (!digits) return Promise.reject(new Error('Phone number is required'));
+  const normalized = digits.length > USER_PHONE_LENGTH ? digits.slice(-USER_PHONE_LENGTH) : digits;
   if (normalized.length !== USER_PHONE_LENGTH) {
-    return Promise.reject(new Error("Phone number must be exactly 10 digits"));
+    return Promise.reject(new Error('Phone number must be exactly 10 digits'));
   }
-  const otpStr = String(otp ?? "")
-    .replace(/\D/g, "")
-    .slice(0, 4);
-  if (!otpStr) {
-    return Promise.reject(new Error("OTP is required"));
-  }
-  if (otpStr.length !== 4) {
-    return Promise.reject(new Error("OTP must be exactly 4 digits"));
-  }
-  const refValue = typeof ref === "string" ? ref.trim() : "";
+  const otpStr = String(otp ?? '').replace(/\D/g, '').slice(0, 4);
+  if (!otpStr) return Promise.reject(new Error('OTP is required'));
+  if (otpStr.length !== 4) return Promise.reject(new Error('OTP must be exactly 4 digits'));
+  const refValue = typeof ref === 'string' ? ref.trim() : '';
   return apiClient.post(AUTH.USER_VERIFY_OTP, {
     phone: normalized,
     otp: otpStr,
@@ -101,128 +53,79 @@ export function verifyUserOtp(
   });
 }
 
-/**
- * Admin login (email + password).
- * Validation: email required and valid format, password required and min 6 characters.
- * Backend returns { accessToken, refreshToken, user } (key is "user" not "admin").
- */
 export function adminLogin(email, password) {
-  const trimmedEmail = typeof email === "string" ? email.trim() : "";
-  if (!trimmedEmail) {
-    return Promise.reject(new Error("Email is required"));
-  }
+  const trimmedEmail = typeof email === 'string' ? email.trim() : '';
+  if (!trimmedEmail) return Promise.reject(new Error('Email is required'));
   if (!EMAIL_REGEX.test(trimmedEmail)) {
-    return Promise.reject(new Error("Please enter a valid email address"));
+    return Promise.reject(new Error('Please enter a valid email address'));
   }
-  const passwordStr = String(password ?? "");
-  if (!passwordStr) {
-    return Promise.reject(new Error("Password is required"));
-  }
-  if (passwordStr.length < 6) {
-    return Promise.reject(new Error("Password must be at least 6 characters"));
-  }
-  return adminClient.post(AUTH.ADMIN_LOGIN, {
-    email: trimmedEmail,
-    password: passwordStr,
-  });
+  const passwordStr = String(password ?? '');
+  if (!passwordStr) return Promise.reject(new Error('Password is required'));
+  if (passwordStr.length < 6) return Promise.reject(new Error('Password must be at least 6 characters'));
+  return adminClient.post(AUTH.ADMIN_LOGIN, { email: trimmedEmail, password: passwordStr });
 }
 
-/**
- * Refresh access token.
- * @param {string} refreshToken
- * @returns {Promise<{ data }>} data.accessToken
- */
-export function refreshToken(refreshToken) {
-  if (!refreshToken)
-    return Promise.reject(new Error("Refresh token is required"));
-  return apiClient.post(AUTH.REFRESH_TOKEN, { refreshToken });
+export function refreshToken(refreshToken = null) {
+  return apiClient.post(AUTH.REFRESH_TOKEN, refreshToken ? { refreshToken } : {});
 }
 
-/**
- * Logout (invalidate refresh token).
- * @param {string} refreshToken
- * @param {string} fcmToken
- * @param {string} platform
- */
-export function logout(refreshToken, fcmToken = null, platform = "web") {
-  if (!refreshToken) return Promise.resolve({ data: { success: true } });
-
-  const payload = { refreshToken };
+export function logout(refreshToken = null, fcmToken = null, platform = 'web') {
+  const payload = {};
+  if (refreshToken) payload.refreshToken = refreshToken;
   if (fcmToken) {
     payload.fcmToken = fcmToken;
     payload.platform = platform;
   }
-
   clearMeCache();
   return apiClient.post(AUTH.LOGOUT, payload);
 }
 
-/** 
- * Clear all local /me caches (resets on logout or new login) 
- */
 export function clearMeCache() {
   meCache.clear();
   meInFlight.clear();
 }
 
-/**
- * Get current profile (requires Bearer).
- * @param {string} [module] - "user" | "admin" | "restaurant" | "delivery" (which token to send; default "user")
- */
-export function getMe(module = "user") {
-  const m = String(module || "user");
-  // Deduplicate /me calls to avoid request storms (and accidental 429s)
-  // across multiple components mounting at once.
-  return getMeOnce(m);
+export function getMe(module = 'user') {
+  return getMeOnce(String(module || 'user'));
 }
 
-// ---- /me in-flight + short cache (per module) ----
 const ME_CACHE_MS = 3000;
-const meCache = new Map(); // module -> { at, res }
-const meInFlight = new Map(); // module -> Promise
+const meCache = new Map();
+const meInFlight = new Map();
+const meBackoff = new Map();
+const BACKOFF_MS = 10000;
 
-function hasAccessToken(module) {
+function hasModuleSession(module) {
   try {
-    return Boolean(localStorage.getItem(`${module}_accessToken`));
+    return (
+      localStorage.getItem(`${module}_authenticated`) === 'true' ||
+      Boolean(localStorage.getItem(`${module}_user`))
+    );
   } catch {
     return false;
   }
 }
 
-// module -> { at, backoffUntil }
-const meBackoff = new Map();
-const BACKOFF_MS = 10000; // 10s wait on 429
-
 function getMeOnce(module) {
   const now = Date.now();
-  
-  // 1. Check Backoff (e.g. from previous 429)
   const backoff = meBackoff.get(module);
   if (backoff && now < backoff) {
-    return Promise.reject(new Error("Rate limited. Retrying too soon."));
+    return Promise.reject(new Error('Rate limited. Retrying too soon.'));
   }
 
-  // 2. Check Cache
   const cached = meCache.get(module);
   if (cached && now - cached.at < ME_CACHE_MS) {
     return Promise.resolve(cached.res);
   }
 
-  // 3. Check Auth Status
-  if (!hasAccessToken(module)) {
-    return Promise.reject(new Error("Not authenticated"));
+  if (!hasModuleSession(module)) {
+    return Promise.reject(new Error('Not authenticated'));
   }
 
-  // 4. Return In-Flight Promise
   const existing = meInFlight.get(module);
   if (existing) return existing;
 
-  const clients = {
-    user: userClient,
-    restaurant: restaurantClient,
-    delivery: deliveryClient,
-    admin: adminClient,
-  };
+  const clients = { user: userClient, restaurant: restaurantClient, delivery: deliveryClient, admin: adminClient };
   const client = clients[module] || apiClient;
 
   const p = client
@@ -245,22 +148,17 @@ function getMeOnce(module) {
   return p;
 }
 
-/**
- * Restaurant OTP auth (backend: same phone format as user, 4-digit OTP e.g. 1234).
- */
 export function requestRestaurantOtp(phone) {
   const normalized = normalizePhone(phone);
-  if (normalized.length < 8) {
-    return Promise.reject(new Error("Phone must be at least 8 digits"));
-  }
+  if (normalized.length < 8) return Promise.reject(new Error('Phone must be at least 8 digits'));
   return restaurantClient.post(AUTH.RESTAURANT_REQUEST_OTP, { phone: normalized });
 }
 
-export function verifyRestaurantOtp(phone, otp, fcmToken = null, platform = "web") {
+export function verifyRestaurantOtp(phone, otp, fcmToken = null, platform = 'web') {
   const normalized = normalizePhone(phone);
-  const otpStr = String(otp).replace(/\D/g, "").slice(0, 4);
+  const otpStr = String(otp).replace(/\D/g, '').slice(0, 4);
   if (!normalized || otpStr.length !== 4) {
-    return Promise.reject(new Error("Phone and 4-digit OTP are required"));
+    return Promise.reject(new Error('Phone and 4-digit OTP are required'));
   }
   return restaurantClient.post(AUTH.RESTAURANT_VERIFY_OTP, {
     phone: normalized,
@@ -269,22 +167,17 @@ export function verifyRestaurantOtp(phone, otp, fcmToken = null, platform = "web
   });
 }
 
-/**
- * Delivery partner OTP auth (backend: same phone + 4-digit OTP).
- */
 export function requestDeliveryOtp(phone) {
   const normalized = normalizePhone(phone);
-  if (normalized.length < 8) {
-    return Promise.reject(new Error("Phone must be at least 8 digits"));
-  }
+  if (normalized.length < 8) return Promise.reject(new Error('Phone must be at least 8 digits'));
   return deliveryClient.post(AUTH.DELIVERY_REQUEST_OTP, { phone: normalized });
 }
 
-export function verifyDeliveryOtp(phone, otp, fcmToken = null, platform = "web") {
+export function verifyDeliveryOtp(phone, otp, fcmToken = null, platform = 'web') {
   const normalized = normalizePhone(phone);
-  const otpStr = String(otp).replace(/\D/g, "").slice(0, 4);
+  const otpStr = String(otp).replace(/\D/g, '').slice(0, 4);
   if (!normalized || otpStr.length !== 4) {
-    return Promise.reject(new Error("Phone and 4-digit OTP are required"));
+    return Promise.reject(new Error('Phone and 4-digit OTP are required'));
   }
   return deliveryClient.post(AUTH.DELIVERY_VERIFY_OTP, {
     phone: normalized,

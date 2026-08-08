@@ -282,23 +282,9 @@ export default function DeliveryOTP() {
       setSuccess(true)
       setIsLoading(false)
 
-      let retryCount = 0
-      const maxRetries = 10
-      const verifyAndNavigate = () => {
-        const storedToken = getModuleToken("delivery")
-        const storedAuth = localStorage.getItem("delivery_authenticated")
-
-        if (storedToken && storedAuth === "true") {
-          navigate("/food/delivery", { replace: true })
-        } else if (retryCount < maxRetries) {
-          retryCount++
-          setTimeout(verifyAndNavigate, 100)
-        } else {
-          setError("Failed to save authentication. Please try again.")
-          setIsLoading(false)
-        }
-      }
-      setTimeout(verifyAndNavigate, 200)
+      setTimeout(() => {
+        navigate("/food/delivery", { replace: true })
+      }, 500)
     } catch (err) {
       debugError("OTP Verification Error:", err)
       const message =
@@ -369,33 +355,9 @@ export default function DeliveryOTP() {
       setSuccess(true)
       setIsLoading(false)
 
-      // Verify token is stored and then navigate
-      let retryCount = 0
-      const maxRetries = 10
-      const verifyAndNavigate = () => {
-        const storedToken = getModuleToken("delivery")
-        const storedAuth = localStorage.getItem("delivery_authenticated")
-
-        debugLog("Verifying token storage (with name):", { hasToken: !!storedToken, authenticated: storedAuth, retryCount })
-
-        if (storedToken && storedAuth === "true") {
-          // Token is stored, navigate to delivery home
-          debugLog("Token verified, navigating to /delivery")
-          navigate("/food/delivery", { replace: true })
-        } else if (retryCount < maxRetries) {
-          // Token not stored yet, retry after short delay
-          retryCount++
-          setTimeout(verifyAndNavigate, 100)
-        } else {
-          // Max retries reached, show error
-          debugError("Token storage verification failed after max retries")
-          setError("Failed to save authentication. Please try again.")
-          setIsLoading(false)
-        }
-      }
-
-      // Start verification after a small delay
-      setTimeout(verifyAndNavigate, 200)
+      setTimeout(() => {
+        navigate("/food/delivery", { replace: true })
+      }, 500)
     } catch (err) {
       debugError("Name Submission Error:", err)
       const message =

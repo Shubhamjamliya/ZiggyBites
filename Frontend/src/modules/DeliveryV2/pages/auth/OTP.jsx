@@ -5,7 +5,7 @@ import AnimatedPage from "@food/components/user/AnimatedPage"
 import { Input } from "@food/components/ui/input"
 import { Button } from "@food/components/ui/button"
 import { deliveryAPI } from "@food/api"
-import { setAuthData as storeAuthData } from "@food/utils/auth"
+import { setAuthData as storeAuthData, getModuleToken } from "@food/utils/auth"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -38,7 +38,7 @@ export default function DeliveryOTP() {
       setAuthData(data)
     } else {
       // No active OTP flow: if already authenticated, go to delivery home
-      const token = localStorage.getItem("delivery_accessToken")
+      const token = getModuleToken("delivery")
       const authenticated = localStorage.getItem("delivery_authenticated") === "true"
       if (token && authenticated) {
         try {
@@ -285,7 +285,7 @@ export default function DeliveryOTP() {
       let retryCount = 0
       const maxRetries = 10
       const verifyAndNavigate = () => {
-        const storedToken = localStorage.getItem("delivery_accessToken")
+        const storedToken = getModuleToken("delivery")
         const storedAuth = localStorage.getItem("delivery_authenticated")
 
         if (storedToken && storedAuth === "true") {
@@ -373,7 +373,7 @@ export default function DeliveryOTP() {
       let retryCount = 0
       const maxRetries = 10
       const verifyAndNavigate = () => {
-        const storedToken = localStorage.getItem("delivery_accessToken")
+        const storedToken = getModuleToken("delivery")
         const storedAuth = localStorage.getItem("delivery_authenticated")
 
         debugLog("Verifying token storage (with name):", { hasToken: !!storedToken, authenticated: storedAuth, retryCount })

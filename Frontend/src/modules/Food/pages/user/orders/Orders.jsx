@@ -12,8 +12,12 @@ const debugError = (...args) => {}
 
 export default function Orders() {
   const navigate = useNavigate()
-  const { orders, loading, patchOrder } = useOrders()
+  const { orders, loading, patchOrder, refreshOrders } = useOrders()
   const [searchQuery, setSearchQuery] = useState("")
+
+  useEffect(() => {
+    refreshOrders?.().catch(() => {})
+  }, [refreshOrders])
   const [activeTab, setActiveTab] = useState('today') // 'today' or 'past'
   const [ratingModal, setRatingModal] = useState({ open: false, order: null })
   const [activeMenuOrderId, setActiveMenuOrderId] = useState(null)

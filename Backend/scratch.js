@@ -1,6 +1,14 @@
 import mongoose from 'mongoose';
+import dotenv from 'dotenv';
+dotenv.config();
 
-mongoose.connect('mongodb+srv://indianbites:indianbites@indianbites.y39vhkd.mongodb.net/IndianBites').then(async () => {
+const MONGODB_URI = process.env.MONGODB_URI;
+if (!MONGODB_URI) {
+  console.error('❌ MONGODB_URI is not set in environment or .env file');
+  process.exit(1);
+}
+
+mongoose.connect(MONGODB_URI).then(async () => {
   const cols = await mongoose.connection.db.collections();
   const id1 = new mongoose.Types.ObjectId('6a26ac7e1184b06ea0b261ba');
   const id2 = new mongoose.Types.ObjectId('6a26b8f23dd26fd4263a4a51');

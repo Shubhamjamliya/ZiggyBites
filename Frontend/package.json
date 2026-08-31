@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "scan:security": "bash ../scripts/security-scan.sh",
+    "scan:security": "node ../scripts/security-scan.js",
     "preview": "vite preview"
   },
   "dependencies": {

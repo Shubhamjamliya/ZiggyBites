@@ -1,6 +1,11 @@
 const mongoose = require('mongoose');
+require('dotenv').config();
 
-const MONGODB_URI = "mongodb+srv://indianbites:indianbites@indianbites.y39vhkd.mongodb.net/IndianBites";
+const MONGODB_URI = process.env.MONGODB_URI;
+if (!MONGODB_URI) {
+  console.error('❌ MONGODB_URI is not set in environment or .env file');
+  process.exit(1);
+}
 
 async function check() {
   await mongoose.connect(MONGODB_URI);

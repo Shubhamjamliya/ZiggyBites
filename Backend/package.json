@@ -19,7 +19,7 @@
     "migrate:legacy-core": "node scripts/migrate-legacy-core-data.js",
     "migrate:legacy-core:apply": "node scripts/migrate-legacy-core-data.js --apply",
     "cleanup:legacy-collections": "node scripts/cleanup-legacy-collections.js",
-    "scan:security": "bash ../scripts/security-scan.sh",
+    "scan:security": "node ../scripts/security-scan.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],

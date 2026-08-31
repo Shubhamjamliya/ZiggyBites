@@ -3,7 +3,11 @@ import dotenv from 'dotenv';
 import bcrypt from 'bcryptjs';
 dotenv.config();
 
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://IndinaFoods:IndinaFoods@cluster0.gptsvku.mongodb.net/?appName=Cluster0';
+const MONGODB_URI = process.env.MONGODB_URI;
+if (!MONGODB_URI) {
+  console.error('❌ MONGODB_URI is not set in environment or .env file');
+  process.exit(1);
+}
 
 mongoose.connect(MONGODB_URI, { useNewUrlParser: true, useUnifiedTopology: true })
   .then(async () => {

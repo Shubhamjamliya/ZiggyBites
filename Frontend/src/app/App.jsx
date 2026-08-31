@@ -3,19 +3,81 @@ import AppRoutes from './routes'
 import SplashScreen from '@/shared/components/SplashScreen.jsx'
 import { publicGetOnce } from '@food/api'
 
+function isReloadNavigation() {
+  if (typeof window === 'undefined') return false
+  try {
+    const navEntries = window.performance?.getEntriesByType?.('navigation')
+    if (navEntries && navEntries.length > 0) {
+      return navEntries[0].type === 'reload'
+    }
+    return window.performance?.navigation?.type === 1
+  } catch {
+    return false
+  }
+}
+
+function shouldSkipSplashScreen() {
+  if (typeof window === 'undefined') return false
+
+  // 1. Skip if page was reloaded / refreshed
+  if (isReloadNavigation()) return true
+
+  // 2. Skip if splash screen was already displayed in this browser session
+  try {
+    if (sessionStorage.getItem('splash_shown') === 'true') {
+      return true
+    }
+  } catch {}
+
+  // 3. Skip if on Delivery registration, Delivery auth, or partner/admin routes
+  const pathname = String(window.location.pathname || '').toLowerCase()
+  const hash = String(window.location.hash || '').toLowerCase()
+  const fullPath = `${pathname} ${hash}`
+
+  if (
+    fullPath.includes('/delivery') ||
+    fullPath.includes('/signup') ||
+    fullPath.includes('/register') ||
+    fullPath.includes('/admin') ||
+    fullPath.includes('/restaurant') ||
+    fullPath.includes('/terms') ||
+    fullPath.includes('/privacy') ||
+    fullPath.includes('/support')
+  ) {
+    return true
+  }
+
+  return false
+}
+
 function App() {
-  const [showSplash, setShowSplash] = useState(true)
-  const [isSplashDecisionReady, setIsSplashDecisionReady] = useState(false)
+  const [showSplash, setShowSplash] = useState(() => !shouldSkipSplashScreen())
+  const [isSplashDecisionReady, setIsSplashDecisionReady] = useState(() => shouldSkipSplashScreen())
   const [isLoading, setIsLoading] = useState(false)
 
   useEffect(() => {
     let mounted = true
 
+    if (shouldSkipSplashScreen()) {
+      try {
+        sessionStorage.setItem('splash_shown', 'true')
+      } catch {}
+      setShowSplash(false)
+      setIsSplashDecisionReady(true)
+      return
+    }
+
     publicGetOnce('/food/landing/settings/public')
       .then((response) => {
         if (!mounted) return
         const settings = response?.data?.data || {}
-        setShowSplash(settings.showSplashScreen !== false)
+        const enabled = settings.showSplashScreen !== false
+        setShowSplash(enabled)
+        if (!enabled) {
+          try {
+            sessionStorage.setItem('splash_shown', 'true')
+          } catch {}
+        }
       })
       .catch(() => {
         if (!mounted) return
@@ -31,6 +93,9 @@ function App() {
   }, [])
 
   const handleSplashFinish = () => {
+    try {
+      sessionStorage.setItem('splash_shown', 'true')
+    } catch {}
     setShowSplash(false)
   }
 
@@ -60,3 +125,4 @@ function App() {
 }
 
 export default App
+

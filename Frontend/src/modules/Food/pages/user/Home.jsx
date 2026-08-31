@@ -861,6 +861,33 @@ export default function Home() {
     };
   }, [showVegModePopup]);
 
+  // Lock body scroll when any veg mode modal or overlay is active
+  useEffect(() => {
+    const isModalOpen =
+      showSwitchOffPopup ||
+      showVegModePopup ||
+      isSwitchingOffVegMode ||
+      isApplyingVegMode ||
+      showAllCategoriesModal;
+
+    if (isModalOpen) {
+      const originalOverflow = document.body.style.overflow;
+      const originalTouchAction = document.body.style.touchAction;
+      document.body.style.overflow = "hidden";
+      document.body.style.touchAction = "none";
+      return () => {
+        document.body.style.overflow = originalOverflow;
+        document.body.style.touchAction = originalTouchAction;
+      };
+    }
+  }, [
+    showSwitchOffPopup,
+    showVegModePopup,
+    isSwitchingOffVegMode,
+    isApplyingVegMode,
+    showAllCategoriesModal,
+  ]);
+
   // Keep index within current banner bounds after admin updates/reloads.
   useEffect(() => {
     setCurrentBannerIndex((prev) => {
@@ -2838,13 +2865,15 @@ export default function Home() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
+              onTouchMove={(e) => e.preventDefault()}
+              onWheel={(e) => e.preventDefault()}
               onClick={() => {
                 setShowVegModePopup(false);
                 // Revert veg mode to OFF if popup is closed without applying
                 setVegModeContext(false);
                 setPrevVegMode(false);
               }}
-              className="fixed inset-0 bg-black/30 z-[9998] backdrop-blur-sm"
+              className="fixed inset-0 bg-black/30 z-[9998] backdrop-blur-sm touch-none overscroll-contain"
             />
 
             {/* Popup */}
@@ -2858,7 +2887,9 @@ export default function Home() {
                 stiffness: 300,
                 mass: 0.8,
               }}
-              className="fixed z-[9999] bg-white dark:bg-[#1a1a1a] rounded-2xl shadow-2xl p-4 w-[calc(100%-2rem)] max-w-xs"
+              onTouchMove={(e) => e.stopPropagation()}
+              onWheel={(e) => e.stopPropagation()}
+              className="fixed z-[9999] bg-white dark:bg-[#1a1a1a] rounded-2xl shadow-2xl p-4 w-[calc(100%-2rem)] max-w-xs overscroll-contain"
               style={{
                 top: `${popupPosition.top}px`,
                 left: `${popupPosition.left}px`,
@@ -2968,13 +2999,15 @@ export default function Home() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
+              onTouchMove={(e) => e.preventDefault()}
+              onWheel={(e) => e.preventDefault()}
               onClick={() => {
                 setShowSwitchOffPopup(false);
                 isHandlingSwitchOff.current = false;
                 setVegModeContext(true);
                 // prevVegMode stays true (from before), which is correct
               }}
-              className="fixed inset-0 bg-black/50 z-[9998] backdrop-blur-sm"
+              className="fixed inset-0 bg-black/50 z-[9998] backdrop-blur-sm touch-none overscroll-contain"
             />
 
             {/* Popup */}
@@ -2988,7 +3021,9 @@ export default function Home() {
                 stiffness: 300,
                 mass: 0.8,
               }}
-              className="fixed inset-0 z-[9999] flex dark:bg-[#lalala] dark:text-white items-center justify-center p-4"
+              onTouchMove={(e) => e.stopPropagation()}
+              onWheel={(e) => e.stopPropagation()}
+              className="fixed inset-0 z-[9999] flex dark:bg-[#lalala] dark:text-white items-center justify-center p-4 touch-none overscroll-contain"
               onClick={(e) => e.stopPropagation()}>
               <div className="bg-white dark:bg-[#lalala] dark:text-white rounded-2xl shadow-2xl w-[85%] max-w-sm p-6">
                 {/* Warning Icon */}

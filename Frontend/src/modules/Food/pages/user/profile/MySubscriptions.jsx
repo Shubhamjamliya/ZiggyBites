@@ -37,10 +37,14 @@ const getStatusClasses = (status) => {
 
 export default function MySubscriptions() {
   const navigate = useNavigate();
-  const { subscriptions, loading } = useSubscriptions();
+  const { subscriptions, loading, refreshSubscriptions } = useSubscriptions();
   const [activeTab, setActiveTab] = useState("my"); // "my" | "explore"
   const [availablePlans, setAvailablePlans] = useState([]);
   const [loadingPlans, setLoadingPlans] = useState(false);
+
+  useEffect(() => {
+    refreshSubscriptions().catch(() => {});
+  }, [refreshSubscriptions]);
 
   useEffect(() => {
     let cancelled = false;

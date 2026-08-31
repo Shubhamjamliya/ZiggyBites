@@ -16,6 +16,7 @@ import { initRazorpayPayment } from "@food/utils/razorpay";
 import { getCompanyNameAsync } from "@food/utils/businessSettings";
 import { useProfile } from "@food/context/ProfileContext";
 import { useLocation as useUserLocation } from "@food/hooks/useLocation";
+import { useSubscriptions } from "@food/context/SubscriptionsContext";
 import { DEFAULT_APP_CUSTOMIZATION, loadAppCustomization } from "@food/utils/appCustomization";
 
 const RUPEE_SYMBOL = "\u20B9";
@@ -52,6 +53,7 @@ export default function SubscriptionCheckout() {
   const location = useLocation();
   const { userProfile, getDefaultAddress, isAuthenticated } = useProfile();
   const { location: currentLocation } = useUserLocation();
+  const { refreshSubscriptions } = useSubscriptions();
 
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
   const [appCustomization, setAppCustomization] = useState(DEFAULT_APP_CUSTOMIZATION);
@@ -277,7 +279,12 @@ export default function SubscriptionCheckout() {
         }
 
         toast.success("Subscription activated successfully.");
-        navigate("/food/user/profile", { replace: true });
+        try {
+          await refreshSubscriptions();
+        } catch {
+          // ignore refresh error
+        }
+        navigate("/food/user/profile/subscriptions", { replace: true });
         setIsPlacingOrder(false);
         return;
       }
@@ -343,7 +350,12 @@ export default function SubscriptionCheckout() {
             }
 
             toast.success("Subscription activated successfully.");
-            navigate("/food/user/profile", { replace: true });
+            try {
+              await refreshSubscriptions();
+            } catch {
+              // ignore refresh error
+            }
+            navigate("/food/user/profile/subscriptions", { replace: true });
           } catch (error) {
             if (error?.response?.status === 401) {
               toast.info("Please login to continue.");

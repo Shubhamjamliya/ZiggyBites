@@ -1,8 +1,7 @@
 import { useState, useEffect } from "react"
 import { Link, useNavigate } from "react-router-dom"
-import { ArrowLeft, Search, MoreVertical, ChevronRight, Star, RotateCcw, AlertCircle, Loader2, Clock, X, Share2, MessageCircle, Send, Copy, Mail, MessagesSquare, Link2, Phone } from "lucide-react"
+import { ArrowLeft, Search, MoreVertical, ChevronRight, Star, AlertCircle, Loader2, Clock, X, Share2, MessageCircle, Send, Copy, Mail, MessagesSquare, Link2, Phone } from "lucide-react"
 import { orderAPI } from "@food/api"
-import { useCart } from "@food/context/CartContext"
 import { useOrders } from "@food/context/OrdersContext"
 import { toast } from "sonner"
 import { getCompanyNameAsync } from "@food/utils/businessSettings"
@@ -13,7 +12,6 @@ const debugError = (...args) => {}
 
 export default function Orders() {
   const navigate = useNavigate()
-  const { replaceCart } = useCart()
   const { orders, loading, patchOrder } = useOrders()
   const [searchQuery, setSearchQuery] = useState("")
   const [activeTab, setActiveTab] = useState('today') // 'today' or 'past'
@@ -225,45 +223,6 @@ export default function Orders() {
   const ratingSubmitDisabled = submittingRating ||
     selectedRestaurantRating === null ||
     (ratingModalHasDeliveryPartner && selectedDeliveryRating === null)
-
-  // Handle reorder
-  const handleReorder = (order) => {
-    const restaurantTarget = order.restaurantSlug || order.restaurantId
-
-    if (!restaurantTarget || !order.items?.length) {
-      toast.info('Order items or restaurant information not available')
-      return
-    }
-
-    const reorderItems = order.items
-      .map((item, index) => {
-        const itemId = item.id || item.itemId || item._id
-        if (!itemId) return null
-
-        return {
-          id: itemId,
-          name: item.name || item.foodName || "Item",
-          price: Number(item.price) || 0,
-          image: item.image || "",
-          restaurant: order.restaurant || "Restaurant",
-          restaurantId: order.restaurantId,
-          description: item.description || "",
-          isVeg: item.isVeg !== false,
-          quantity: Math.max(1, Number(item.quantity) || 1),
-          reorderIndex: index,
-        }
-      })
-      .filter(Boolean)
-
-    if (!reorderItems.length) {
-      toast.error("No reorderable items found in this order")
-      return
-    }
-
-    replaceCart(reorderItems)
-    toast.success("Items added to cart")
-    navigate(`/food/user/restaurants/${restaurantTarget}`)
-  }
 
   // Three-dots menu handlers
   const toggleMenuForOrder = (orderId) => {
@@ -901,17 +860,6 @@ Order again from this restaurant in the ${companyName} app.`
                         </div>
                       )}
                     </div>
-                  )}
-
-                  {/* Right Side: Reorder Button */}
-                  {isDelivered && !paymentFailed && (
-                    <button
-                      onClick={() => handleReorder(order)}
-                      className="bg-primary hover:bg-secondary text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-1 shadow-sm transition-colors"
-                    >
-                      <RotateCcw className="w-3.5 h-3.5" />
-                      Reorder
-                    </button>
                   )}
                 </div>
               </div>

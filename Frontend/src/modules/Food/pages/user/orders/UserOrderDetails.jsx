@@ -11,11 +11,9 @@ import {
   CreditCard,
   Calendar,
   MapPin,
-  RotateCcw,
   FileText,
 } from "lucide-react"
 import { orderAPI, restaurantAPI } from "@food/api"
-import { useCart } from "@food/context/CartContext"
 import { toast } from "sonner"
 import { jsPDF } from "jspdf"
 import autoTable from "jspdf-autotable"
@@ -29,7 +27,6 @@ const debugError = (...args) => {}
 export default function UserOrderDetails() {
   const navigate = useNavigate()
   const goBack = useAppBackNavigation()
-  const { replaceCart } = useCart()
   const { orderId } = useParams()
   const [order, setOrder] = useState(null)
   const [restaurant, setRestaurant] = useState(null)
@@ -439,48 +436,6 @@ export default function UserOrderDetails() {
     }
   }
 
-  const handleReorder = (currentOrder) => {
-    const restaurantTarget =
-      restaurantObj.slug ||
-      restaurantObj._id ||
-      restaurantObj.restaurantId ||
-      (typeof currentOrder?.restaurantId === "string" ? currentOrder.restaurantId : currentOrder?.restaurantId?._id)
-
-    if (!restaurantTarget || !items.length) {
-      toast.error("Order items or restaurant information not available")
-      return
-    }
-
-    const reorderItems = items
-      .map((item, index) => {
-        const itemId = item.id || item.itemId || item._id
-        if (!itemId) return null
-
-        return {
-          id: itemId,
-          name: item.name || item.foodName || "Item",
-          price: Number(item.price) || 0,
-          image: item.image || "",
-          restaurant: restaurantName,
-          restaurantId: restaurantObj._id || restaurantObj.restaurantId || currentOrder?.restaurantId,
-          description: item.description || "",
-          isVeg: item.isVeg === true || item.foodType === 'Veg',
-          quantity: Math.max(1, Number(item.quantity || item.qty) || 1),
-          reorderIndex: index,
-        }
-      })
-      .filter(Boolean)
-
-    if (!reorderItems.length) {
-      toast.error("No reorderable items found in this order")
-      return
-    }
-
-    replaceCart(reorderItems)
-    toast.success("Items added to cart")
-    navigate(`/food/user/restaurants/${restaurantTarget}`)
-  }
-
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-[#0a0a0a] pb-24 font-sans relative">
       {/* Header */}
@@ -777,22 +732,14 @@ export default function UserOrderDetails() {
       </div>
 
       {/* Fixed Bottom Buttons */}
-      <div className="fixed bottom-0 w-full bg-white dark:bg-[#121212] border-t border-gray-200 dark:border-gray-800 p-4 flex gap-3 z-20">
-        <button
-          type="button"
-          onClick={() => handleReorder(order)}
-          className="flex-1 bg-primary text-white py-3 rounded-lg font-semibold flex items-center justify-center gap-2 hover:bg-secondary transition-all active:scale-95 shadow-md"
-        >
-          <RotateCcw className="w-4 h-4" />
-          Reorder
-        </button>
+      <div className="fixed bottom-0 w-full bg-white dark:bg-[#121212] border-t border-gray-200 dark:border-gray-800 p-4 z-20">
         <button
           type="button"
           onClick={handleDownloadSummary}
-          className="flex-1 bg-white dark:bg-[#1a1a1a] border border-primary text-primary py-3 rounded-lg font-semibold flex items-center justify-center gap-2 hover:bg-primary/5 transition-colors"
+          className="w-full bg-primary hover:bg-secondary text-white py-3 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all active:scale-[0.99] shadow-md text-sm"
         >
           <Download className="w-4 h-4" />
-          Invoice
+          Download Invoice
         </button>
       </div>
 

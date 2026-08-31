@@ -1429,6 +1429,28 @@ function RestaurantDetailsContent() {
       .filter(Boolean)
   }, [restaurant?.menuSections])
 
+  const isPureVegRestaurant = Boolean(
+    restaurant?.pureVegRestaurant === true ||
+    restaurant?.isPureVeg === true ||
+    restaurant?.vegOnly === true ||
+    restaurant?.restaurantType === "veg" ||
+    restaurant?.foodType === "Veg"
+  )
+
+  const hasNonVegDishes = useMemo(() => {
+    if (isPureVegRestaurant) return false
+    if (!restaurant?.menuSections || !Array.isArray(restaurant.menuSections)) return true
+    const allItems = restaurant.menuSections.flatMap(section => [
+      ...(Array.isArray(section?.items) ? section.items : []),
+      ...(Array.isArray(section?.subsections) ? section.subsections.flatMap(sub => Array.isArray(sub?.items) ? sub.items : []) : [])
+    ])
+    if (allItems.length === 0) return true
+    return allItems.some(item => {
+      const ft = String(item?.foodType || "").toLowerCase()
+      return ft === "non-veg" || ft === "nonveg" || ft === "non_veg" || item?.isVeg === false
+    })
+  }, [restaurant, isPureVegRestaurant])
+
   // Count active filters
   const getActiveFilterCount = () => {
     let count = 0
@@ -2683,7 +2705,7 @@ function RestaurantDetailsContent() {
                       )}
                     </Button>
                   )}
-                  {vegModeOption !== "pure-veg" && !vegMode && (
+                  {hasNonVegDishes && vegModeOption !== "pure-veg" && !vegMode && (
                     <Button
                       variant="outline"
                       size="sm"
@@ -3193,7 +3215,7 @@ function RestaurantDetailsContent() {
                             <div className="h-4 w-4 rounded-full bg-green-600 dark:bg-green-500" />
                             <span className="font-medium">Veg</span>
                           </button>
-                          {!vegMode && (
+                          {hasNonVegDishes && !vegMode && (
                             <button
                               onClick={() =>
                                 setFilters((prev) => ({

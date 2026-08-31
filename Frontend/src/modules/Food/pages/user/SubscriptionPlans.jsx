@@ -132,12 +132,25 @@ export default function SubscriptionPlans() {
               <p className="text-[11px] font-bold uppercase tracking-wider text-[#e3282c]">
                 Your Selection
               </p>
-              <p className="mt-2 text-sm font-bold text-gray-900">
-                You have selected {selectedMealCount} meal{selectedMealCount === 1 ? "" : "s"}.
-              </p>
-              <p className="mt-0.5 text-xs font-medium text-gray-600">
-                Price will be calculated based on this selection.
-              </p>
+              {selectedDishPrice > 0 ? (
+                <>
+                  <p className="mt-2 text-sm font-bold text-gray-900 truncate">
+                    {dish.name || "Selected meal"} ({selectedMealCount} meal{selectedMealCount === 1 ? "" : "s"})
+                  </p>
+                  <p className="mt-0.5 text-xs font-medium text-gray-600">
+                    INR {selectedDishPrice.toLocaleString("en-IN")}/meal {dish.restaurantName ? `• ${dish.restaurantName}` : ""}
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="mt-2 text-sm font-bold text-gray-900">
+                    No meal selected yet
+                  </p>
+                  <p className="mt-0.5 text-xs font-medium text-gray-600">
+                    Choose a plan below, then pick your daily meal.
+                  </p>
+                </>
+              )}
             </div>
             <button
               type="button"
@@ -147,10 +160,10 @@ export default function SubscriptionPlans() {
                   search: `?dish=${encodeURIComponent(dish.name || "")}&dishId=${encodeURIComponent(dish.itemId || dish.id || "")}&restaurant=${encodeURIComponent(dish.restaurantName || "")}&restaurantId=${encodeURIComponent(dish.restaurantId || "")}&category=${encodeURIComponent(dish.categoryName || "")}${dish.price ? `&price=${encodeURIComponent(dish.price)}` : ""}`,
                 }, { state: { dish } })
               }
-              className="inline-flex shrink-0 items-center gap-1 text-xs font-bold text-[#e3282c] mt-1"
+              className="inline-flex shrink-0 items-center gap-1 text-xs font-bold text-[#e3282c] mt-1 hover:underline"
             >
               <Edit3 className="h-3.5 w-3.5" />
-              Edit Meals
+              {selectedDishPrice > 0 ? "Edit Meals" : "Choose Meal"}
             </button>
           </div>
         </section>
@@ -196,26 +209,32 @@ export default function SubscriptionPlans() {
                   <p className="mt-1 text-[15px] font-bold text-gray-900">
                     {selectedDishPrice > 0
                       ? `INR ${(selectedDishPrice * selectedMealCount * plan.durationDays).toLocaleString("en-IN")} + GST + delivery`
-                      : "Price is calculated from selected dish and duration"}
+                      : `From ~INR ${(99 * selectedMealCount * plan.durationDays).toLocaleString("en-IN")} (${plan.durationDays} Days)`}
                   </p>
                   <p className="mt-1 text-xs font-medium text-gray-500">
                     {selectedDishPrice > 0
                       ? `${plan.durationDays} days x ${selectedMealCount} meal${selectedMealCount === 1 ? "" : "s"} x INR ${selectedDishPrice.toLocaleString("en-IN")}`
-                      : "Select a priced dish to continue"}
+                      : "Calculated based on your selected daily meal dish"}
                   </p>
                 </div>
 
                 <button
                   type="button"
-                  disabled={selectedDishPrice <= 0}
-                  onClick={() =>
-                    navigate("/food/user/checkout", {
-                      state: { dish, selectedMeals, subscriptionPlan: plan },
-                    })
-                  }
-                  className="mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#e3282c] text-sm font-bold text-white transition active:bg-[#c42226] disabled:bg-gray-300 disabled:text-gray-500"
+                  onClick={() => {
+                    if (selectedDishPrice > 0) {
+                      navigate("/food/user/checkout", {
+                        state: { dish, selectedMeals, subscriptionPlan: plan },
+                      });
+                    } else {
+                      navigate({
+                        pathname: "/food/user/choose-meal",
+                        search: `?planId=${encodeURIComponent(plan.id || "")}&duration=${encodeURIComponent(plan.durationDays || "")}`,
+                      }, { state: { subscriptionPlan: plan } });
+                    }
+                  }}
+                  className="mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#e3282c] text-sm font-bold text-white transition active:bg-[#c42226]"
                 >
-                  {selectedDishPrice > 0 ? "Continue" : "Unavailable"}
+                  {selectedDishPrice > 0 ? "Continue to Checkout" : "Choose Meal & Subscribe"}
                   <ChevronRight className="h-4 w-4" />
                 </button>
 

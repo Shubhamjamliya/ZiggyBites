@@ -206,9 +206,15 @@ export default function OutletInfo() {
         payload.fssaiNumber = editFormData.fssaiNumber
         payload.fssaiExpiry = editFormData.fssaiExpiry
       } else if (editSection === 'bank') {
+        const ifsc = String(editFormData.ifscCode || '').trim().toUpperCase()
+        if (ifsc && !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(ifsc)) {
+          toast.error('Invalid IFSC code format (e.g. SBIN0001234)')
+          setSavingEdit(false)
+          return
+        }
         payload.accountHolderName = editFormData.accountHolderName
         payload.accountNumber = editFormData.accountNumber
-        payload.ifscCode = editFormData.ifscCode
+        payload.ifscCode = ifsc
         payload.upiId = editFormData.upiId
       }
       
@@ -568,7 +574,7 @@ export default function OutletInfo() {
                 </div>
                 <div>
                   <label className="text-[13px] font-bold text-gray-700 mb-1.5 block tracking-wide">IFSC Code</label>
-                  <Input className="h-12 rounded-xl bg-gray-50 border-gray-200 focus:bg-white focus:ring-2 focus:ring-[#E91E63]/20 focus:border-[#E91E63] transition-all text-base px-4 uppercase" value={editFormData.ifscCode || ''} onChange={e => setEditFormData({...editFormData, ifscCode: e.target.value})} placeholder="Enter IFSC code" />
+                  <Input className="h-12 rounded-xl bg-gray-50 border-gray-200 focus:bg-white focus:ring-2 focus:ring-[#E91E63]/20 focus:border-[#E91E63] transition-all text-base px-4 uppercase" value={editFormData.ifscCode || ''} onChange={e => setEditFormData({...editFormData, ifscCode: String(e.target.value || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 11)})} placeholder="e.g. SBIN0001234" maxLength={11} />
                 </div>
                 <div>
                   <label className="text-[13px] font-bold text-gray-700 mb-1.5 block tracking-wide">UPI ID</label>

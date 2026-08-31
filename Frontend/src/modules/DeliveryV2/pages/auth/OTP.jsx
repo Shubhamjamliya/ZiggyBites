@@ -91,18 +91,35 @@ export default function DeliveryOTP() {
   }, [otp])
 
   const handleChange = (index, value) => {
-    // Only allow digits
-    if (value && !/^\d$/.test(value)) {
+    const cleanDigits = String(value || "").replace(/\D/g, "")
+
+    // Case 1: Multi-digit input (e.g. pasted or autofilled via onChange)
+    if (cleanDigits.length > 1) {
+      const digits = cleanDigits.slice(0, 4).split("")
+      const newOtp = ["", "", "", ""]
+      digits.forEach((d, i) => {
+        newOtp[i] = d
+      })
+      setOtp(newOtp)
+      setError("")
+
+      if (!showNameInput && digits.length === 4) {
+        handleVerify(newOtp.join(""))
+      } else {
+        const nextIndex = Math.min(digits.length, 3)
+        inputRefs.current[nextIndex]?.focus()
+      }
       return
     }
 
+    // Case 2: Single-digit entry or clear
     const newOtp = [...otp]
-    newOtp[index] = value
+    newOtp[index] = cleanDigits
     setOtp(newOtp)
     setError("")
 
     // Auto-focus next input
-    if (value && index < 3) {
+    if (cleanDigits && index < 3) {
       inputRefs.current[index + 1]?.focus()
     }
 
@@ -128,43 +145,27 @@ export default function DeliveryOTP() {
         setOtp(newOtp)
       }
     }
-    // Handle paste
-    if (e.key === "v" && (e.ctrlKey || e.metaKey)) {
-      e.preventDefault()
-      navigator.clipboard.readText().then((text) => {
-        const digits = text.replace(/\D/g, "").slice(0, 4).split("")
-        const newOtp = [...otp]
-        digits.forEach((digit, i) => {
-          if (i < 4) {
-            newOtp[i] = digit
-          }
-        })
-        setOtp(newOtp)
-        if (digits.length === 4) {
-          handleVerify(newOtp.join(""))
-        } else {
-          inputRefs.current[digits.length]?.focus()
-        }
-      })
-    }
   }
 
   const handlePaste = (e) => {
     e.preventDefault()
-    const pastedData = e.clipboardData.getData("text")
+    const pastedData = e.clipboardData?.getData("text") || ""
     const digits = pastedData.replace(/\D/g, "").slice(0, 4).split("")
-    const newOtp = [...otp]
+    if (digits.length === 0) return
+
+    const newOtp = ["", "", "", ""]
     digits.forEach((digit, i) => {
-      if (i < 4) {
-        newOtp[i] = digit
-      }
+      newOtp[i] = digit
     })
     setOtp(newOtp)
+    setError("")
+
     if (!showNameInput && digits.length === 4) {
       handleVerify(newOtp.join(""))
       return
     }
-    inputRefs.current[digits.length]?.focus()
+    const nextIndex = Math.min(digits.length, 3)
+    inputRefs.current[nextIndex]?.focus()
   }
 
   const handleVerify = async (otpValue = null) => {
@@ -537,13 +538,13 @@ export default function DeliveryOTP() {
                     ref={(el) => (inputRefs.current[index] = el)}
                     type="text"
                     inputMode="numeric"
-                    maxLength={1}
+                    maxLength={4}
                     value={digit}
                     onChange={(e) => handleChange(index, e.target.value)}
                     onKeyDown={(e) => handleKeyDown(index, e)}
-                    onPaste={index === 0 ? handlePaste : undefined}
+                    onPaste={handlePaste}
                     disabled={isLoading}
-                    autoComplete="off"
+                    autoComplete="one-time-code"
                     autoFocus={false}
                     className="w-12 h-12 text-center text-lg font-semibold p-0 border border-black rounded-md focus-visible:ring-0 focus-visible:border-black bg-white"
                   />

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from "react"
+import React, { createContext, useContext, useState, useEffect, useMemo, useCallback, useRef } from "react"
 import { orderAPI } from "@food/api"
 
 const OrdersContext = createContext(null)
@@ -48,7 +48,8 @@ const getLastOrdersSyncTime = () => {
 }
 
 const hasFreshOrdersCache = (orders = []) =>
-  orders.length > 0 && Date.now() - getLastOrdersSyncTime() < ORDERS_STALE_MS
+  (orders.length > 0 || getLastOrdersSyncTime() > 0) &&
+  Date.now() - getLastOrdersSyncTime() < ORDERS_STALE_MS
 
 const transformOrders = (ordersData = []) => {
   const transformedOrders = ordersData.map((order) => {
@@ -64,6 +65,7 @@ const transformOrders = (ordersData = []) => {
     const isRestaurantCancelled =
       isCancelled &&
       (order.cancelledBy === "restaurant" ||
+        backendStatus === "cancelled_by_restaurant" ||
         /rejected by restaurant|restaurant rejected|restaurant cancelled|restaurant is too busy|item not available|outside delivery area|kitchen closing|technical issue|order not accepted within time limit|restaurant did not respond/i.test(
           cancellationReason,
         ))
@@ -77,6 +79,7 @@ const transformOrders = (ordersData = []) => {
       id: order._id?.toString() || order.orderId || `ORD-${order._id}`,
       mongoId: order._id,
       orderId: order.orderId || order._id?.toString(),
+      orderNumber: order.orderNumber || order.order_id || order._id || order.id,
       status: isRestaurantCancelled
         ? "restaurant_cancelled"
         : getOrderStatus({ ...order, status: backendStatus }),
@@ -85,39 +88,46 @@ const transformOrders = (ordersData = []) => {
       address: order.address || order.deliveryAddress || {},
       items: (order.items || []).map((item) => ({
         itemId: item.itemId || item._id || item.id,
-        name: item.name || item.foodName || "Item",
+        id: item._id || item.id || item.itemId || item.foodId,
+        _id: item._id || item.id,
+        name: item.name || item.foodName || item.title || "Item",
         variantName: item.variantName || "",
-        quantity: item.quantity || 1,
+        quantity: item.quantity || item.qty || 1,
         price: item.price || 0,
-        image: item.image || null,
+        image: item.image || item.imageUrl || null,
         description: item.description || null,
         isVeg:
           item.isVeg === true ||
           item.foodType === "Veg" ||
           item.category === "veg" ||
           item.type === "veg",
-        _id: item._id || item.id,
-        id: item.id || item._id,
       })),
-      total: order.pricing?.total || order.total || 0,
-      subtotal: order.pricing?.subtotal || 0,
-      deliveryFee: order.pricing?.deliveryFee || 0,
-      tax: order.pricing?.tax || 0,
+      total: order.pricing?.total || order.total || order.totalAmount || 0,
+      subtotal: order.pricing?.subtotal || order.subtotal || 0,
+      deliveryFee: order.pricing?.deliveryFee || order.deliveryFee || 0,
+      tax: order.pricing?.tax || order.tax || 0,
+      discount: order.pricing?.discount || order.discount || 0,
       pricing: order.pricing || {},
       payment: order.payment || {},
-      paymentMethod: order.payment?.method || order.paymentMethod,
+      paymentMethod: order.payment?.method || order.paymentMethod || "online",
+      paymentStatus: order.payment?.status || order.paymentStatus || "pending",
       restaurant:
         order.restaurantId?.restaurantName ||
         order.restaurantId?.name ||
         order.restaurantName ||
         "Restaurant",
-      restaurantId: order.restaurantId?._id || order.restaurantId,
+      restaurantId: order.restaurantId?._id || order.restaurantId?.id || order.restaurantId,
       restaurantSlug: order.restaurantId?.slug || null,
       restaurantImage:
-        order.restaurantId?.profileImage?.url || order.restaurantId?.profileImage || null,
+        order.restaurantId?.profileImage?.url ||
+        order.restaurantId?.coverImage?.url ||
+        order.restaurantId?.profileImage ||
+        order.restaurantImage ||
+        null,
       restaurantLocation:
         order.restaurantId?.location?.area ||
         order.restaurantId?.location?.city ||
+        order.restaurantAddress ||
         order.address?.city ||
         order.deliveryAddress?.city ||
         "",
@@ -131,12 +141,13 @@ const transformOrders = (ordersData = []) => {
       isRestaurantCancelled,
       isUserCancelled,
       isDead,
-      cancelledBy: order.cancelledBy,
+      cancelledBy: order.cancelledBy || (isRestaurantCancelled ? "restaurant" : isCancelled ? "user" : null),
       eta: order.eta || {
         min: order.estimatedDeliveryTime || 30,
         max: order.estimatedDeliveryTime || 30,
       },
-      estimatedDeliveryTime: order.estimatedDeliveryTime || 30,
+      estimatedDeliveryTime: order.estimatedDeliveryTime || order.eta || 30,
+      deliveryAddress: order.deliveryAddress?.address || order.deliveryAddress?.formattedAddress || order.deliveryAddress || order.address || "Home",
       preparationTime: order.preparationTime || 0,
       deliveredAt: order.deliveredAt || null,
       deliveryPartnerId: order.deliveryPartnerId?._id || order.deliveryPartnerId || null,
@@ -205,6 +216,9 @@ export function OrdersProvider({ children }) {
       return []
     }
   })
+  const ordersRef = useRef(orders)
+  ordersRef.current = orders
+
   const [loading, setLoading] = useState(() => orders.length === 0 && isUserAuthenticated())
 
   useEffect(() => {
@@ -270,12 +284,13 @@ export function OrdersProvider({ children }) {
         return
       }
 
-      if (!force && hasFreshOrdersCache(orders)) {
+      const currentOrders = ordersRef.current
+      if (!force && hasFreshOrdersCache(currentOrders)) {
         setLoading(false)
         return
       }
 
-      refreshOrders({ silent: orders.length > 0 }).catch(() => {
+      refreshOrders({ silent: currentOrders.length > 0 }).catch(() => {
         setLoading(false)
       })
     }
@@ -310,7 +325,7 @@ export function OrdersProvider({ children }) {
         document.removeEventListener("visibilitychange", handleVisibilityChange)
       }
     }
-  }, [orders, hasActiveOrders, refreshOrders])
+  }, [hasActiveOrders, refreshOrders])
 
   const createOrder = (orderData) => {
     const newOrder = {

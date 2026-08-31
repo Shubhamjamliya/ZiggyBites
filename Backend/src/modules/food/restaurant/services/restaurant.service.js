@@ -797,7 +797,11 @@ export const updateRestaurantProfile = async (restaurantId, body = {}) => {
         update.accountNumber = String(body.accountNumber || '').replace(/\s|-/g, '').trim();
     }
     if (body.ifscCode !== undefined) {
-        update.ifscCode = String(body.ifscCode || '').trim().toUpperCase();
+        const trimmedIfsc = String(body.ifscCode || '').trim().toUpperCase();
+        if (trimmedIfsc && !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(trimmedIfsc)) {
+            throw new ValidationError('Invalid IFSC code format (e.g., SBIN0001234)');
+        }
+        update.ifscCode = trimmedIfsc;
     }
     if (body.accountType !== undefined) {
         update.accountType = String(body.accountType || '').trim();

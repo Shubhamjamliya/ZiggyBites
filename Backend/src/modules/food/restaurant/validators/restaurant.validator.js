@@ -18,6 +18,7 @@ const requiredBooleanSchema = z.preprocess((value) => {
 }, z.boolean({ required_error: 'Please select whether the restaurant is pure veg' }));
 
 const panRegex = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/;
+const ifscRegex = /^[A-Z]{4}0[A-Z0-9]{6}$/;
 
 const normalizeTimeValue = (value) => {
     const raw = String(value || '').trim();
@@ -98,7 +99,11 @@ const restaurantRegisterSchema = z.object({
     fssaiNumber: z.string().optional(),
     fssaiExpiry: z.string().optional(),
     accountNumber: z.string().optional(),
-    ifscCode: z.string().optional(),
+    ifscCode: z
+        .string()
+        .regex(ifscRegex, 'Invalid IFSC code format (e.g., SBIN0001234)')
+        .optional()
+        .or(z.literal('')),
     accountHolderName: z.string().optional(),
     accountType: z.string().optional()
 });

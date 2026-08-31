@@ -25,9 +25,9 @@ import { getGoogleMapsApiKey } from "@food/utils/googleMapsApiKey"
 import { clearModuleAuth, clearAuthData } from "@food/utils/auth"
 import { ImageSourcePicker } from "@food/components/ImageSourcePicker"
 import { EMAIL_REGEX } from "@/shared/utils/emailValidation"
-const debugLog = (...args) => {}
-const debugWarn = (...args) => {}
-const debugError = (...args) => {}
+const debugLog = (...args) => { }
+const debugWarn = (...args) => { }
+const debugError = (...args) => { }
 
 
 const daysOfWeek = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
@@ -118,7 +118,7 @@ const getAllFilesFromDB = async (keys) => {
     const db = await openOnboardingFilesDB()
     const tx = db.transaction(FILES_STORE, "readonly")
     const store = tx.objectStore(FILES_STORE)
-    
+
     const results = await Promise.all(
       keys.map(key => new Promise(resolve => {
         const req = store.get(key)
@@ -271,7 +271,7 @@ const findZoneForLocation = (lat, lng, zonesList) => {
       const xi = polygon[i].latitude, yi = polygon[i].longitude;
       const xj = polygon[j].latitude, yj = polygon[j].longitude;
       const intersect = ((yi > longitude) !== (yj > longitude)) &&
-          (latitude < (xj - xi) * (longitude - yi) / (yj - yi) + xi);
+        (latitude < (xj - xi) * (longitude - yi) / (yj - yi) + xi);
       if (intersect) isInside = !isInside;
     }
     return isInside;
@@ -298,12 +298,12 @@ const saveOnboardingToLocalStorage = (step1, step2, step3, currentStep) => {
       ),
       profileImage:
         !isUploadableFile(step2.profileImage) &&
-        (step2.profileImage?.url || (typeof step2.profileImage === "string" && step2.profileImage.trim()))
+          (step2.profileImage?.url || (typeof step2.profileImage === "string" && step2.profileImage.trim()))
           ? step2.profileImage
           : null,
       menuPdf:
         !isUploadableFile(step2.menuPdf) &&
-        (step2.menuPdf?.url || (typeof step2.menuPdf === "string" && step2.menuPdf.trim()))
+          (step2.menuPdf?.url || (typeof step2.menuPdf === "string" && step2.menuPdf.trim()))
           ? step2.menuPdf
           : null,
     }
@@ -312,17 +312,17 @@ const saveOnboardingToLocalStorage = (step1, step2, step3, currentStep) => {
       ...step3,
       panImage:
         !isUploadableFile(step3.panImage) &&
-        (step3.panImage?.url || (typeof step3.panImage === "string" && step3.panImage.trim()))
+          (step3.panImage?.url || (typeof step3.panImage === "string" && step3.panImage.trim()))
           ? step3.panImage
           : null,
       gstImage:
         !isUploadableFile(step3.gstImage) &&
-        (step3.gstImage?.url || (typeof step3.gstImage === "string" && step3.gstImage.trim()))
+          (step3.gstImage?.url || (typeof step3.gstImage === "string" && step3.gstImage.trim()))
           ? step3.gstImage
           : null,
       fssaiImage:
         !isUploadableFile(step3.fssaiImage) &&
-        (step3.fssaiImage?.url || (typeof step3.fssaiImage === "string" && step3.fssaiImage.trim()))
+          (step3.fssaiImage?.url || (typeof step3.fssaiImage === "string" && step3.fssaiImage.trim()))
           ? step3.fssaiImage
           : null,
     }
@@ -529,7 +529,7 @@ function TimeSelector({ label, value, onChange }) {
         <Clock className="w-4 h-4 text-gray-800" />
         <span className="text-xs font-medium text-gray-900">{label}</span>
       </div>
-      <TimePicker 
+      <TimePicker
         ampm={true}
         value={timeValue}
         onChange={applyTimeValue}
@@ -585,7 +585,7 @@ export default function RestaurantOnboarding() {
           return Math.min(3, Math.max(1, Number(parsed.currentStep)))
         }
       }
-    } catch (e) {}
+    } catch (e) { }
     return 1
   })
   const [loading, setLoading] = useState(false)
@@ -611,7 +611,7 @@ export default function RestaurantOnboarding() {
                   fcmToken = t.trim();
                   break;
                 }
-              } catch (e) {}
+              } catch (e) { }
             }
           } else {
             fcmToken = localStorage.getItem("fcm_web_registered_token_restaurant") || null;
@@ -620,14 +620,14 @@ export default function RestaurantOnboarding() {
       } catch (e) {
         console.warn("Failed to get FCM token during logout", e);
       }
-      
+
       await restaurantAPI.logout(null, fcmToken, platform)
       clearModuleAuth("restaurant")
       clearAuthData()
       // Clear onboarding data and files
       clearOnboardingFromLocalStorage()
       await clearAllFilesFromDB()
-      
+
       window.dispatchEvent(new Event("restaurantAuthChanged"))
       navigate("/food/restaurant/login", { replace: true })
     } catch (error) {
@@ -757,7 +757,7 @@ export default function RestaurantOnboarding() {
         longitude: parsed.longitude !== "" ? parsed.longitude : prev.location.longitude,
       },
     }))
-    
+
     setLocationSearchValue(parsed.formattedAddress)
     setLocationSuggestions([])
   }
@@ -881,9 +881,9 @@ export default function RestaurantOnboarding() {
         typeof img === "string"
           ? img
           : {
-              url: img.url,
-              publicId: img.publicId || null,
-            },
+            url: img.url,
+            publicId: img.publicId || null,
+          },
       )
 
   const handleRemoveMenuImage = async (indexToRemove) => {
@@ -1026,7 +1026,7 @@ export default function RestaurantOnboarding() {
 
         const currentPhone = getVerifiedPhoneFromStoredRestaurant()
         const localData = loadOnboardingFromLocalStorage()
-        
+
         // 1. First fetch API data to have the latest backend state (only if authenticated)
         let apiData = null;
 
@@ -1104,18 +1104,18 @@ export default function RestaurantOnboarding() {
           const savedOwnerPhone = normalizePhoneDigits(localData.step1?.ownerPhone || "")
           const checkPhone = savedLoginPhone || savedOwnerPhone
           const normalizedCurrent = normalizePhoneDigits(currentPhone)
-          
+
           // Only use local data if it belongs to the same user or if the phone was not saved yet
           if (!checkPhone || !normalizedCurrent || checkPhone === normalizedCurrent) {
             debugLog("? Matching local session found. Resuming with unsaved changes.")
-            
+
             if (localData.step1) {
               setStep1(prev => ({ ...prev, ...localData.step1, location: { ...prev.location, ...localData.step1.location } }));
             }
             if (localData.step2) {
               // Note: Files/Images must be re-hydrated from IndexedDB (handled below)
-              setStep2(prev => ({ 
-                ...prev, 
+              setStep2(prev => ({
+                ...prev,
                 ...localData.step2,
                 openingTime: normalizeTimeValue(localData.step2.openingTime),
                 closingTime: normalizeTimeValue(localData.step2.closingTime),
@@ -1130,9 +1130,9 @@ export default function RestaurantOnboarding() {
               setStep(Math.min(3, Math.max(1, Number(localData.currentStep))))
             }
           } else {
-             debugLog("? Phone mismatch, data belongs to different user. Clearing local cache.")
-             clearOnboardingFromLocalStorage()
-             await clearAllFilesFromDB()
+            debugLog("? Phone mismatch, data belongs to different user. Clearing local cache.")
+            clearOnboardingFromLocalStorage()
+            await clearAllFilesFromDB()
           }
         }
 
@@ -1146,7 +1146,7 @@ export default function RestaurantOnboarding() {
           "menuPdf",
           ...Array.from({ length: 10 }, (_, i) => `menuImage_${i}`)
         ];
-        
+
         const [prof, pan, gst, fs, pdf, ...menuImages] = await getAllFilesFromDB(fileKeys);
 
         if (prof) setStep2(p => ({ ...p, profileImage: prof }));
@@ -1210,7 +1210,7 @@ export default function RestaurantOnboarding() {
   useEffect(() => {
     if (!isOnboardingHydrated) return
     saveOnboardingToLocalStorage(step1, step2, step3, step)
-    
+
     // Save images to IndexedDB
     const saveFiles = async () => {
       if (step2.profileImage && isUploadableFile(step2.profileImage)) {
@@ -1227,7 +1227,7 @@ export default function RestaurantOnboarding() {
       if (step3.fssaiImage && isUploadableFile(step3.fssaiImage)) {
         await saveFileToDB("fssaiImage", step3.fssaiImage)
       }
-      
+
       await persistMenuImagesToDB(step2.menuImages || [])
       await persistMenuPdfToDB(step2.menuPdf || null)
     }
@@ -1331,7 +1331,7 @@ export default function RestaurantOnboarding() {
     if (!step1.primaryContactNumber?.trim()) {
       errors.push("Primary contact number is required")
     } else if (!/^\d{10}$/.test(normalizePhoneDigits(step1.primaryContactNumber))) {
-       errors.push("Primary contact number must be exactly 10 digits")
+      errors.push("Primary contact number must be exactly 10 digits")
     }
     if (!step1.zoneId?.trim()) {
       errors.push("Service zone is required")
@@ -1686,7 +1686,7 @@ export default function RestaurantOnboarding() {
         clearOnboardingFileCache()
         try {
           localStorage.setItem("restaurant_pendingPhone", normalizePhoneDigits(step1.ownerPhone))
-        } catch {}
+        } catch { }
 
         toast.success("Registration submitted. Awaiting admin approval.", { duration: 4000 })
         navigate("/food/restaurant/pending-verification", {
@@ -1741,22 +1741,20 @@ export default function RestaurantOnboarding() {
               <button
                 type="button"
                 onClick={() => isEditing && setStep1({ ...step1, pureVegRestaurant: true })}
-                className={`px-3 py-1.5 text-xs rounded-full border ${
-                  step1.pureVegRestaurant === true
+                className={`px-3 py-1.5 text-xs rounded-full border ${step1.pureVegRestaurant === true
                     ? "bg-green-600 text-white border-green-600"
                     : "bg-white text-gray-700 border-gray-200"
-                } ${!isEditing ? "opacity-70 cursor-not-allowed" : ""}`}
+                  } ${!isEditing ? "opacity-70 cursor-not-allowed" : ""}`}
               >
                 Yes, Pure Veg
               </button>
               <button
                 type="button"
                 onClick={() => isEditing && setStep1({ ...step1, pureVegRestaurant: false })}
-                className={`px-3 py-1.5 text-xs rounded-full border ${
-                  step1.pureVegRestaurant === false
+                className={`px-3 py-1.5 text-xs rounded-full border ${step1.pureVegRestaurant === false
                     ? "bg-gray-900 text-white border-gray-900"
                     : "bg-white text-gray-700 border-gray-200"
-                } ${!isEditing ? "opacity-70 cursor-not-allowed" : ""}`}
+                  } ${!isEditing ? "opacity-70 cursor-not-allowed" : ""}`}
               >
                 No, Mixed Menu
               </button>
@@ -1865,7 +1863,7 @@ export default function RestaurantOnboarding() {
               />
               {isSearchingLocation && (
                 <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                   <div className="animate-spin rounded-full h-4 w-4 border-2 border-orange-500 border-t-transparent" />
+                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-orange-500 border-t-transparent" />
                 </div>
               )}
             </div>
@@ -1940,7 +1938,7 @@ export default function RestaurantOnboarding() {
                 ))}
               </div>
             )}
-            
+
             <p className="text-[11px] text-gray-500 mt-1">
               Select a suggestion to auto-fill area/city/state/pincode and coordinates.
             </p>
@@ -2086,18 +2084,18 @@ export default function RestaurantOnboarding() {
 
       const scripts = Array.from(document.getElementsByTagName("script"))
       const mapsScript = scripts.find(s => s.src?.includes("maps.googleapis.com/maps/api/js"))
-      
+
       if (mapsScript && !mapsScript.src.includes("libraries=places")) {
         mapsScript.remove()
       } else if (mapsScript && mapsScript.src.includes("libraries=places")) {
-         for (let i = 0; i < 60; i++) {
-           if (window.google?.maps?.places?.AutocompleteService) {
-             googleMapsReadyRef.current = true
-             return
-           }
-           if (cancelled) return
-           await new Promise(r => setTimeout(r, 100))
-         }
+        for (let i = 0; i < 60; i++) {
+          if (window.google?.maps?.places?.AutocompleteService) {
+            googleMapsReadyRef.current = true
+            return
+          }
+          if (cancelled) return
+          await new Promise(r => setTimeout(r, 100))
+        }
       }
 
       const script = document.createElement("script")
@@ -2115,7 +2113,7 @@ export default function RestaurantOnboarding() {
       document.head.appendChild(script)
     }
 
-    loadMaps().catch(() => {})
+    loadMaps().catch(() => { })
     return () => { cancelled = true }
   }, [step])
 

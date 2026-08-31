@@ -736,12 +736,23 @@ export default function Home() {
     }));
   }, [landingCategories, normalizeImageUrl, slugifyCategory]);
 
+  const DEFAULT_FALLBACK_CATEGORIES = useMemo(() => [
+    { id: "cat-thali", name: "Thali", label: "Thali", slug: "thali", image: foodImages[0], healthy: true },
+    { id: "cat-biryani", name: "Biryani", label: "Biryani", slug: "biryani", image: foodImages[1], healthy: false },
+    { id: "cat-meals", name: "Home Meals", label: "Home Meals", slug: "home-meals", image: foodImages[2], healthy: true },
+    { id: "cat-snacks", name: "Snacks", label: "Snacks", slug: "snacks", image: foodImages[9], healthy: false },
+    { id: "cat-north-indian", name: "North Indian", label: "North Indian", slug: "north-indian", image: foodImages[3], healthy: false },
+    { id: "cat-south-indian", name: "South Indian", label: "South Indian", slug: "south-indian", image: foodImages[5], healthy: true },
+  ], []);
+
   const displayCategories = useMemo(() => {
     const source = realCategories.length > 0
       ? realCategories
       : menuCategories.length > 0
         ? menuCategories
-        : normalizedLandingCategories;
+        : normalizedLandingCategories.length > 0
+          ? normalizedLandingCategories
+          : DEFAULT_FALLBACK_CATEGORIES;
 
     if (!vegMode) return source;
 
@@ -752,7 +763,7 @@ export default function Home() {
 
       return scope !== "non-veg";
     });
-  }, [menuCategories, normalizedLandingCategories, realCategories, vegMode]);
+  }, [menuCategories, normalizedLandingCategories, realCategories, vegMode, DEFAULT_FALLBACK_CATEGORIES]);
 
   // Swipe functionality for hero banner carousel
   const touchStartX = useRef(0);
@@ -1824,6 +1835,51 @@ export default function Home() {
 
           if (cancelled) return;
           nextItems.push(...collectRecommendedItemsFromMenu(menu, restaurant));
+        }
+
+        if (nextItems.length === 0) {
+          try {
+            const fallbackParams = {
+              limit: 20,
+            };
+            if (vegMode) {
+              fallbackParams.foodType = "Veg";
+            }
+            const dishRes = await restaurantAPI.getPublicDishes(fallbackParams);
+            const dishes = dishRes?.data?.data?.dishes || dishRes?.data?.dishes || [];
+            (Array.isArray(dishes) ? dishes : []).forEach((dish, index) => {
+              const restaurant = dish.restaurant || {};
+              const restaurantName = dish.restaurantName || restaurant.name || "Restaurant";
+              const restaurantId = dish.restaurantId || restaurant._id || "";
+              const restaurantSlug = dish.restaurantSlug || getRestaurantSlug({
+                name: restaurantName,
+                restaurantName,
+                _id: restaurantId,
+              }, index);
+              const priceCandidate = [dish.price, dish.finalPrice, dish.basePrice]
+                .map((value) => Number(value))
+                .find((value) => Number.isFinite(value) && value > 0);
+
+              nextItems.push({
+                id: dish._id || dish.id || `${restaurantSlug}-recommended-${index}`,
+                itemId: dish._id || dish.id || `${restaurantSlug}-recommended-${index}`,
+                name: dish.name || "",
+                description: dish.description || restaurantName || "",
+                price: priceCandidate,
+                image: normalizeImageUrl(dish.image) || "",
+                foodType: dish.foodType || "",
+                tag: dish.tag || "Normal",
+                restaurantName,
+                mongoRestaurantId: restaurantId,
+                restaurantId,
+                restaurantSlug,
+                categoryName: dish.categoryName || "",
+                nutrition: dish.nutrition || null,
+              });
+            });
+          } catch {
+            // ignore fallback error
+          }
         }
 
         const dedupedItems = nextItems.filter((item, index, list) => {

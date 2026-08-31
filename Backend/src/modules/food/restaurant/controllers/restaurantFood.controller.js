@@ -1,5 +1,14 @@
 import { sendResponse, sendError } from '../../../../utils/response.js';
-import { createRestaurantFood, updateRestaurantFood, bulkCreateFood, deleteFood } from '../services/restaurantFood.service.js';
+import { createRestaurantFood, updateRestaurantFood, bulkCreateFood, deleteFood, listPublicDishes } from '../services/restaurantFood.service.js';
+
+export const listPublicDishesController = async (req, res, next) => {
+    try {
+        const data = await listPublicDishes(req.query || {});
+        return sendResponse(res, 200, 'Public dishes fetched successfully', data);
+    } catch (error) {
+        next(error);
+    }
+};
 
 export const createRestaurantFoodController = async (req, res, next) => {
     try {

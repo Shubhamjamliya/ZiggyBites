@@ -490,3 +490,81 @@ export async function deleteFood(userId, foodId) {
     await FoodItem.findByIdAndDelete(foodId);
     return { success: true, message: "Food item deleted successfully" };
 }
+
+export async function listPublicDishes(query = {}) {
+    const limit = Math.min(Math.max(parseInt(query.limit, 10) || 50, 1), 200);
+    const page = Math.max(parseInt(query.page, 10) || 1, 1);
+    const skip = (page - 1) * limit;
+
+    const filter = {
+        approvalStatus: 'approved',
+        isAvailable: { $ne: false }
+    };
+
+    if (query.categoryId && mongoose.Types.ObjectId.isValid(String(query.categoryId).trim())) {
+        filter.categoryId = new mongoose.Types.ObjectId(String(query.categoryId).trim());
+    } else if (query.category) {
+        const catTerm = String(query.category).trim();
+        filter.$or = [
+            { categoryName: { $regex: catTerm, $options: 'i' } },
+            { name: { $regex: catTerm, $options: 'i' } }
+        ];
+    }
+
+    if (query.foodType && ['Veg', 'Non-Veg'].includes(query.foodType)) {
+        filter.foodType = query.foodType;
+    }
+
+    if (query.search) {
+        const searchTerm = String(query.search).trim();
+        filter.name = { $regex: searchTerm, $options: 'i' };
+    }
+
+    const approvedRestaurants = await FoodRestaurant.find({ status: 'approved' })
+        .select('_id restaurantName profileImage rating estimatedDeliveryTimeMinutes isAcceptingOrders')
+        .lean();
+
+    if (!approvedRestaurants.length) {
+        return { dishes: [], total: 0, page, limit };
+    }
+
+    const restaurantMap = new Map(approvedRestaurants.map((r) => [String(r._id), r]));
+    filter.restaurantId = { $in: approvedRestaurants.map((r) => r._id) };
+
+    const [items, total] = await Promise.all([
+        FoodItem.find(filter)
+            .sort({ createdAt: -1 })
+            .skip(skip)
+            .limit(limit)
+            .lean(),
+        FoodItem.countDocuments(filter)
+    ]);
+
+    const dishes = items.map((item) => {
+        const rest = restaurantMap.get(String(item.restaurantId)) || {};
+        return {
+            _id: item._id,
+            id: item._id,
+            name: item.name,
+            description: item.description,
+            price: item.price,
+            image: item.image,
+            foodType: item.foodType,
+            tag: item.tag || 'Normal',
+            categoryId: item.categoryId,
+            categoryName: item.categoryName,
+            nutrition: item.nutrition,
+            restaurantId: item.restaurantId,
+            restaurantName: rest.restaurantName || '',
+            restaurant: {
+                _id: rest._id,
+                name: rest.restaurantName,
+                profileImage: rest.profileImage,
+                rating: rest.rating,
+                estimatedDeliveryTime: rest.estimatedDeliveryTimeMinutes
+            }
+        };
+    });
+
+    return { dishes, total, page, limit };
+}

@@ -1,4 +1,4 @@
-﻿import express from 'express';
+import express from 'express';
 import { upload } from '../../../../middleware/upload.js';
 import {
     registerRestaurantController,
@@ -43,7 +43,8 @@ import {
     createRestaurantFoodController,
     bulkCreateRestaurantFoodController,
     updateRestaurantFoodController,
-    deleteRestaurantFoodController
+    deleteRestaurantFoodController,
+    listPublicDishesController
 } from '../controllers/restaurantFood.controller.js';
 import {
     listAddonsController,
@@ -92,6 +93,7 @@ router.get('/restaurants/:id', cacheResponse(600, 'restaurant_detail'), getAppro
 router.get('/restaurants/:id/menu', cacheResponse(600, 'restaurant_menu'), getPublicRestaurantMenuController);
 router.get('/restaurants/:id/outlet-timings', cacheResponse(600, 'restaurant_timings'), getOutletTimingsByRestaurantIdController);
 router.get('/offers', cacheResponse(300, 'offers'), listPublicOffersController);
+router.get('/dishes', cacheResponse(300, 'dishes'), listPublicDishesController);
 // Public: categories list (zone-aware; returns zone categories + global)
 router.get('/categories/public', cacheResponse(600, 'categories'), listCategoriesController);
 

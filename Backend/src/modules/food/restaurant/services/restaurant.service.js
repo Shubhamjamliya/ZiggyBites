@@ -1320,7 +1320,11 @@ export const listApprovedRestaurants = async (query = {}) => {
     // Optional zone polygon filter (when restaurant.zoneId is not set yet).
     const zoneIdRaw = String(query.zoneId || '').trim();
     if (zoneIdRaw && mongoose.Types.ObjectId.isValid(zoneIdRaw)) {
-        const zoneOr = [{ zoneId: new mongoose.Types.ObjectId(zoneIdRaw) }];
+        const zoneOr = [
+            { zoneId: new mongoose.Types.ObjectId(zoneIdRaw) },
+            { zoneId: { $exists: false } },
+            { zoneId: null }
+        ];
         const zoneDoc = await FoodZone.findOne({ _id: zoneIdRaw, isActive: true }).lean();
         const polygon = zoneToPolygon(zoneDoc);
         if (polygon) {

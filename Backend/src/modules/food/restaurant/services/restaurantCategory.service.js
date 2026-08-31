@@ -178,20 +178,24 @@ export async function listPublicCategories(query = {}) {
             zoneId: new mongoose.Types.ObjectId(zoneIdRaw),
             status: 'approved'
         });
-        itemFilter.restaurantId = { $in: zoneRestaurants };
+        if (zoneRestaurants.length > 0) {
+            itemFilter.restaurantId = { $in: zoneRestaurants };
+        }
     }
 
     const approvedCategoryIds = await FoodItem.distinct('categoryId', itemFilter);
 
-    if (!approvedCategoryIds.length) {
-        return { categories: [], total: 0, page, limit };
-    }
-
     const filter = {
-        _id: { $in: approvedCategoryIds },
         isActive: true,
         $and: [{ $or: GLOBAL_CATEGORY_FILTER }, { $or: APPROVED_CATEGORY_FILTER }]
     };
+
+    // If there are approved food items in this zone's categories, prioritize those categories.
+    // If no approved food items exist yet in this zone, return all active global platform categories
+    // so users still see category tiles on the Home screen rather than "No categories available".
+    if (approvedCategoryIds.length > 0) {
+        filter._id = { $in: approvedCategoryIds };
+    }
 
     if (search) {
         const term = escapeRegex(search.slice(0, 80));
@@ -199,7 +203,7 @@ export async function listPublicCategories(query = {}) {
     }
     applyZoneVisibilityFilter(filter.$and, zoneIdRaw);
 
-    const [list, total] = await Promise.all([
+    let [list, total] = await Promise.all([
         FoodCategory.find(filter)
             .sort({ sortOrder: 1, createdAt: -1 })
             .skip(skip)
@@ -208,6 +212,31 @@ export async function listPublicCategories(query = {}) {
             .lean(),
         FoodCategory.countDocuments(filter)
     ]);
+
+    // Fallback: If zone filter returned empty list, fetch active global categories
+    if (!list.length && zoneIdRaw) {
+        const fallbackFilter = {
+            isActive: true,
+            $and: [
+                { $or: GLOBAL_CATEGORY_FILTER },
+                { $or: APPROVED_CATEGORY_FILTER },
+                { $or: [{ zoneId: { $exists: false } }, { zoneId: null }] }
+            ]
+        };
+        if (search) {
+            const term = escapeRegex(search.slice(0, 80));
+            fallbackFilter.$and.push({ name: { $regex: term, $options: 'i' } });
+        }
+        [list, total] = await Promise.all([
+            FoodCategory.find(fallbackFilter)
+                .sort({ sortOrder: 1, createdAt: -1 })
+                .skip(skip)
+                .limit(limit)
+                .select('name image type foodTypeScope zoneId sortOrder createdAt updatedAt')
+                .lean(),
+            FoodCategory.countDocuments(fallbackFilter)
+        ]);
+    }
 
     await backfillLegacyCategoryWorkflow(list);
     const categories = list.map((category) => serializeCategoryForResponse(category));

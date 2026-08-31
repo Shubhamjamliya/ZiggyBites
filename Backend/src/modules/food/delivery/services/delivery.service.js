@@ -25,17 +25,27 @@ export const registerDeliveryPartner = async (payload, files) => {
         await FoodDeliveryPartner.deleteMany({ phone });
     }
 
+    const isBicycle = vehicleType === 'bicycle' && !drivingLicenseNumber;
+
+    if (!files?.profilePhoto?.[0]) {
+        throw new ValidationError('Profile photo document image is required');
+    }
+    if (!files?.aadharPhoto?.[0]) {
+        throw new ValidationError('Aadhar card document image is required');
+    }
+    if (!files?.panPhoto?.[0]) {
+        throw new ValidationError('PAN card document image is required');
+    }
+    if (!isBicycle && !files?.drivingLicensePhoto?.[0]) {
+        throw new ValidationError('Driving license document image is required');
+    }
+
     const images = {};
 
-    if (files?.profilePhoto?.[0]) {
-        images.profilePhoto = await uploadImageBuffer(files.profilePhoto[0].buffer, 'food/delivery/profile');
-    }
-    if (files?.aadharPhoto?.[0]) {
-        images.aadharPhoto = await uploadImageBuffer(files.aadharPhoto[0].buffer, 'food/delivery/aadhar');
-    }
-    if (files?.panPhoto?.[0]) {
-        images.panPhoto = await uploadImageBuffer(files.panPhoto[0].buffer, 'food/delivery/pan');
-    }
+    images.profilePhoto = await uploadImageBuffer(files.profilePhoto[0].buffer, 'food/delivery/profile');
+    images.aadharPhoto = await uploadImageBuffer(files.aadharPhoto[0].buffer, 'food/delivery/aadhar');
+    images.panPhoto = await uploadImageBuffer(files.panPhoto[0].buffer, 'food/delivery/pan');
+
     if (files?.drivingLicensePhoto?.[0]) {
         images.drivingLicensePhoto = await uploadImageBuffer(
             files.drivingLicensePhoto[0].buffer,

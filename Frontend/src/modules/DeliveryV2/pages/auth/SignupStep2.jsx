@@ -334,8 +334,44 @@ export default function SignupStep2() {
     await deleteFileFromDB(docType)
   }
 
+  const signupDetails = (() => {
+    try {
+      return JSON.parse(localStorage.getItem("deliverySignupDetails") || "{}")
+    } catch {
+      return {}
+    }
+  })()
+  const isDlRequired = signupDetails.vehicleType !== "bicycle" || Boolean(signupDetails.drivingLicenseNumber)
+
+  const isDocUploaded = (docType) => {
+    return Boolean(documents[docType] || uploadedDocs[docType])
+  }
+
+  const hasAllRequiredDocs =
+    isDocUploaded("profilePhoto") &&
+    isDocUploaded("aadharPhoto") &&
+    isDocUploaded("panPhoto") &&
+    (!isDlRequired || isDocUploaded("drivingLicensePhoto"))
+
   const handleSubmit = async (e) => {
     e.preventDefault()
+
+    if (!isDocUploaded("profilePhoto")) {
+      toast.error("Please upload your Profile Photo")
+      return
+    }
+    if (!isDocUploaded("aadharPhoto")) {
+      toast.error("Please upload your Aadhar Card Photo")
+      return
+    }
+    if (!isDocUploaded("panPhoto")) {
+      toast.error("Please upload your PAN Card Photo")
+      return
+    }
+    if (isDlRequired && !isDocUploaded("drivingLicensePhoto")) {
+      toast.error("Please upload your Driving License Photo")
+      return
+    }
 
     const raw = localStorage.getItem("deliverySignupDetails")
     if (!raw) {
@@ -593,16 +629,16 @@ export default function SignupStep2() {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <DocumentUpload docType="profilePhoto" label="Profile Photo" required={false} />
-          <DocumentUpload docType="aadharPhoto" label="Aadhar Card Photo" required={false} />
-          <DocumentUpload docType="panPhoto" label="PAN Card Photo" required={false} />
-          <DocumentUpload docType="drivingLicensePhoto" label="Driving License Photo" required={false} />
+          <DocumentUpload docType="profilePhoto" label="Profile Photo" required={true} />
+          <DocumentUpload docType="aadharPhoto" label="Aadhar Card Photo" required={true} />
+          <DocumentUpload docType="panPhoto" label="PAN Card Photo" required={true} />
+          <DocumentUpload docType="drivingLicensePhoto" label="Driving License Photo" required={isDlRequired} />
 
           {/* Submit Button */}
           <button
             type="submit"
-            disabled={isSubmitting}
-            className={`w-full py-4 rounded-lg font-bold text-white text-base transition-colors mt-6 ${isSubmitting
+            disabled={isSubmitting || !hasAllRequiredDocs}
+            className={`w-full py-4 rounded-lg font-bold text-white text-base transition-colors mt-6 ${isSubmitting || !hasAllRequiredDocs
               ? "bg-gray-400 cursor-not-allowed"
               : "bg-[#00B761] hover:bg-[#00A055]"
               }`}

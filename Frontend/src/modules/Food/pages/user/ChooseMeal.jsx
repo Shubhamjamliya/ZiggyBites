@@ -78,9 +78,12 @@ export default function ChooseMeal() {
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
-  const [selectedSlots, setSelectedSlots] = useState([]);
+  const [selectedSlots, setSelectedSlots] = useState(["lunch"]);
   const [mealSlots, setMealSlots] = useState(fallbackMealSlots);
   const [resolvedDishImage, setResolvedDishImage] = useState("");
+  const [availableDishes, setAvailableDishes] = useState([]);
+  const [loadingDishes, setLoadingDishes] = useState(false);
+  const [userSelectedDish, setUserSelectedDish] = useState(null);
 
   useEffect(() => {
     let mounted = true;
@@ -99,22 +102,76 @@ export default function ChooseMeal() {
   }, [navigate]);
   const [loadingSlots, setLoadingSlots] = useState(true);
 
-  const dish = useMemo(() => {
-    const stateDish = location.state?.dish || {};
-    return {
-      id: stateDish.id || stateDish.itemId || searchParams.get("dishId") || "",
-      itemId: stateDish.itemId || stateDish.id || searchParams.get("dishId") || "",
-      name: stateDish.name || searchParams.get("dish") || "Selected meal",
-      restaurantName:
-        stateDish.restaurantName || searchParams.get("restaurant") || "",
-      restaurantId:
-        stateDish.restaurantId || searchParams.get("restaurantId") || "",
-      categoryName: stateDish.categoryName || searchParams.get("category") || "",
-      price: stateDish.price || searchParams.get("price") || "",
-      image: stateDish.image || "",
-      foodType: stateDish.foodType || "",
+  // Fetch available subscription dishes
+  useEffect(() => {
+    let cancelled = false;
+    const fetchDishes = async () => {
+      setLoadingDishes(true);
+      try {
+        const response = await restaurantAPI.getPublicDishes({ limit: 30 });
+        const dishes = response?.data?.data?.dishes || response?.data?.dishes || [];
+        if (!cancelled && Array.isArray(dishes) && dishes.length > 0) {
+          setAvailableDishes(dishes);
+        }
+      } catch {
+        if (!cancelled) setAvailableDishes([]);
+      } finally {
+        if (!cancelled) setLoadingDishes(false);
+      }
     };
-  }, [location.state, searchParams]);
+    fetchDishes();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const dish = useMemo(() => {
+    if (userSelectedDish) {
+      return userSelectedDish;
+    }
+    const stateDish = location.state?.dish;
+    if (stateDish && (stateDish.price || stateDish.id || stateDish.itemId)) {
+      return {
+        id: stateDish.id || stateDish.itemId || searchParams.get("dishId") || "",
+        itemId: stateDish.itemId || stateDish.id || searchParams.get("dishId") || "",
+        name: stateDish.name || searchParams.get("dish") || "Selected meal",
+        restaurantName:
+          stateDish.restaurantName || searchParams.get("restaurant") || "",
+        restaurantId:
+          stateDish.restaurantId || searchParams.get("restaurantId") || "",
+        categoryName: stateDish.categoryName || searchParams.get("category") || "",
+        price: stateDish.price || searchParams.get("price") || "",
+        image: stateDish.image || "",
+        foodType: stateDish.foodType || "",
+      };
+    }
+    if (availableDishes.length > 0) {
+      const first = availableDishes[0];
+      return {
+        id: first._id || first.id || "dish-default",
+        itemId: first._id || first.id || "dish-default",
+        name: first.name || "Homestyle Meal",
+        restaurantName: first.restaurantName || first.restaurant?.name || "Kitchen",
+        restaurantId: first.restaurantId || first.restaurant?._id || "",
+        categoryName: first.categoryName || "",
+        price: String(first.price || 99),
+        image: first.image || "",
+        foodType: first.foodType || "Veg",
+      };
+    }
+    return {
+      id: searchParams.get("dishId") || "default-dish",
+      itemId: searchParams.get("dishId") || "default-dish",
+      name: searchParams.get("dish") || "Daily Homestyle Thali",
+      restaurantName: searchParams.get("restaurant") || "Ziggy Kitchen",
+      restaurantId: searchParams.get("restaurantId") || "default-rest-id",
+      categoryName: searchParams.get("category") || "Thali",
+      price: searchParams.get("price") || "99",
+      image: "",
+      foodType: "Veg",
+    };
+  }, [location.state, searchParams, userSelectedDish, availableDishes]);
+
   useEffect(() => {
     setResolvedDishImage(getImageUrl(dish.image));
   }, [dish.image]);
@@ -160,7 +217,9 @@ export default function ChooseMeal() {
   const toggleSlot = (slotId) => {
     setSelectedSlots((current) =>
       current.includes(slotId)
-        ? current.filter((id) => id !== slotId)
+        ? current.length > 1
+          ? current.filter((id) => id !== slotId)
+          : current
         : [...current, slotId],
     );
   };
@@ -211,15 +270,29 @@ export default function ChooseMeal() {
 
   const continueToPlans = () => {
     if (!canContinue) return;
+    const passedPlan = location.state?.subscriptionPlan;
     const mealsToPass = mealSlots
       .filter((slot) => selectedSlots.includes(slot.id))
       .map(({ icon, ...rest }) => rest);
-    navigate("/food/user/subscription-plans", {
-      state: {
-        dish,
-        selectedMeals: mealsToPass,
-      },
-    });
+
+    if (passedPlan && dish?.price) {
+      // User came with a pre-selected plan -> Go forward to checkout!
+      navigate("/food/user/checkout", {
+        state: {
+          dish,
+          selectedMeals: mealsToPass,
+          subscriptionPlan: passedPlan,
+        },
+      });
+    } else {
+      // Go to Subscription Plans with the selected dish and meals
+      navigate("/food/user/subscription-plans", {
+        state: {
+          dish,
+          selectedMeals: mealsToPass,
+        },
+      });
+    }
   };
 
   return (
@@ -248,11 +321,89 @@ export default function ChooseMeal() {
         </header>
 
         <p className="mt-4 pl-10 pr-6 text-[12px] font-semibold leading-5 text-[#6d6a7d]">
-          Pick your preferred meal time to get started. Once you choose at
-          least one meal, you can continue to the plan page.
+          Pick your preferred meal dish and delivery slots to get started.
         </p>
 
-        <section className="mt-7">
+        {/* Selected Meal / Dish Selector */}
+        <section className="mt-5">
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="text-sm font-bold text-gray-900">
+              Selected Meal Dish
+            </h2>
+            <span className="text-[11px] font-bold text-[#e32c31]">
+              ₹{Number(dish.price || 99).toFixed(0)}/meal
+            </span>
+          </div>
+
+          {availableDishes.length > 0 ? (
+            <div className="flex gap-2.5 overflow-x-auto pb-2 scrollbar-none">
+              {availableDishes.map((item) => {
+                const isSelected = String(dish.itemId || dish.id) === String(item._id || item.id);
+                return (
+                  <div
+                    key={item._id || item.id}
+                    onClick={() => {
+                      setUserSelectedDish({
+                        id: item._id || item.id,
+                        itemId: item._id || item.id,
+                        name: item.name,
+                        restaurantName: item.restaurantName || item.restaurant?.name || "Kitchen",
+                        restaurantId: item.restaurantId || item.restaurant?._id || "",
+                        categoryName: item.categoryName || "",
+                        price: String(item.price || 99),
+                        image: item.image || "",
+                        foodType: item.foodType || "Veg",
+                      });
+                      if (item.image) {
+                        setResolvedDishImage(getImageUrl(item.image));
+                      }
+                    }}
+                    className={`shrink-0 w-36 rounded-2xl p-2.5 border cursor-pointer transition active:scale-95 ${
+                      isSelected
+                        ? "border-[#e32c31] bg-red-50/50 shadow-sm"
+                        : "border-gray-100 bg-white hover:border-gray-200"
+                    }`}
+                  >
+                    <div className="relative h-20 w-full rounded-xl overflow-hidden bg-gray-100 mb-2">
+                      {item.image ? (
+                        <img
+                          src={getImageUrl(item.image)}
+                          alt={item.name}
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <div className="h-full w-full flex items-center justify-center text-gray-400 font-bold text-lg">
+                          🍱
+                        </div>
+                      )}
+                      <span className="absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-black/60 text-white">
+                        ₹{item.price || 99}
+                      </span>
+                    </div>
+                    <p className="text-xs font-bold text-gray-900 truncate">
+                      {item.name}
+                    </p>
+                    <p className="text-[10px] text-gray-500 truncate">
+                      {item.restaurantName || "Kitchen"}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="p-3 rounded-xl bg-orange-50/80 border border-orange-100 flex items-center justify-between">
+              <div>
+                <p className="text-xs font-bold text-gray-900">{dish.name}</p>
+                <p className="text-[11px] text-gray-500">{dish.restaurantName || "Homestyle Kitchen"}</p>
+              </div>
+              <span className="text-xs font-bold text-[#e32c31]">
+                ₹{dish.price}/meal
+              </span>
+            </div>
+          )}
+        </section>
+
+        <section className="mt-6">
           <div className="flex items-end justify-between">
             <h2 className="text-lg font-black tracking-tight">
               Select Meal Time
@@ -350,9 +501,9 @@ export default function ChooseMeal() {
           <button
             type="button"
             onClick={continueToPlans}
-            className="fixed bottom-[74px] left-4 right-4 z-30 mx-auto h-12 max-w-md rounded-xl bg-[#e32c31] text-sm font-black text-white shadow-lg shadow-red-200 active:scale-[0.98]"
+            className="fixed bottom-[74px] left-4 right-4 z-30 mx-auto h-12 max-w-md rounded-xl bg-[#e32c31] text-sm font-black text-white shadow-lg shadow-red-200 active:scale-[0.98] flex items-center justify-center gap-1.5"
           >
-            Continue
+            {location.state?.subscriptionPlan ? "Proceed to Checkout" : "Continue to Plans"}
           </button>
         )}
 

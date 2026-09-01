@@ -178,14 +178,6 @@ export default function OrdersTable({
                   </div>
                 </th>
               )}
-              {visibleColumns.paymentMethodDetail && (
-                <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">
-                  <div className="flex items-center gap-2">
-                    <span>Method</span>
-                    <ArrowUpDown className="w-3 h-3 text-slate-400 cursor-pointer hover:text-slate-600" />
-                  </div>
-                </th>
-              )}
               {visibleColumns.orderStatus && (
                 <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">
                   <div className="flex items-center gap-2">
@@ -370,17 +362,6 @@ export default function OrdersTable({
                         </span>
                       )}
                     </div>
-                  </td>
-                )}
-                {visibleColumns.paymentMethodDetail && (
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${
-                      (order.paymentMethodDetail === "QR" || order.paymentMethodDetail === "COD/QR")
-                        ? "bg-emerald-50 text-emerald-600 border border-emerald-100" 
-                        : "bg-slate-50 text-slate-600 border border-slate-100"
-                    }`}>
-                      {order.paymentMethodDetail}
-                    </span>
                   </td>
                 )}
                 {visibleColumns.orderStatus && (

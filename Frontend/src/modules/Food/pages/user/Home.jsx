@@ -2744,7 +2744,7 @@ export default function Home() {
                           }`}>
                         <span
                           className={`text-sm font-medium ${activeFilters.has("price-under-200") ? "text-[#7e3866]" : "text-gray-700 dark:text-gray-300"}`}>
-                          Under â‚¹200
+                          Under ₹200
                         </span>
                       </button>
                       <button
@@ -2755,7 +2755,7 @@ export default function Home() {
                           }`}>
                         <span
                           className={`text-sm font-medium ${activeFilters.has("price-under-500") ? "text-[#7e3866]" : "text-gray-700 dark:text-gray-300"}`}>
-                          Under â‚¹500
+                          Under ₹500
                         </span>
                       </button>
                     </div>

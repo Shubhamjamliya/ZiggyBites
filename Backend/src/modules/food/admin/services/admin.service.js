@@ -232,7 +232,7 @@ export async function globalSearch(query = '') {
         id: i._id,
         type: 'Product',
         title: i.name,
-        description: `Price: â‚¹${i.price}`,
+        description: `Price: ₹${i.price}`,
         path: `/admin/food/foods?productId=${i._id}`
     }));
 
@@ -248,7 +248,7 @@ export async function globalSearch(query = '') {
         id: a._id,
         type: 'Addon',
         title: a.name,
-        description: `Price: â‚¹${a.price}`,
+        description: `Price: ₹${a.price}`,
         path: `/admin/food/addons`
     }));
 
@@ -3029,7 +3029,7 @@ export async function approveRestaurantAddon(addonId) {
             await notifyOwnersSafely(
                 [{ ownerType: 'RESTAURANT', ownerId: updated.restaurantId }],
                 {
-                    title: 'Addon Approved! Ã¢Å“â€¦',
+                    title: 'Addon Approved! ✅',
                     body: `Your addon "${updated.published?.name || 'New Addon'}" has been approved and is now live.`,
                     image: 'https://i.ibb.co/3m2Yh7r/Appzeto-Brand-Image.png',
                     data: {

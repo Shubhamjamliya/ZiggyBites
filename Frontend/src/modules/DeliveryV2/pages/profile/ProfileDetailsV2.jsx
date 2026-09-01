@@ -377,7 +377,15 @@ export const ProfileDetailsV2 = () => {
     setIsUpdatingBankDetails(true)
     try {
       // Validation
-      const { accountNumber, ifscCode, panNumber, upiId } = bankDetails
+      const { accountNumber, ifscCode, panNumber, upiId, accountHolderName, bankName } = bankDetails
+
+      if (accountHolderName && !/^[A-Za-z\s.'-]{2,60}$/.test(accountHolderName.trim())) {
+        return toast.error("Invalid Account Holder Name (letters only, min 2 chars)")
+      }
+
+      if (bankName && !/^[A-Za-z\s.&()-]{2,60}$/.test(bankName.trim())) {
+        return toast.error("Invalid Bank Name (letters only, min 2 chars)")
+      }
 
       if (accountNumber && !/^\d{9,18}$/.test(accountNumber.trim())) {
         return toast.error("Invalid Account Number (9-18 digits)")
@@ -854,10 +862,22 @@ export const ProfileDetailsV2 = () => {
         <div className="space-y-5 pb-10">
           <div className="grid gap-4">
              {[
-               { label: "Account Holder", key: "accountHolderName", icon: User, maxLength: 60 },
+               { 
+                 label: "Account Holder", 
+                 key: "accountHolderName", 
+                 icon: User, 
+                 maxLength: 60,
+                 format: (v) => v.replace(/[^a-zA-Z\s.'-]/g, "")
+               },
                { label: "Account Number", key: "accountNumber", icon: Banknote, maxLength: 20, isNumeric: true },
                { label: "IFSC Code", key: "ifscCode", icon: Shield, format: (v) => v.toUpperCase(), maxLength: 11 },
-               { label: "Bank Name", key: "bankName", icon: MapPin, maxLength: 60 },
+               { 
+                 label: "Bank Name", 
+                 key: "bankName", 
+                 icon: MapPin, 
+                 maxLength: 60,
+                 format: (v) => v.replace(/[^a-zA-Z\s.&()-]/g, "")
+               },
                { label: "PAN Number", key: "panNumber", icon: FileText, format: (v) => v.toUpperCase(), maxLength: 10 },
                { label: "UPI ID", key: "upiId", icon: Smartphone, maxLength: 60 }
              ].map((field) => (

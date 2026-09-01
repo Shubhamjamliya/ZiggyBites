@@ -40,19 +40,44 @@ export const ProfileBankV2 = () => {
     fetchProfile();
   }, []);
 
+  const formatters = {
+    accountHolderName: (v) => v.replace(/[^a-zA-Z\s.'-]/g, "").slice(0, 60),
+    accountNumber: (v) => v.replace(/\D/g, "").slice(0, 20),
+    ifscCode: (v) => v.toUpperCase().slice(0, 11),
+    bankName: (v) => v.replace(/[^a-zA-Z\s.&()-]/g, "").slice(0, 60),
+    panNumber: (v) => v.toUpperCase().slice(0, 10),
+  };
+
   const handleSave = async () => {
-     if (!form.accountNumber || !form.ifscCode) return toast.error("Missing mandatory fields");
+     if (form.accountHolderName && !/^[A-Za-z\s.'-]{2,60}$/.test(form.accountHolderName.trim())) {
+        return toast.error("Invalid Account Holder Name (letters only, min 2 chars)");
+     }
+     if (form.bankName && !/^[A-Za-z\s.&()-]{2,60}$/.test(form.bankName.trim())) {
+        return toast.error("Invalid Bank Name (letters only, min 2 chars)");
+     }
+     if (!form.accountNumber || !/^\d{9,18}$/.test(form.accountNumber.trim())) {
+        return toast.error("Invalid Account Number (9-18 digits)");
+     }
+     const ifscRegex = /^[A-Z]{4}0[A-Z0-9]{6}$/;
+     if (!form.ifscCode || !ifscRegex.test(form.ifscCode.trim().toUpperCase())) {
+        return toast.error("Invalid IFSC Code (e.g. SBIN0001234)");
+     }
+     const panRegex = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/;
+     if (form.panNumber && !panRegex.test(form.panNumber.trim().toUpperCase())) {
+        return toast.error("Invalid PAN Card format (e.g. ABCDE1234F)");
+     }
+
      setIsSaving(true);
      try {
         const payload = {
            documents: {
               bankDetails: {
-                 accountHolderName: form.accountHolderName,
-                 accountNumber: form.accountNumber,
-                 ifscCode: form.ifscCode,
-                 bankName: form.bankName
+                 accountHolderName: form.accountHolderName.trim(),
+                 accountNumber: form.accountNumber.trim(),
+                 ifscCode: form.ifscCode.trim().toUpperCase(),
+                 bankName: form.bankName.trim()
               },
-              pan: { number: form.panNumber }
+              pan: { number: form.panNumber.trim().toUpperCase() }
            }
         };
         const response = await deliveryAPI.updateProfileDetails(payload);
@@ -91,7 +116,7 @@ export const ProfileBankV2 = () => {
                       <input 
                          type="text" 
                          value={form[key]}
-                         onChange={(e) => setForm({...form, [key]: e.target.value})}
+                         onChange={(e) => setForm({...form, [key]: (formatters[key] ? formatters[key](e.target.value) : e.target.value)})}
                          className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-sm font-bold text-gray-950 focus:ring-2 focus:ring-orange-500/20"
                       />
                    ) : (

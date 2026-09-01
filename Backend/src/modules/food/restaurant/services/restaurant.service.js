@@ -811,7 +811,11 @@ export const updateRestaurantProfile = async (restaurantId, body = {}) => {
         update.accountType = String(body.accountType || '').trim();
     }
     if (body.upiId !== undefined) {
-        update.upiId = String(body.upiId || '').trim();
+        const trimmedUpi = String(body.upiId || '').trim();
+        if (trimmedUpi && !/^[a-zA-Z0-9._-]{2,256}@[a-zA-Z]{2,64}$/.test(trimmedUpi)) {
+            throw new ValidationError('Invalid UPI ID format (e.g. name@bank or 9876543210@upi)');
+        }
+        update.upiId = trimmedUpi;
     }
     if (body.upiQrImage !== undefined || body.upiQrCode !== undefined) {
         const qrImage = body.upiQrImage !== undefined ? body.upiQrImage : body.upiQrCode;

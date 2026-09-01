@@ -212,10 +212,16 @@ export default function OutletInfo() {
           setSavingEdit(false)
           return
         }
+        const upi = String(editFormData.upiId || '').trim().toLowerCase()
+        if (upi && !/^[a-zA-Z0-9._-]{2,256}@[a-zA-Z]{2,64}$/.test(upi)) {
+          toast.error('Invalid UPI ID format (e.g. name@bank or 9876543210@upi)')
+          setSavingEdit(false)
+          return
+        }
         payload.accountHolderName = editFormData.accountHolderName
         payload.accountNumber = editFormData.accountNumber
         payload.ifscCode = ifsc
-        payload.upiId = editFormData.upiId
+        payload.upiId = upi
       }
       
       await restaurantAPI.updateProfile(payload)
@@ -364,8 +370,11 @@ export default function OutletInfo() {
             </span>
             <Star className="w-3.5 h-3.5 text-white fill-white mb-[1px]" />
           </div>
-          <div className="flex items-center text-[#E91E63] font-black text-sm uppercase tracking-wide cursor-pointer hover:underline" onClick={() => navigate("/food/restaurant/feedback")}>
-            {Number(restaurantData?.totalRatings || restaurantData?.reviewCount || 0)} DELIVERY REVIEWS
+          <div
+            className="flex items-center text-[#E91E63] font-black text-sm uppercase tracking-wide cursor-pointer hover:underline"
+            onClick={() => navigate("/food/restaurant/feedback?tab=reviews")}
+          >
+            {Number(restaurantData?.totalRatings || restaurantData?.reviewCount || 0)} USER REVIEWS
             <ChevronRight className="w-4 h-4 ml-0.5" />
           </div>
         </div>
@@ -582,7 +591,16 @@ export default function OutletInfo() {
                 </div>
                 <div>
                   <label className="text-[13px] font-bold text-gray-700 mb-1.5 block tracking-wide">UPI ID</label>
-                  <Input className="h-12 rounded-xl bg-gray-50 border-gray-200 focus:bg-white focus:ring-2 focus:ring-[#E91E63]/20 focus:border-[#E91E63] transition-all text-base px-4" value={editFormData.upiId || ''} onChange={e => setEditFormData({...editFormData, upiId: e.target.value})} placeholder="Enter UPI ID (optional)" />
+                  <Input
+                    className="h-12 rounded-xl bg-gray-50 border-gray-200 focus:bg-white focus:ring-2 focus:ring-[#E91E63]/20 focus:border-[#E91E63] transition-all text-base px-4 lowercase"
+                    value={editFormData.upiId || ''}
+                    onChange={e => {
+                      const val = e.target.value.toLowerCase().replace(/[^a-z0-9._@-]/g, '')
+                      setEditFormData({...editFormData, upiId: val})
+                    }}
+                    placeholder="e.g. name@okaxis, 9876543210@upi"
+                  />
+                  <p className="text-[11px] text-gray-500 mt-1">Format: username@handle (e.g., merchant@okhdfcbank, 9876543210@paytm)</p>
                 </div>
               </>
             )}

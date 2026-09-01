@@ -10,6 +10,50 @@ const formatDate = (value) => {
   return date.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })
 }
 
+const formatFullAddress = (address) => {
+  if (!address) return "-"
+  if (typeof address === "string") return address.trim() || "-"
+
+  const parts = []
+
+  // Label prefix if available
+  const headerParts = []
+  if (address.label) headerParts.push(`[${address.label.toUpperCase()}]`)
+  if (address.fullName || address.name) headerParts.push(address.fullName || address.name)
+  if (address.phone) headerParts.push(`(${address.phone})`)
+
+  // Street / House / Flat
+  const streetParts = []
+  if (address.street) streetParts.push(address.street.trim())
+  if (address.additionalDetails && address.additionalDetails.trim() !== address.street?.trim()) {
+    streetParts.push(address.additionalDetails.trim())
+  }
+  if (address.landmark) streetParts.push(`Near ${address.landmark.trim()}`)
+  if (streetParts.length > 0) parts.push(streetParts.join(", "))
+
+  // Area / Locality
+  if (address.area && !address.street?.includes(address.area)) {
+    parts.push(address.area.trim())
+  }
+
+  // City & State & ZipCode
+  const cityStateZip = [address.city, address.state, address.zipCode || address.pincode]
+    .filter(Boolean)
+    .map((s) => String(s).trim())
+    .join(", ")
+
+  if (cityStateZip) parts.push(cityStateZip)
+
+  if (parts.length === 0) {
+    const raw = address.formattedAddress || address.address || address.fullAddress
+    if (raw) return typeof raw === "string" ? raw : JSON.stringify(raw)
+    return "-"
+  }
+
+  const fullAddrStr = parts.join(", ")
+  return headerParts.length > 0 ? `${headerParts.join(" ")} - ${fullAddrStr}` : fullAddrStr
+}
+
 const statusClass = (status) => {
   const normalized = String(status || "").toLowerCase()
   if (normalized === "active") return "bg-emerald-100 text-emerald-700"
@@ -182,7 +226,9 @@ export default function SubscriptionStatus() {
                     <Info label="End Date" value={formatDate(selected.endDate)} />
                     <Info label="Meals" value={(selected.meals || []).join(", ") || "-"} />
                     <Info label="Dish" value={selected.dishName} />
-                    <Info label="Address" value={selected.deliveryAddress?.street || "-"} />
+                    <div className="col-span-full pt-1 border-t border-slate-100">
+                      <Info label="Full Delivery Address" value={formatFullAddress(selected.deliveryAddress || selected.address)} />
+                    </div>
                   </div>
                 </section>
 

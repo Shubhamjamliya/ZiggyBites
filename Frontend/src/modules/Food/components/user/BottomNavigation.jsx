@@ -2,40 +2,60 @@ import { useState, useEffect } from "react"
 import { Link, useLocation } from "react-router-dom"
 import { CalendarDays, History, Home, User } from "lucide-react"
 
+const normalizePath = (pathname) => {
+  if (!pathname) return "/"
+  if (pathname.startsWith("/food")) {
+    return pathname.substring(5) || "/"
+  }
+  return pathname
+}
+
 const navItems = [
   {
     label: "Home",
     to: "/food/user",
     icon: Home,
-    active: (pathname) =>
-      pathname === "/" ||
-      pathname === "/food" ||
-      pathname === "/food/" ||
-      pathname === "/food/user",
+    active: (pathname) => {
+      const p = normalizePath(pathname)
+      return p === "/" || p === "/user" || p === "/user/"
+    },
   },
   {
     label: "Subscription",
     to: "/food/user/profile/subscriptions",
     icon: CalendarDays,
-    active: (pathname) =>
-      pathname.startsWith("/food/user/profile/subscriptions") ||
-      pathname.startsWith("/food/user/choose-meal") ||
-      pathname.startsWith("/food/user/subscription-plans") ||
-      pathname.startsWith("/food/user/checkout"),
+    active: (pathname) => {
+      const p = normalizePath(pathname)
+      return (
+        p.startsWith("/user/profile/subscriptions") ||
+        p.startsWith("/profile/subscriptions") ||
+        p.startsWith("/user/choose-meal") ||
+        p.startsWith("/user/subscription-plans") ||
+        p.startsWith("/user/checkout") ||
+        p.startsWith("/subscriptions")
+      )
+    },
   },
   {
     label: "History",
     to: "/food/user/orders",
     icon: History,
-    active: (pathname) => pathname.startsWith("/food/user/orders"),
+    active: (pathname) => {
+      const p = normalizePath(pathname)
+      return p.startsWith("/user/orders") || p.startsWith("/orders")
+    },
   },
   {
     label: "Profile",
     to: "/food/user/profile",
     icon: User,
-    active: (pathname) =>
-      pathname.startsWith("/food/user/profile") &&
-      !pathname.startsWith("/food/user/profile/subscriptions"),
+    active: (pathname) => {
+      const p = normalizePath(pathname)
+      return (
+        (p.startsWith("/user/profile") || p.startsWith("/profile")) &&
+        !p.includes("/subscriptions")
+      )
+    },
   },
 ]
 

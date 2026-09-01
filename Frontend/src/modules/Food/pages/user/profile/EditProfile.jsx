@@ -72,20 +72,26 @@ const saveProfileToStorage = (data) => {
 const normalizePhoneToTenDigits = (value) =>
   String(value || "").replace(/\D/g, "").slice(-10)
 
+const formatDateValue = (val) => {
+  if (!val) return ""
+  if (typeof val === "string") {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(val)) return val
+    const d = dayjs(val)
+    return d.isValid() ? d.format("YYYY-MM-DD") : ""
+  }
+  if (val && typeof val.format === "function") {
+    return val.format("YYYY-MM-DD")
+  }
+  const d = dayjs(val)
+  return d.isValid() ? d.format("YYYY-MM-DD") : ""
+}
+
 const buildFormDataFromProfile = (profile = {}) => ({
   name: profile.name || "",
   mobile: normalizePhoneToTenDigits(profile.mobile || profile.phone || ""),
   email: profile.email || "",
-  dateOfBirth: profile.dateOfBirth
-    ? (typeof profile.dateOfBirth === 'string'
-      ? dayjs(profile.dateOfBirth)
-      : dayjs(profile.dateOfBirth))
-    : null,
-  anniversary: profile.anniversary
-    ? (typeof profile.anniversary === 'string'
-      ? dayjs(profile.anniversary)
-      : dayjs(profile.anniversary))
-    : null,
+  dateOfBirth: formatDateValue(profile.dateOfBirth),
+  anniversary: formatDateValue(profile.anniversary),
   gender: profile.gender || "",
 })
 
@@ -166,8 +172,8 @@ export default function EditProfile() {
       mobile: formData.mobile,
       email: formData.email,
       profileImage,
-      dateOfBirth: formData.dateOfBirth ? formData.dateOfBirth.format('YYYY-MM-DD') : null,
-      anniversary: formData.anniversary ? formData.anniversary.format('YYYY-MM-DD') : null,
+      dateOfBirth: formData.dateOfBirth || null,
+      anniversary: formData.anniversary || null,
       gender: formData.gender || "",
     })
   }, [formData, profileImage])
@@ -272,8 +278,8 @@ export default function EditProfile() {
           phone: formData.mobile,
           mobile: formData.mobile,
           email: formData.email,
-          dateOfBirth: formData.dateOfBirth ? formData.dateOfBirth.format('YYYY-MM-DD') : null,
-          anniversary: formData.anniversary ? formData.anniversary.format('YYYY-MM-DD') : null,
+          dateOfBirth: formData.dateOfBirth || null,
+          anniversary: formData.anniversary || null,
           gender: formData.gender || "",
           profileImage: imageUrl,
         }
@@ -337,8 +343,8 @@ export default function EditProfile() {
       const updateData = {
         name: formData.name,
         email: formData.email || undefined,
-        dateOfBirth: formData.dateOfBirth ? formData.dateOfBirth.format('YYYY-MM-DD') : undefined,
-        anniversary: formData.anniversary ? formData.anniversary.format('YYYY-MM-DD') : undefined,
+        dateOfBirth: formData.dateOfBirth || undefined,
+        anniversary: formData.anniversary || undefined,
         gender: formData.gender || undefined,
         profileImage: profileImage || undefined, // Include profileImage in update
       }
@@ -362,8 +368,8 @@ export default function EditProfile() {
           mobile: updatedUser.phone || formData.mobile,
           email: updatedUser.email || formData.email,
           profileImage: updatedUser.profileImage || profileImage,
-          dateOfBirth: updatedUser.dateOfBirth || formData.dateOfBirth?.format('YYYY-MM-DD'),
-          anniversary: updatedUser.anniversary || formData.anniversary?.format('YYYY-MM-DD'),
+          dateOfBirth: updatedUser.dateOfBirth || formData.dateOfBirth,
+          anniversary: updatedUser.anniversary || formData.anniversary,
           gender: updatedUser.gender || formData.gender,
         })
         clearEditProfileDraft()
@@ -517,101 +523,39 @@ export default function EditProfile() {
             </div>
 
             {/* Date of Birth Field */}
-            <div className="space-y-1.5 text-gray-900 dark:text-white [&_input]:dark:!text-white [&_input::placeholder]:dark:!text-white [&_.MuiSvgIcon-root]:dark:!text-white">
+            <div className="space-y-1.5">
               <Label htmlFor="dateOfBirth" className="text-sm font-medium text-gray-700 dark:text-white">
                 Date of birth
               </Label>
-              <LocalizationProvider dateAdapter={AdapterDayjs}>
-                <DatePicker
-                  value={formData.dateOfBirth}
-                  onChange={(newValue) => handleChange('dateOfBirth', newValue)}
-                  maxDate={dayjs()}
-                  slotProps={{
-                    textField: {
-                      className: "w-full",
-                      sx: {
-                        '& .MuiOutlinedInput-root': {
-                          height: '48px',
-                          borderRadius: '8px',
-                          color: 'inherit',
-                          '& fieldset': {
-                            borderColor: '#d1d5db',
-                          },
-                          '&:hover fieldset': {
-                            borderColor: '#9ca3af',
-                          },
-                          '&.Mui-focused fieldset': {
-                            borderColor: '#7e3866',
-                            borderWidth: '1px',
-                          },
-                          '& .MuiSvgIcon-root': {
-                            color: 'inherit',
-                          },
-                        },
-                        '& .MuiInputBase-input': {
-                          padding: '12px 14px',
-                          fontSize: '16px',
-                          color: 'inherit',
-                          '&::placeholder': {
-                            color: 'inherit',
-                            opacity: 0.5,
-                          }
-                        },
-                      },
-                    },
-                  }}
+              <div className="relative">
+                <input
+                  id="dateOfBirth"
+                  type="date"
+                  max={dayjs().format('YYYY-MM-DD')}
+                  value={formData.dateOfBirth || ""}
+                  onChange={(e) => handleChange('dateOfBirth', e.target.value)}
+                  className="w-full h-12 text-base px-3.5 py-2.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#1a1a1a] text-gray-900 dark:text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary [color-scheme:light] dark:[color-scheme:dark]"
                 />
-              </LocalizationProvider>
+              </div>
               {fieldErrors.dateOfBirth && (
                 <p className="text-xs text-red-600">{fieldErrors.dateOfBirth}</p>
               )}
             </div>
 
             {/* Anniversary Field */}
-            <div className="space-y-1.5 text-gray-900 dark:text-white [&_input]:dark:!text-white [&_input::placeholder]:dark:!text-white [&_.MuiSvgIcon-root]:dark:!text-white">
+            <div className="space-y-1.5">
               <Label htmlFor="anniversary" className="text-sm font-medium text-gray-700 dark:text-white">
                 Anniversary <span className="text-gray-400 dark:text-gray-500 font-normal">(Optional)</span>
               </Label>
-              <LocalizationProvider dateAdapter={AdapterDayjs}>
-                <DatePicker
-                  value={formData.anniversary}
-                  onChange={(newValue) => handleChange('anniversary', newValue)}
-                  slotProps={{
-                    textField: {
-                      className: "w-full",
-                      sx: {
-                        '& .MuiOutlinedInput-root': {
-                          height: '48px',
-                          borderRadius: '8px',
-                          color: 'inherit',
-                          '& fieldset': {
-                            borderColor: '#d1d5db',
-                          },
-                          '&:hover fieldset': {
-                            borderColor: '#9ca3af',
-                          },
-                          '&.Mui-focused fieldset': {
-                            borderColor: '#7e3866',
-                            borderWidth: '1px',
-                          },
-                          '& .MuiSvgIcon-root': {
-                            color: 'inherit',
-                          },
-                        },
-                        '& .MuiInputBase-input': {
-                          padding: '12px 14px',
-                          fontSize: '16px',
-                          color: 'inherit',
-                          '&::placeholder': {
-                            color: 'inherit',
-                            opacity: 0.5,
-                          }
-                        },
-                      },
-                    },
-                  }}
+              <div className="relative">
+                <input
+                  id="anniversary"
+                  type="date"
+                  value={formData.anniversary || ""}
+                  onChange={(e) => handleChange('anniversary', e.target.value)}
+                  className="w-full h-12 text-base px-3.5 py-2.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#1a1a1a] text-gray-900 dark:text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary [color-scheme:light] dark:[color-scheme:dark]"
                 />
-              </LocalizationProvider>
+              </div>
             </div>
 
             {/* Gender Field */}

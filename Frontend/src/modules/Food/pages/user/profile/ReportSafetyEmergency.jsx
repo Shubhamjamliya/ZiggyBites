@@ -128,15 +128,18 @@ export default function ReportSafetyEmergency() {
   }
 
   return (
-    <AnimatedPage className="min-h-screen bg-[#f5f5f5] dark:bg-[#0a0a0a] pb-24 md:pb-0">
-      <div className="max-w-5xl mx-auto px-4 md:px-6 lg:px-8 py-4 md:py-6 lg:py-8">
-        {/* Header */}
-        <div className="flex items-center gap-3 md:gap-4 mb-4 md:mb-6 lg:mb-8">
-          <Button variant="ghost" size="icon" onClick={goBack} className="h-8 w-8 md:h-10 md:w-10 p-0">
+    <AnimatedPage className="min-h-screen bg-[#f5f5f5] dark:bg-[#0a0a0a]">
+      {/* Sticky Header */}
+      <div className="bg-white dark:bg-[#1a1a1a] sticky top-0 z-30 border-b border-gray-100 dark:border-gray-800 shadow-xs">
+        <div className="max-w-5xl mx-auto flex items-center gap-3 md:gap-4 px-4 md:px-6 lg:px-8 py-3 md:py-4">
+          <Button variant="ghost" size="icon" onClick={goBack} className="h-8 w-8 md:h-10 md:w-10 p-0 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full">
             <ArrowLeft className="h-4 w-4 md:h-5 md:w-5 text-black dark:text-white" />
           </Button>
-          <h1 className="text-xl md:text-2xl lg:text-3xl font-bold text-black dark:text-white">Report a safety emergency</h1>
+          <h1 className="text-lg md:text-xl font-bold text-black dark:text-white">Report a safety emergency</h1>
         </div>
+      </div>
+
+      <div className="max-w-5xl mx-auto px-4 md:px-6 lg:px-8 py-4 md:py-6 lg:py-8 pb-32 md:pb-12">
 
         {/* Emergency Contact Card */}
         <Card className="bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800 rounded-xl shadow-sm mb-4 md:mb-5 lg:mb-6">

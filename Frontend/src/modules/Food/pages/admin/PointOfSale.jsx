@@ -17,9 +17,10 @@ export default function PointOfSale() {
 
   const getRestaurantName = (restaurant) => {
     return String(
-      restaurant?.name ||
       restaurant?.restaurantName ||
+      restaurant?.name ||
       restaurant?.restaurant?.name ||
+      restaurant?.restaurant?.restaurantName ||
       '',
     ).trim()
   }
@@ -30,6 +31,7 @@ export default function PointOfSale() {
       restaurant?.restaurantCode ||
       restaurant?.restaurant?.restaurantId ||
       restaurant?._id ||
+      restaurant?.id ||
       '',
     ).trim()
   }
@@ -131,7 +133,7 @@ export default function PointOfSale() {
   const fetchRestaurants = async () => {
     try {
       setLoading(true)
-      const response = await adminAPI.getRestaurants({ limit: 1000, isActive: true })
+      const response = await adminAPI.getRestaurants({ limit: 1000 })
       if (response?.data?.success) {
         const rawRestaurants = response.data.data?.restaurants || response.data.data || []
         setRestaurants(normalizeRestaurants(rawRestaurants))
@@ -164,45 +166,55 @@ export default function PointOfSale() {
         const { restaurant, analytics, paymentSummary: apiPaymentSummary } = analyticsResponse.data.data
         
         debugLog('Analytics data received:', analytics)
-        debugLog('Commission percentage from API:', analytics.commissionPercentage)
-        debugLog('Commission percentage type:', typeof analytics.commissionPercentage)
         
         // Set restaurant data
         setRestaurantData(restaurant)
         setPaymentSummary(apiPaymentSummary || null)
+
+        // Ensure newly loaded restaurant is in the local restaurants state
+        if (restaurant) {
+          const resolvedId = String(restaurant._id || restaurant.id || restaurantId)
+          const resolvedName = getRestaurantName(restaurant) || `Restaurant ${resolvedId.slice(-6)}`
+          const resolvedCode = getRestaurantCode(restaurant) || resolvedId
+          setRestaurants(prev => {
+            if (prev.some(r => r._id === resolvedId)) return prev
+            return [{ ...restaurant, _id: resolvedId, name: resolvedName, restaurantId: resolvedCode }, ...prev]
+          })
+          if (!searchQuery || searchQuery === restaurantId) {
+            setSearchQuery(resolvedName)
+          }
+        }
         
         // Parse commission percentage - handle both number and string
-        const commissionPercentage = analytics.commissionPercentage !== undefined && analytics.commissionPercentage !== null
+        const commissionPercentage = analytics?.commissionPercentage !== undefined && analytics?.commissionPercentage !== null
           ? parseFloat(analytics.commissionPercentage) || 0
           : 0;
         
-        debugLog('Parsed commission percentage:', commissionPercentage)
-        
         // Set analytics data - ensure all values are numbers, not null/undefined
         setAnalyticsData({
-          totalOrders: Number(analytics.totalOrders) || 0,
-          cancelledOrders: Number(analytics.cancelledOrders) || 0,
-          completedOrders: Number(analytics.completedOrders) || 0,
-          averageRating: Number(analytics.averageRating) || 0,
-          totalRatings: Number(analytics.totalRatings) || 0,
+          totalOrders: Number(analytics?.totalOrders) || 0,
+          cancelledOrders: Number(analytics?.cancelledOrders) || 0,
+          completedOrders: Number(analytics?.completedOrders) || 0,
+          averageRating: Number(analytics?.averageRating) || 0,
+          totalRatings: Number(analytics?.totalRatings) || 0,
           commissionPercentage: commissionPercentage,
-          monthlyProfit: analytics.monthlyProfit || 0,
-          yearlyProfit: analytics.yearlyProfit || 0,
-          averageOrderValue: analytics.averageOrderValue || 0,
-          totalRevenue: analytics.totalRevenue || 0,
-          totalCommission: analytics.totalCommission || 0,
-          restaurantEarning: analytics.restaurantEarning || 0,
-          restaurantProfit: analytics.restaurantProfit || 0,
-          monthlyOrders: analytics.monthlyOrders || 0,
-          yearlyOrders: analytics.yearlyOrders || 0,
-          averageMonthlyProfit: analytics.averageMonthlyProfit || 0,
-          averageYearlyProfit: analytics.averageYearlyProfit || 0,
-          status: analytics.status || 'inactive',
-          joinDate: analytics.joinDate || restaurant.createdAt || new Date(),
-          totalCustomers: analytics.totalCustomers || 0,
-          repeatCustomers: analytics.repeatCustomers || 0,
-          cancellationRate: analytics.cancellationRate || 0,
-          completionRate: analytics.completionRate || 0
+          monthlyProfit: analytics?.monthlyProfit || 0,
+          yearlyProfit: analytics?.yearlyProfit || 0,
+          averageOrderValue: analytics?.averageOrderValue || 0,
+          totalRevenue: analytics?.totalRevenue || 0,
+          totalCommission: analytics?.totalCommission || 0,
+          restaurantEarning: analytics?.restaurantEarning || 0,
+          restaurantProfit: analytics?.restaurantProfit || 0,
+          monthlyOrders: analytics?.monthlyOrders || 0,
+          yearlyOrders: analytics?.yearlyOrders || 0,
+          averageMonthlyProfit: analytics?.averageMonthlyProfit || 0,
+          averageYearlyProfit: analytics?.averageYearlyProfit || 0,
+          status: analytics?.status || (restaurant?.status === 'approved' ? 'active' : 'inactive'),
+          joinDate: analytics?.joinDate || restaurant?.createdAt || new Date(),
+          totalCustomers: analytics?.totalCustomers || 0,
+          repeatCustomers: analytics?.repeatCustomers || 0,
+          cancellationRate: analytics?.cancellationRate || 0,
+          completionRate: analytics?.completionRate || 0
         })
       } else {
         // Fallback to empty data if API fails
@@ -235,21 +247,6 @@ export default function PointOfSale() {
       }
     } catch (error) {
       debugError('Error fetching restaurant analytics:', error)
-      debugError('Error details:', {
-        message: error?.message,
-        response: error?.response?.data,
-        status: error?.response?.status,
-        restaurantId: selectedRestaurant
-      })
-      
-      // Show user-friendly error message
-      if (error?.response?.status === 404) {
-        debugWarn('Restaurant not found')
-      } else if (error?.response?.status === 400) {
-        debugWarn('Invalid restaurant ID')
-      } else {
-        debugWarn('Failed to fetch analytics. Please try again.')
-      }
       
       // Set empty data on error
       setPaymentSummary(null)
@@ -285,11 +282,13 @@ export default function PointOfSale() {
 
   const filteredRestaurants = restaurants.filter(restaurant => {
     if (!searchQuery.trim()) return true
-    const query = searchQuery.toLowerCase()
+    const query = searchQuery.trim().toLowerCase()
     return (
       restaurant.name?.toLowerCase().includes(query) ||
       restaurant.restaurantId?.toLowerCase().includes(query) ||
-      restaurant._id?.toLowerCase().includes(query)
+      restaurant._id?.toLowerCase().includes(query) ||
+      restaurant.ownerPhone?.toLowerCase().includes(query) ||
+      restaurant.ownerName?.toLowerCase().includes(query)
     )
   })
 
@@ -301,6 +300,45 @@ export default function PointOfSale() {
       setSearchQuery(selected.name)
     }
     setShowSearchResults(false)
+  }
+
+  // Handle direct ID search (e.g. pasted or typed Mongo ObjectId)
+  const handleDirectIdSearch = (id) => {
+    const trimmedId = id.trim()
+    if (!trimmedId) return
+    setSelectedRestaurant(trimmedId)
+    setShowSearchResults(false)
+  }
+
+  // Handle Enter keypress in search input
+  const handleSearchKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      const query = searchQuery.trim()
+      if (!query) return
+
+      // 1. Exact match on _id, restaurantId, or name in existing list
+      const exactMatch = filteredRestaurants.find(
+        r => r._id?.toLowerCase() === query.toLowerCase() ||
+             r.restaurantId?.toLowerCase() === query.toLowerCase() ||
+             r.name?.toLowerCase() === query.toLowerCase()
+      )
+      if (exactMatch) {
+        handleRestaurantSelect(exactMatch._id)
+        return
+      }
+
+      // 2. Top filtered result
+      if (filteredRestaurants.length > 0) {
+        handleRestaurantSelect(filteredRestaurants[0]._id)
+        return
+      }
+
+      // 3. Fallback: 24-character ObjectId lookup
+      if (/^[0-9a-fA-F]{24}$/.test(query)) {
+        handleDirectIdSearch(query)
+      }
+    }
   }
 
   // Handle search input change
@@ -326,7 +364,7 @@ export default function PointOfSale() {
 
   const getSelectedRestaurantName = () => {
     const restaurant = restaurants.find(r => r._id === selectedRestaurant)
-    return restaurant?.name || 'Select Restaurant'
+    return restaurant?.name || restaurantData?.restaurantName || restaurantData?.name || 'Select Restaurant'
   }
 
   return (
@@ -337,21 +375,22 @@ export default function PointOfSale() {
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-[#334257] mb-2">Restaurant POS Analytics & Benefits</h1>
           <p className="text-sm text-[#8a94aa]">Track restaurant performance, profits, and commission details</p>
-                </div>
+        </div>
 
         {/* Restaurant Selection Card */}
         <div className="bg-white rounded-lg shadow-sm border border-[#e3e6ef] p-6 mb-6">
           <div className="flex flex-col gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-[#334257] mb-2">
+            <div>
+              <label className="block text-sm font-medium text-[#334257] mb-2">
                 Search Restaurant by Name or ID <span className="text-red-500">*</span>
-                  </label>
-                  <div className="relative">
+              </label>
+              <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5 z-10" />
-                    <input
-                      type="text"
-                      value={searchQuery}
+                <input
+                  type="text"
+                  value={searchQuery}
                   onChange={handleSearchChange}
+                  onKeyDown={handleSearchKeyDown}
                   onFocus={() => {
                     if (searchQuery.trim()) {
                       setShowSearchResults(true)
@@ -361,12 +400,26 @@ export default function PointOfSale() {
                     // Delay to allow click on results
                     setTimeout(() => setShowSearchResults(false), 200)
                   }}
-                  placeholder="Type restaurant name or ID to search..."
-                  className="w-full h-11 pl-10 pr-3 rounded-md border border-[#e3e6ef] bg-white text-sm text-[#4a5671] focus:outline-none focus:ring-1 focus:ring-[#006fbd]"
+                  placeholder="Type restaurant name or ID to search (press Enter to select)..."
+                  className="w-full h-11 pl-10 pr-10 rounded-md border border-[#e3e6ef] bg-white text-sm text-[#4a5671] focus:outline-none focus:ring-1 focus:ring-[#006fbd]"
                 />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchQuery('')
+                      setSelectedRestaurant('')
+                      setShowSearchResults(false)
+                    }}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 p-1"
+                    title="Clear search"
+                  >
+                    <XCircle className="w-4 h-4" />
+                  </button>
+                )}
                 
                 {/* Search Results Dropdown */}
-                {showSearchResults && filteredRestaurants.length > 0 && (
+                {showSearchResults && (
                   <div className="absolute z-50 w-full mt-1 bg-white border border-[#e3e6ef] rounded-md shadow-lg max-h-60 overflow-y-auto">
                     {filteredRestaurants.map(restaurant => (
                       <button
@@ -389,30 +442,45 @@ export default function PointOfSale() {
                         </div>
                       </button>
                     ))}
+
+                    {/* Direct ID Lookup option when typing an exact 24-char ObjectId not currently in list */}
+                    {/^[0-9a-fA-F]{24}$/.test(searchQuery.trim()) && !filteredRestaurants.some(r => r._id === searchQuery.trim()) && (
+                      <button
+                        type="button"
+                        onMouseDown={(e) => {
+                          e.preventDefault()
+                          handleDirectIdSearch(searchQuery.trim())
+                        }}
+                        className="w-full px-4 py-3 text-left bg-blue-50/50 hover:bg-blue-50 cursor-pointer border-t border-[#e3e6ef] transition-colors"
+                      >
+                        <p className="text-sm font-semibold text-[#006fbd]">Search database for Restaurant ID: {searchQuery.trim()}</p>
+                        <p className="text-xs text-[#8a94aa]">Load analytics directly for this ID</p>
+                      </button>
+                    )}
                   </div>
                 )}
                 
                 {/* No Results Message */}
-                {showSearchResults && searchQuery.trim() && filteredRestaurants.length === 0 && (
+                {showSearchResults && searchQuery.trim() && filteredRestaurants.length === 0 && !/^[0-9a-fA-F]{24}$/.test(searchQuery.trim()) && (
                   <div className="absolute z-50 w-full mt-1 bg-white border border-[#e3e6ef] rounded-md shadow-lg p-4">
                     <p className="text-sm text-[#8a94aa] text-center">No restaurants found matching "{searchQuery}"</p>
                   </div>
                 )}
-                  </div>
+              </div>
               {selectedRestaurant && (
                 <p className="text-xs text-green-600 mt-2">
-                  Selected: {getSelectedRestaurantName()}
+                  Selected: {getSelectedRestaurantName()} <span className="text-gray-400">({selectedRestaurant})</span>
                 </p>
               )}
-        </div>
+            </div>
 
             {/* Alternative: Dropdown Selector */}
             <div>
-                    <label className="block text-sm font-medium text-[#334257] mb-2">
+              <label className="block text-sm font-medium text-[#334257] mb-2">
                 Or Select from Dropdown
-                    </label>
-                    <div className="relative">
-                      <select 
+              </label>
+              <div className="relative">
+                <select 
                   value={selectedRestaurant}
                   onChange={(e) => {
                     setSelectedRestaurant(e.target.value)
@@ -421,19 +489,19 @@ export default function PointOfSale() {
                       setSearchQuery(selected.name)
                     }
                   }}
-                        className="w-full h-11 rounded-md border border-[#e3e6ef] bg-white px-3 pr-10 text-sm text-[#4a5671] focus:outline-none focus:ring-1 focus:ring-[#006fbd]"
-                      >
+                  className="w-full h-11 rounded-md border border-[#e3e6ef] bg-white px-3 pr-10 text-sm text-[#4a5671] focus:outline-none focus:ring-1 focus:ring-[#006fbd]"
+                >
                   <option value="">Select Restaurant</option>
                   {restaurants.map(restaurant => (
                     <option key={restaurant._id} value={restaurant._id}>
-                      {restaurant.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                  </div>
-                </div>
+                      {restaurant.name} ({restaurant._id.slice(-6)})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
 
         {/* Analytics Dashboard */}
         {selectedRestaurant && !loading ? (

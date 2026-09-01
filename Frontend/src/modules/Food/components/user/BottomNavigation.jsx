@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react"
 import { Link, useLocation } from "react-router-dom"
 import { CalendarDays, History, Home, User } from "lucide-react"
 
@@ -40,6 +41,57 @@ const navItems = [
 
 export default function BottomNavigation() {
   const { pathname } = useLocation()
+  const [isKeyboardOpen, setIsKeyboardOpen] = useState(false)
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+
+    const checkKeyboardState = () => {
+      // 1. VisualViewport height check (standard on modern mobile browsers)
+      if (window.visualViewport) {
+        const isShrunk = window.visualViewport.height < window.innerHeight * 0.85
+        if (isShrunk) {
+          setIsKeyboardOpen(true)
+          return
+        }
+      }
+
+      // 2. Active element input check on touch/mobile devices
+      const activeEl = document.activeElement
+      const isInputActive =
+        activeEl &&
+        (activeEl.tagName === "INPUT" ||
+          activeEl.tagName === "TEXTAREA" ||
+          activeEl.isContentEditable)
+
+      const isMobile = window.innerWidth < 768
+      if (isMobile && isInputActive) {
+        setIsKeyboardOpen(true)
+        return
+      }
+
+      setIsKeyboardOpen(false)
+    }
+
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener("resize", checkKeyboardState)
+    }
+
+    window.addEventListener("focusin", checkKeyboardState)
+    window.addEventListener("focusout", checkKeyboardState)
+    window.addEventListener("resize", checkKeyboardState)
+
+    return () => {
+      if (window.visualViewport) {
+        window.visualViewport.removeEventListener("resize", checkKeyboardState)
+      }
+      window.removeEventListener("focusin", checkKeyboardState)
+      window.removeEventListener("focusout", checkKeyboardState)
+      window.removeEventListener("resize", checkKeyboardState)
+    }
+  }, [])
+
+  if (isKeyboardOpen) return null
 
   return (
     <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 border-t border-gray-100 dark:border-gray-800 bg-white/95 dark:bg-[#121212]/95 backdrop-blur-md shadow-[0_-2px_10px_rgba(15,23,42,0.06)] dark:shadow-[0_-2px_10px_rgba(0,0,0,0.5)] transition-colors duration-200">

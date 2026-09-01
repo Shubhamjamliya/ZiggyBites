@@ -46,48 +46,76 @@ export default function BottomNavigation() {
   useEffect(() => {
     if (typeof window === "undefined") return
 
+    let initialHeight = window.innerHeight
+
     const checkKeyboardState = () => {
-      // 1. VisualViewport height check (standard on modern mobile browsers)
+      // 1. Check if any input/textarea/editable element is currently focused
+      const activeEl = document.activeElement
+      const isInputActive = Boolean(
+        activeEl &&
+        (activeEl.tagName === "INPUT" ||
+          activeEl.tagName === "TEXTAREA" ||
+          activeEl.tagName === "SELECT" ||
+          activeEl.isContentEditable ||
+          activeEl.getAttribute?.("contenteditable") === "true")
+      )
+
+      if (isInputActive) {
+        setIsKeyboardOpen(true)
+        return
+      }
+
+      // 2. Check visualViewport height reduction (iOS & Android)
       if (window.visualViewport) {
-        const isShrunk = window.visualViewport.height < window.innerHeight * 0.85
-        if (isShrunk) {
+        const visualHeight = window.visualViewport.height
+        if (visualHeight < window.innerHeight * 0.82 || visualHeight < initialHeight * 0.82) {
           setIsKeyboardOpen(true)
           return
         }
       }
 
-      // 2. Active element input check on touch/mobile devices
-      const activeEl = document.activeElement
-      const isInputActive =
-        activeEl &&
-        (activeEl.tagName === "INPUT" ||
-          activeEl.tagName === "TEXTAREA" ||
-          activeEl.isContentEditable)
-
-      const isMobile = window.innerWidth < 768
-      if (isMobile && isInputActive) {
+      // 3. Check innerHeight reduction compared to max height
+      if (window.innerHeight < initialHeight * 0.82) {
         setIsKeyboardOpen(true)
         return
+      }
+
+      // Update baseline if window enlarged (e.g. orientation change)
+      if (window.innerHeight > initialHeight) {
+        initialHeight = window.innerHeight
       }
 
       setIsKeyboardOpen(false)
     }
 
-    if (window.visualViewport) {
-      window.visualViewport.addEventListener("resize", checkKeyboardState)
+    const handleFocusIn = () => {
+      setIsKeyboardOpen(true)
+      setTimeout(checkKeyboardState, 50)
+      setTimeout(checkKeyboardState, 150)
     }
 
-    window.addEventListener("focusin", checkKeyboardState)
-    window.addEventListener("focusout", checkKeyboardState)
+    const handleFocusOut = () => {
+      setTimeout(checkKeyboardState, 50)
+      setTimeout(checkKeyboardState, 150)
+    }
+
+    document.addEventListener("focusin", handleFocusIn, true)
+    document.addEventListener("focusout", handleFocusOut, true)
     window.addEventListener("resize", checkKeyboardState)
 
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener("resize", checkKeyboardState)
+      window.visualViewport.addEventListener("scroll", checkKeyboardState)
+    }
+
     return () => {
+      document.removeEventListener("focusin", handleFocusIn, true)
+      document.removeEventListener("focusout", handleFocusOut, true)
+      window.removeEventListener("resize", checkKeyboardState)
       if (window.visualViewport) {
         window.visualViewport.removeEventListener("resize", checkKeyboardState)
+        window.visualViewport.removeEventListener("scroll", checkKeyboardState)
       }
-      window.removeEventListener("focusin", checkKeyboardState)
-      window.removeEventListener("focusout", checkKeyboardState)
-      window.removeEventListener("resize", checkKeyboardState)
     }
   }, [])
 

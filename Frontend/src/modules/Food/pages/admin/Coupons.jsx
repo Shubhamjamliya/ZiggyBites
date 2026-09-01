@@ -32,7 +32,6 @@ export default function Coupons() {
     maxDiscount: "",
     usageLimit: "",
     perUserLimit: "",
-    isFirstOrderOnly: false,
   })
 
   const fetchOffers = useCallback(async () => {
@@ -174,7 +173,6 @@ export default function Coupons() {
       maxDiscount: "",
       usageLimit: "",
       perUserLimit: "",
-      isFirstOrderOnly: false,
     })
   }
 
@@ -219,7 +217,7 @@ export default function Coupons() {
         maxDiscount: formData.discountType === "percentage" && formData.maxDiscount !== "" ? Number(formData.maxDiscount) : undefined,
         usageLimit: formData.usageLimit !== "" ? Number(formData.usageLimit) : undefined,
         perUserLimit: formData.perUserLimit !== "" ? Number(formData.perUserLimit) : undefined,
-        isFirstOrderOnly: Boolean(formData.isFirstOrderOnly),
+        isFirstOrderOnly: formData.customerScope === "first-time",
       }
       await adminAPI.createAdminOffer(payload)
 
@@ -454,16 +452,6 @@ export default function Coupons() {
                 {errors.perUserLimit && <p className="mt-1 text-xs text-red-600">{errors.perUserLimit}</p>}
               </div>
 
-              <div className="flex items-center gap-2">
-                <input
-                  id="isFirstOrderOnly"
-                  type="checkbox"
-                  checked={formData.isFirstOrderOnly}
-                  onChange={(e) => handleFormChange("isFirstOrderOnly", e.target.checked)}
-                  className="h-4 w-4"
-                />
-                <label htmlFor="isFirstOrderOnly" className="text-sm text-slate-700">First order only</label>
-              </div>
 
                 {formData.restaurantScope === "selected" && (
                   <div className="md:col-span-2 lg:col-span-3">

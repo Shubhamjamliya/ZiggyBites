@@ -57,6 +57,28 @@ export default function ItemDetailsPage() {
   const defaultCategory = location.state?.category || "Select category"
   const defaultCategoryId = location.state?.categoryId || ""
   const fileInputRef = useRef(null)
+  const scrollContainerRef = useRef(null)
+
+  const scrollToElement = (target) => {
+    if (!target) return
+    window.setTimeout(() => {
+      try {
+        target.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" })
+      } catch {}
+
+      const container = scrollContainerRef.current
+      if (container && target) {
+        const containerRect = container.getBoundingClientRect()
+        const targetRect = target.getBoundingClientRect()
+        const offsetTop = targetRect.top - containerRect.top + container.scrollTop
+        const desiredScrollTop = Math.max(0, offsetTop - (container.clientHeight / 2) + (targetRect.height / 2))
+        container.scrollTo({
+          top: desiredScrollTop,
+          behavior: "smooth"
+        })
+      }
+    }, 150)
+  }
 
   // Initialize state with empty values - will be populated from API
   const [itemData, setItemData] = useState(null) // Store the full item data for saving
@@ -302,18 +324,12 @@ export default function ItemDetailsPage() {
 
   // Keep focused form fields visible above mobile keyboard
   useEffect(() => {
-    const ensureFieldVisible = (target) => {
+    const handleFocusIn = (event) => {
+      const target = event.target
       if (!target) return
       const isFormField = target.matches?.('input, textarea, select, [contenteditable="true"]')
       if (!isFormField) return
-
-      window.setTimeout(() => {
-        target.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" })
-      }, 120)
-    }
-
-    const handleFocusIn = (event) => {
-      ensureFieldVisible(event.target)
+      scrollToElement(target)
     }
 
     document.addEventListener("focusin", handleFocusIn, true)
@@ -330,6 +346,12 @@ export default function ItemDetailsPage() {
     const updateKeyboardInset = () => {
       const inset = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop)
       setKeyboardInset(inset > 60 ? inset : 0)
+      if (inset > 60 && document.activeElement) {
+        const isFormField = document.activeElement.matches?.('input, textarea, select, [contenteditable="true"]')
+        if (isFormField) {
+          scrollToElement(document.activeElement)
+        }
+      }
     }
 
     viewport.addEventListener("resize", updateKeyboardInset)
@@ -796,7 +818,11 @@ export default function ItemDetailsPage() {
 
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto" style={{ paddingBottom: `${96 + keyboardInset}px` }}>
+      <div
+        ref={scrollContainerRef}
+        className="flex-1 overflow-y-auto scroll-smooth"
+        style={{ paddingBottom: `${96 + keyboardInset}px` }}
+      >
         {!isNewItem && currentApprovalStatus === "rejected" && currentRejectionReason ? (
           <div className="px-4 pt-4">
             <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3">
@@ -957,8 +983,9 @@ export default function ItemDetailsPage() {
                 type="text"
                 value={itemName}
                 onChange={(e) => setItemName(e.target.value)}
+                onFocus={(e) => scrollToElement(e.target)}
                 maxLength={maxNameLength}
-                className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent scroll-mt-28"
                 placeholder="Enter item name"
               />
               <button className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full hover:bg-gray-100">
@@ -982,10 +1009,11 @@ export default function ItemDetailsPage() {
               <textarea
                 value={itemDescription}
                 onChange={(e) => setItemDescription(e.target.value)}
+                onFocus={(e) => scrollToElement(e.target)}
                 maxLength={maxDescriptionLength}
                 rows={4}
                 placeholder="Eg: Yummy veg paneer burger with a soft patty, veggies, cheese, and special sauce"
-                className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none scroll-mt-28"
               />
               <button className="absolute right-3 top-3 p-1 rounded-full hover:bg-gray-100">
                 <EditIcon className="w-4 h-4 text-gray-500" />

@@ -201,13 +201,23 @@ const DeliveryMap = memo(({ orderId, order, isVisible, fallbackCustomerCoords = 
 });
 
 // Section item component
-const SectionItem = ({ icon: Icon, iconNode, title, subtitle, onClick, showArrow = true, rightContent }) => (
+const SectionItem = ({
+  icon: Icon,
+  iconNode,
+  title,
+  subtitle,
+  onClick,
+  showArrow = true,
+  rightContent,
+  multilineSubtitle = false,
+}) => (
   <motion.button
     onClick={onClick}
-    className="w-full flex items-center gap-3 p-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors text-left border-b border-dashed border-gray-200 dark:border-gray-800 last:border-0"
-    whileTap={{ scale: 0.99 }}
+    type={onClick ? "button" : undefined}
+    className="w-full flex items-start gap-3 p-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors text-left border-b border-dashed border-gray-200 dark:border-gray-800 last:border-0"
+    whileTap={onClick ? { scale: 0.99 } : undefined}
   >
-    <div className="w-10 h-10 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center flex-shrink-0 overflow-hidden">
+    <div className="w-10 h-10 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center flex-shrink-0 overflow-hidden mt-0.5">
       {iconNode ? (
         <div
           className="w-6 h-6 flex-shrink-0 flex items-center justify-center [&_svg]:w-full [&_svg]:h-full [&_svg]:block"
@@ -219,12 +229,16 @@ const SectionItem = ({ icon: Icon, iconNode, title, subtitle, onClick, showArrow
       )}
     </div>
     <div className="flex-1 min-w-0">
-      <p className="font-medium text-gray-900 dark:text-gray-100 truncate">{title}</p>
-      {subtitle && <p className="text-sm text-gray-500 dark:text-gray-400 truncate">{subtitle}</p>}
+      <p className="font-semibold text-gray-900 dark:text-gray-100">{title}</p>
+      {subtitle && (
+        <p className={`text-xs text-gray-600 dark:text-gray-300 mt-0.5 leading-relaxed ${multilineSubtitle ? "break-words whitespace-normal" : "truncate"}`}>
+          {subtitle}
+        </p>
+      )}
     </div>
-    {rightContent || (showArrow && <ChevronRight className="w-5 h-5 text-gray-400 dark:text-gray-500 flex-shrink-0" />)}
+    {rightContent || (showArrow && <ChevronRight className="w-5 h-5 text-gray-400 dark:text-gray-500 flex-shrink-0 mt-1" />)}
   </motion.button>
-)
+);
 
 class MapErrorBoundary extends React.Component {
   constructor(props) {
@@ -343,12 +357,16 @@ const transformOrderForTracking = (apiOrder, previousOrder = null, explicitResta
     userName: apiOrder?.userName || apiOrder?.userId?.name || apiOrder?.userId?.fullName || previousOrder?.userName || '',
     userPhone: apiOrder?.userPhone || apiOrder?.userId?.phone || previousOrder?.userPhone || '',
     address: {
-      street: addr?.street || previousOrder?.address?.street || '',
+      street: addr?.street || addr?.addressLine1 || previousOrder?.address?.street || '',
       city: addr?.city || previousOrder?.address?.city || '',
       state: addr?.state || previousOrder?.address?.state || '',
-      zipCode: addr?.zipCode || previousOrder?.address?.zipCode || '',
-      additionalDetails: addr?.additionalDetails || previousOrder?.address?.additionalDetails || '',
-      formattedAddress: addr?.formattedAddress ||
+      zipCode: addr?.zipCode || addr?.pincode || addr?.postalCode || previousOrder?.address?.zipCode || '',
+      additionalDetails: addr?.additionalDetails || addr?.addressLine2 || addr?.landmark || previousOrder?.address?.additionalDetails || '',
+      landmark: addr?.landmark || previousOrder?.address?.landmark || '',
+      area: addr?.area || previousOrder?.address?.area || '',
+      houseNo: addr?.houseNo || addr?.houseNumber || addr?.flatNo || addr?.flatNumber || previousOrder?.address?.houseNo || '',
+      label: addr?.label || previousOrder?.address?.label || '',
+      formattedAddress: addr?.formattedAddress || addr?.fullAddress || addr?.address ||
         (addr?.street && addr?.city
           ? `${addr.street}${addr.additionalDetails ? `, ${addr.additionalDetails}` : ''}, ${addr.city}${addr.state ? `, ${addr.state}` : ''}${addr.zipCode ? ` ${addr.zipCode}` : ''}`
           : previousOrder?.address?.formattedAddress || addr?.city || ''),
@@ -1955,44 +1973,80 @@ export default function OrderTracking() {
               />
             }
             title="Delivery at Location"
+            multilineSubtitle={true}
             subtitle={(() => {
-              // Priority 1: Use order address formattedAddress (live location address)
-              if (order?.address?.formattedAddress && order.address.formattedAddress !== "Select location") {
-                return order.address.formattedAddress
-              }
-
-              // Priority 2: Build full address from order address parts
-              if (order?.address) {
-                const orderAddressParts = []
-                if (order.address.street) orderAddressParts.push(order.address.street)
-                if (order.address.additionalDetails) orderAddressParts.push(order.address.additionalDetails)
-                if (order.address.city) orderAddressParts.push(order.address.city)
-                if (order.address.state) orderAddressParts.push(order.address.state)
-                if (order.address.zipCode) orderAddressParts.push(order.address.zipCode)
-                if (orderAddressParts.length > 0) {
-                  return orderAddressParts.join(', ')
+              const formatFullDeliveryAddress = (addr) => {
+                if (!addr) return null;
+                if (typeof addr === "string") {
+                  const s = addr.trim();
+                  return s && s !== "Select location" && s !== "Add delivery address" ? s : null;
                 }
-              }
 
-              // Priority 3: Use defaultAddress formattedAddress (live location address)
-              if (defaultAddress?.formattedAddress && defaultAddress.formattedAddress !== "Select location") {
-                return defaultAddress.formattedAddress
-              }
+                const parts = [];
 
-              // Priority 4: Build full address from defaultAddress parts
-              if (defaultAddress) {
-                const defaultAddressParts = []
-                if (defaultAddress.street) defaultAddressParts.push(defaultAddress.street)
-                if (defaultAddress.additionalDetails) defaultAddressParts.push(defaultAddress.additionalDetails)
-                if (defaultAddress.city) defaultAddressParts.push(defaultAddress.city)
-                if (defaultAddress.state) defaultAddressParts.push(defaultAddress.state)
-                if (defaultAddress.zipCode) defaultAddressParts.push(defaultAddress.zipCode)
-                if (defaultAddressParts.length > 0) {
-                  return defaultAddressParts.join(', ')
+                // Label tag
+                const labelTag = addr.label && typeof addr.label === "string" && !["home", "office", "other"].includes(addr.label.toLowerCase())
+                  ? `[${addr.label.toUpperCase()}] `
+                  : "";
+
+                // House / Flat / Street / Building
+                const streetItems = [
+                  addr.houseNo || addr.houseNumber || addr.flatNo || addr.flatNumber,
+                  addr.street || addr.addressLine1,
+                  addr.additionalDetails || addr.addressLine2
+                ].filter(Boolean).map(s => String(s).trim()).filter(Boolean);
+
+                if (streetItems.length > 0) {
+                  parts.push(streetItems.join(", "));
                 }
-              }
 
-              return 'Add delivery address'
+                // Landmark
+                if (addr.landmark && String(addr.landmark).trim() && !parts.some(p => p.includes(String(addr.landmark).trim()))) {
+                  parts.push(`Near ${String(addr.landmark).trim()}`);
+                }
+
+                // Locality / Area
+                if (addr.area && String(addr.area).trim() && !parts.some(p => p.includes(String(addr.area).trim()))) {
+                  parts.push(String(addr.area).trim());
+                }
+
+                // City, State, Pincode
+                const cityStateZip = [addr.city, addr.state, addr.zipCode || addr.pincode || addr.postalCode]
+                  .filter(Boolean)
+                  .map(s => String(s).trim())
+                  .join(", ");
+
+                if (cityStateZip) {
+                  parts.push(cityStateZip);
+                }
+
+                if (parts.length > 0) {
+                  return `${labelTag}${parts.join(", ")}`;
+                }
+
+                // Fallbacks
+                if (addr.formattedAddress && addr.formattedAddress !== "Select location") {
+                  return `${labelTag}${addr.formattedAddress}`;
+                }
+                if (addr.address && typeof addr.address === "string" && addr.address !== "Select location") {
+                  return `${labelTag}${addr.address}`;
+                }
+                if (addr.fullAddress && typeof addr.fullAddress === "string" && addr.fullAddress !== "Select location") {
+                  return `${labelTag}${addr.fullAddress}`;
+                }
+
+                return null;
+              };
+
+              // Check order address / deliveryAddress first
+              const orderAddr = formatFullDeliveryAddress(order?.address) || formatFullDeliveryAddress(order?.deliveryAddress);
+              if (orderAddr) return orderAddr;
+
+              // Check defaultAddress
+              const defAddr = formatFullDeliveryAddress(defaultAddress);
+              if (defAddr) return defAddr;
+
+              return "Add delivery address";
             })()}
             showArrow={false}
           />

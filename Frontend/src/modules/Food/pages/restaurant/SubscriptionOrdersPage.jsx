@@ -53,6 +53,23 @@ const formatAddress = (address = {}) =>
     .filter(Boolean)
     .join(", ");
 
+const formatScheduleId = (id) => {
+  if (!id) return "SCH-000000";
+  const str = String(id).trim();
+  if (str.startsWith("SCH-") && str.length <= 12) return str;
+  const clean = str.replace(/[^a-zA-Z0-9]/g, "");
+  const last6 = clean.slice(-6).toUpperCase();
+  return `SCH-${last6 || "000000"}`;
+};
+
+const formatOrderId = (orderId) => {
+  if (!orderId) return "-";
+  const str = String(orderId).trim();
+  if (str.startsWith("#") || str.startsWith("ORD-")) return str;
+  const clean = str.replace(/[^a-zA-Z0-9]/g, "");
+  return `#${clean.slice(-6).toUpperCase()}`;
+};
+
 const getSubscriptionLabel = (meal) =>
   meal?.subscription?.subscriptionCode ||
   meal?.subscription?.shortId ||
@@ -510,10 +527,16 @@ function SubscriptionOrdersPage() {
                                 </span>
                               </div>
                               <p className="mt-1 text-xs text-gray-500">{formatDateTime(meal.serviceDate)}</p>
-                              <p className="mt-2 text-xs text-gray-500">Schedule ID: {scheduleId}</p>
-                              {meal.order?._id && (
-                                <p className="mt-1 text-xs text-gray-500">Linked order: {meal.order.order_id || meal.order._id}</p>
-                              )}
+                              <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                                <span className="font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded text-[11px]">
+                                  Schedule ID: {formatScheduleId(scheduleId)}
+                                </span>
+                                {meal.order?._id && (
+                                  <span className="text-gray-500">
+                                    Linked order: <span className="font-medium text-slate-700">{formatOrderId(meal.order.order_id || meal.order._id)}</span>
+                                  </span>
+                                )}
+                              </div>
                             </div>
                             <span className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-black uppercase ${statusBadgeClass}`}>
                               {linkedOrderStatusLabel}

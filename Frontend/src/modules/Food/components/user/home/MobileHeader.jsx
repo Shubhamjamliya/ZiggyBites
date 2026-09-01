@@ -1,13 +1,19 @@
 import React from "react";
+import { Link } from "react-router-dom";
 import { MapPin, ChevronDown, Search, Mic, ShoppingCart } from "lucide-react";
+import { useCart } from "@food/context/CartContext";
 
 export default function MobileHeader({ 
   effectiveLocation, 
   handleLocationClick, 
   handleSearchFocus, 
   vegMode, 
-  handleVegModeChange
+  handleVegModeChange,
+  cartCount: propCartCount,
 }) {
+  const { getCartCount } = useCart();
+  const count = propCartCount !== undefined ? propCartCount : getCartCount();
+
   return (
     <header className="sticky top-0 z-50 bg-[#fff9f2]/95 dark:bg-[#121212]/95 backdrop-blur-md px-5 pt-3 pb-2 border-b border-transparent dark:border-gray-800/80 transition-colors duration-200">
       <div className="relative flex min-h-[34px] items-center justify-between gap-3">
@@ -33,7 +39,18 @@ export default function MobileHeader({
         </div>
 
         <div className="ml-auto flex w-[34%] items-center justify-end gap-3 text-gray-900 dark:text-white">
-          <ShoppingCart className="h-5 w-5" />
+          <Link
+            to="/food/user/cart"
+            className="relative p-1.5 rounded-full hover:bg-gray-200/60 dark:hover:bg-gray-800 transition-colors flex items-center justify-center cursor-pointer active:scale-95 text-gray-900 dark:text-white"
+            aria-label="View Cart"
+          >
+            <ShoppingCart className="h-5 w-5" />
+            {count > 0 && (
+              <span className="absolute -top-1 -right-1 flex h-4 min-w-[16px] px-1 items-center justify-center rounded-full bg-[#e92823] text-[9px] font-black text-white shadow-sm">
+                {count > 99 ? "99+" : count}
+              </span>
+            )}
+          </Link>
         </div>
       </div>
 

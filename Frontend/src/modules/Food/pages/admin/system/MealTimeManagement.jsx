@@ -385,49 +385,75 @@ export default function MealTimeManagement() {
                     }`}
                   >
                     <div
-                      className="relative h-40 p-4"
+                      className="p-4"
                       style={{ backgroundColor: slot.backgroundColor || "#fff7ed" }}
                     >
-                      <span
-                        className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-white text-sm font-black shadow-sm"
-                        style={{ color: slot.accentColor || "#ef2b24" }}
-                      >
-                        <CalendarClock className="h-5 w-5" />
-                      </span>
-                      
-                      {/* Active / Hidden Status Badge */}
-                      <span
-                        className={`absolute right-3 top-3 inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold shadow-sm backdrop-blur-sm ${
-                          isActive
-                            ? "bg-emerald-600 text-white"
-                            : "bg-amber-600 text-white"
-                        }`}
-                      >
-                        {isActive ? (
-                          <>
-                            <Eye className="h-3 w-3" />
-                            Active
-                          </>
-                        ) : (
-                          <>
-                            <EyeOff className="h-3 w-3" />
-                            Hidden
-                          </>
-                        )}
-                      </span>
+                      {/* Top Bar: Icon & Status */}
+                      <div className="flex items-center justify-between mb-3">
+                        <span
+                          className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white text-sm font-black shadow-xs shrink-0"
+                          style={{ color: slot.accentColor || "#ef2b24" }}
+                        >
+                          <CalendarClock className="h-4 w-4" />
+                        </span>
+                        
+                        {/* Active / Hidden Status Badge */}
+                        <span
+                          className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold shadow-xs backdrop-blur-sm ${
+                            isActive
+                              ? "bg-emerald-600 text-white"
+                              : "bg-amber-600 text-white"
+                          }`}
+                        >
+                          {isActive ? (
+                            <>
+                              <Eye className="h-3 w-3" />
+                              Active
+                            </>
+                          ) : (
+                            <>
+                              <EyeOff className="h-3 w-3" />
+                              Hidden
+                            </>
+                          )}
+                        </span>
+                      </div>
 
-                      {slot.imageUrl ? (
-                        <img src={slot.imageUrl} alt={slot.title} className="absolute bottom-0 right-0 h-24 w-40 object-contain" />
-                      ) : (
-                        <div className="absolute bottom-4 right-4 flex h-16 w-16 items-center justify-center rounded-full bg-white/70 text-xl font-black text-slate-400">
-                          {String(slot.title || "M").slice(0, 1).toUpperCase()}
+                      {/* Main Body: Text & Image cleanly separated */}
+                      <div className="flex items-center justify-between gap-3 min-h-[76px]">
+                        <div className="min-w-0 flex-1">
+                          <p className="font-bold text-slate-950 text-base leading-snug line-clamp-2" title={slot.title}>
+                            {slot.title}
+                          </p>
+                          <p
+                            className="mt-1 text-xs font-black uppercase tracking-wide truncate"
+                            style={{ color: slot.accentColor || "#ef2b24" }}
+                          >
+                            {slot.timeLabel}
+                          </p>
+                          {slot.subtitle && (
+                            <p className="text-[11px] text-slate-600 dark:text-gray-400 mt-0.5 line-clamp-1">
+                              {slot.subtitle}
+                            </p>
+                          )}
                         </div>
-                      )}
-                      <div className="absolute bottom-4 left-4 max-w-[65%]">
-                        <p className="font-black text-slate-950">{slot.title}</p>
-                        <p className="mt-1 text-[11px] font-black uppercase" style={{ color: slot.accentColor || "#ef2b24" }}>
-                          {slot.timeLabel}
-                        </p>
+
+                        {slot.imageUrl ? (
+                          <div className="shrink-0 w-24 h-20 rounded-lg overflow-hidden bg-white/70 p-1 flex items-center justify-center shadow-xs border border-black/5">
+                            <img
+                              src={slot.imageUrl}
+                              alt={slot.title}
+                              className="h-full w-full object-contain"
+                            />
+                          </div>
+                        ) : (
+                          <div
+                            className="shrink-0 flex h-14 w-14 items-center justify-center rounded-xl bg-white/80 text-lg font-black shadow-xs border border-black/5"
+                            style={{ color: slot.accentColor || "#ef2b24" }}
+                          >
+                            {String(slot.title || "M").slice(0, 1).toUpperCase()}
+                          </div>
+                        )}
                       </div>
                     </div>
 

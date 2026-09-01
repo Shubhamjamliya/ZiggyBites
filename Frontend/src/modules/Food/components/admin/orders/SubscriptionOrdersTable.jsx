@@ -121,7 +121,9 @@ export default function SubscriptionOrdersTable({ orders, visibleColumns, onView
                 )}
                 {visibleColumns.subscriptionId && (
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="text-sm font-medium text-slate-900">{order.subscriptionId}</span>
+                    <span className="text-sm font-medium text-slate-900">
+                      {order.shortId || order.subscriptionCode || (order.subscriptionId ? (String(order.subscriptionId).startsWith("SUB-") ? order.subscriptionId : `SUB-${String(order.subscriptionId).slice(-6).toUpperCase()}`) : "N/A")}
+                    </span>
                   </td>
                 )}
                 {visibleColumns.orderType && (

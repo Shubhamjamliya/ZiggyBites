@@ -32,7 +32,9 @@ export default function ViewSubscriptionDialog({ isOpen, onOpenChange, order }) 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1">
                 <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Subscription ID</p>
-                <p className="text-sm font-medium text-slate-900">{order.subscriptionId}</p>
+                <p className="text-sm font-medium text-slate-900">
+                  {order.shortId || order.subscriptionCode || (order.subscriptionId ? (String(order.subscriptionId).startsWith("SUB-") ? order.subscriptionId : `SUB-${String(order.subscriptionId).slice(-6).toUpperCase()}`) : "N/A")}
+                </p>
               </div>
               <div className="space-y-1">
                 <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Order Type</p>

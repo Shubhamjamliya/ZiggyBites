@@ -314,35 +314,33 @@ export default function OrdersTable({
                 {(visibleColumns.paymentType !== false) && (
                   <td className="px-6 py-4 whitespace-nowrap">
                     {(() => {
-                      // Determine payment type display
+                      const paymentMethod = String(order.payment?.method || order.paymentMethod || order.payment?.paymentMethod || "").toLowerCase();
+                      const hasRazorpayId = !!(order.payment?.razorpay_payment_id || order.payment?.razorpayPaymentId || order.payment?.razorpay?.paymentId);
+                      const isQrPayment = paymentMethod === 'razorpay_qr' || paymentMethod === 'qr' || ((paymentMethod === 'cash' || paymentMethod === 'cod' || paymentMethod === 'cash on delivery') && hasRazorpayId) || order.paymentType === 'COD (QR)';
+
                       let paymentTypeDisplay = order.paymentType;
-                      const paymentMethod = order.payment?.method || order.paymentMethod || order.payment?.paymentMethod;
-                      
-                      if (paymentMethod === 'razorpay_qr') {
+                      if (isQrPayment) {
                         paymentTypeDisplay = 'COD (QR)';
-                      } else if (!paymentTypeDisplay) {
-                        if (paymentMethod === 'cash' || paymentMethod === 'cod') {
-                          paymentTypeDisplay = 'Cash on Delivery';
-                        } else if (paymentMethod === 'wallet') {
-                          paymentTypeDisplay = 'Wallet';
-                        } else {
-                          paymentTypeDisplay = 'Online';
-                        }
-                      }
-                      
-                      // Override if payment method is wallet but paymentType is not set correctly
-                      if (paymentMethod === 'wallet' && paymentTypeDisplay !== 'Wallet') {
+                      } else if (paymentMethod === 'wallet' || paymentTypeDisplay === 'Wallet') {
                         paymentTypeDisplay = 'Wallet';
+                      } else if (paymentMethod === 'cash' || paymentMethod === 'cod' || paymentMethod === 'cash on delivery') {
+                        paymentTypeDisplay = 'Cash on Delivery';
+                      } else if (paymentMethod && paymentMethod !== 'n/a') {
+                        paymentTypeDisplay = 'Online';
+                      } else if (!paymentTypeDisplay) {
+                        paymentTypeDisplay = 'Online';
                       }
-                      
-                      const isCod = paymentTypeDisplay === 'Cash on Delivery' || paymentTypeDisplay === 'COD (QR)';
+
+                      const isCodOnly = paymentTypeDisplay === 'Cash on Delivery';
+                      const isCodQr = paymentTypeDisplay === 'COD (QR)';
                       const isWallet = paymentTypeDisplay === 'Wallet';
-                      
+
                       return (
-                        <span className={`text-sm font-medium ${
-                          isCod ? 'text-amber-600' : 
-                          isWallet ? 'text-purple-600' : 
-                          'text-emerald-600'
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                          isCodOnly ? 'bg-amber-50 text-amber-700 border border-amber-200' :
+                          isCodQr ? 'bg-blue-50 text-blue-700 border border-blue-200' :
+                          isWallet ? 'bg-purple-50 text-purple-700 border border-purple-200' :
+                          'bg-emerald-50 text-emerald-700 border border-emerald-200'
                         }`}>
                           {paymentTypeDisplay}
                         </span>

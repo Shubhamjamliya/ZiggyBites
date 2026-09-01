@@ -1062,7 +1062,12 @@ export async function getRestaurantReport(query = {}) {
             {
                 $match: {
                     restaurantId: { $in: restaurantIds },
-                    approvalStatus: 'approved'
+                    $or: [
+                        { approvalStatus: 'approved' },
+                        { approvalStatus: { $exists: false } },
+                        { status: 'active' },
+                        { isApproved: true }
+                    ]
                 }
             },
             {
@@ -1078,11 +1083,17 @@ export async function getRestaurantReport(query = {}) {
                 $group: {
                     _id: '$restaurantId',
                     totalOrder: { $sum: 1 },
-                    totalOrderAmount: { $sum: { $ifNull: ['$pricing.total', 0] } },
-                    totalDiscountGiven: { $sum: { $ifNull: ['$pricing.discount', 0] } },
-                    totalVATTAX: { $sum: { $ifNull: ['$pricing.tax', 0] } },
-                    totalAdminCommissionFromPlatformProfit: { $sum: { $ifNull: ['$platformProfit', 0] } },
-                    totalAdminCommissionFromPlatformFee: { $sum: { $ifNull: ['$pricing.platformFee', 0] } }
+                    totalOrderAmount: { $sum: { $ifNull: ['$pricing.total', { $ifNull: ['$totalAmount', 0] }] } },
+                    totalDiscountGiven: { $sum: { $ifNull: ['$pricing.discount', { $ifNull: ['$discountAmount', 0] }] } },
+                    totalVATTAX: { $sum: { $ifNull: ['$pricing.tax', { $ifNull: ['$pricing.gst', { $ifNull: ['$tax', { $ifNull: ['$gst', 0] }] }] }] } },
+                    totalAdminCommission: {
+                        $sum: {
+                            $ifNull: [
+                                '$pricing.restaurantCommission',
+                                { $ifNull: ['$restaurantCommission', { $ifNull: ['$platformProfit', { $ifNull: ['$pricing.platformFee', 0] }] }] }
+                            ]
+                        }
+                    }
                 }
             }
         ])
@@ -1097,10 +1108,7 @@ export async function getRestaurantReport(query = {}) {
                 totalOrderAmount: Number(x.totalOrderAmount || 0),
                 totalDiscountGiven: Number(x.totalDiscountGiven || 0),
                 totalVATTAX: Number(x.totalVATTAX || 0),
-                totalAdminCommission:
-                    Number(x.totalAdminCommissionFromPlatformProfit || 0) > 0
-                        ? Number(x.totalAdminCommissionFromPlatformProfit || 0)
-                        : Number(x.totalAdminCommissionFromPlatformFee || 0)
+                totalAdminCommission: Number(x.totalAdminCommission || 0)
             }
         ])
     );
@@ -3991,6 +3999,8 @@ export async function getDeliveryPartners(query) {
         vehicleType: doc.vehicleType || '',
         status: doc.status,
         totalOrders: countsMap.get(String(doc._id)) || 0,
+        rating: Number(doc.rating || 0),
+        totalRatings: Number(doc.totalRatings || 0),
         profilePhoto: doc.profilePhoto || null,
         profileImage: doc.profilePhoto ? { url: doc.profilePhoto } : null
     }));
@@ -4586,6 +4596,8 @@ export async function getDeliveryPartnerById(id) {
         ...partner,
         email: partner.email || null,
         deliveryId,
+        rating: Number(partner.rating || 0),
+        totalRatings: Number(partner.totalRatings || 0),
         status: partner.status === 'rejected' ? 'blocked' : partner.status,
         profileImage: partner.profilePhoto ? { url: partner.profilePhoto } : null,
         documents: {

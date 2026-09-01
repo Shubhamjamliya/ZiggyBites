@@ -1,13 +1,17 @@
-import { useState, useMemo } from "react"
-import { Search, Download, ChevronDown, Filter, ArrowUpDown, Settings, FileText, FileSpreadsheet, Code } from "lucide-react"
+import { useState, useMemo, useEffect } from "react"
+import { Search, Download, ChevronDown, Filter, ArrowUpDown, Settings, FileText, FileSpreadsheet, Code, Loader2 } from "lucide-react"
 import { emptySubscriptionReports } from "@food/utils/adminFallbackData"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@food/components/ui/dropdown-menu"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@food/components/ui/dialog"
 import { exportReportsToCSV, exportReportsToExcel, exportReportsToPDF, exportReportsToJSON } from "@food/components/admin/reports/reportsExportUtils"
+import { adminAPI } from "@food/api"
+import { toast } from "sonner"
 
 export default function SubscriptionReport() {
   const [searchQuery, setSearchQuery] = useState("")
-  const [subscriptions, setSubscriptions] = useState(emptySubscriptionReports)
+  const [subscriptions, setSubscriptions] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [restaurantsList, setRestaurantsList] = useState([])
   const [filters, setFilters] = useState({
     restaurant: "All restaurants",
     package: "All packages",
@@ -15,6 +19,49 @@ export default function SubscriptionReport() {
   })
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+
+  useEffect(() => {
+    const fetchReportData = async () => {
+      try {
+        setLoading(true)
+        const [subRes, restRes] = await Promise.allSettled([
+          adminAPI.getSubscriptions({ limit: 1000 }),
+          adminAPI.getRestaurants({ limit: 1000 }),
+        ])
+
+        if (subRes.status === "fulfilled" && subRes.value?.data?.success) {
+          const payload = subRes.value.data.data || {}
+          const rows = payload.subscriptions || payload.data || []
+          const mapped = rows.map((s, idx) => ({
+            sl: idx + 1,
+            id: s._id || s.id,
+            transactionId: s.shortId || s.subscriptionCode || (s.subscriptionId ? (String(s.subscriptionId).startsWith("SUB-") ? s.subscriptionId : `SUB-${String(s.subscriptionId).slice(-6).toUpperCase()}`) : (s._id ? `SUB-${String(s._id).slice(-6).toUpperCase()}` : "N/A")),
+            transactionDate: s.createdAt ? new Date(s.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'N/A',
+            restaurantName: s.restaurant || s.restaurantName || "N/A",
+            packageName: s.planTitle || s.planName || "Standard",
+            duration: s.duration || `${s.planDays || 30} days`,
+            pricing: `₹ ${Number(s.totalAmount || 0).toFixed(2)}`,
+            paymentStatus: s.paymentStatus === 'paid' ? 'Paid' : (s.statusLabel || s.status || 'Active'),
+            paymentMethod: s.paymentMethod || 'Online'
+          }))
+          setSubscriptions(mapped)
+        } else {
+          setSubscriptions([])
+        }
+
+        if (restRes.status === "fulfilled" && restRes.value?.data?.success) {
+          setRestaurantsList(restRes.value.data.data.restaurants || [])
+        }
+      } catch (err) {
+        toast.error("Failed to load subscription report")
+        setSubscriptions([])
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchReportData()
+  }, [])
 
   const filteredSubscriptions = useMemo(() => {
     let result = [...subscriptions]
@@ -82,6 +129,17 @@ export default function SubscriptionReport() {
 
   const activeFiltersCount = (filters.restaurant !== "All restaurants" ? 1 : 0) + (filters.package !== "All packages" ? 1 : 0) + (filters.all !== "All" ? 1 : 0)
 
+  if (loading) {
+    return (
+      <div className="p-4 lg:p-6 bg-slate-50 min-h-screen flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+          <p className="text-gray-600">Loading subscription report...</p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="p-4 lg:p-6 bg-slate-50 min-h-screen overflow-x-hidden">
       <div className="w-full max-w-full">
@@ -105,11 +163,9 @@ export default function SubscriptionReport() {
                   className="w-full sm:w-48 px-4 py-2.5 pr-8 text-sm rounded-lg border border-slate-300 bg-white text-slate-700 appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="All restaurants">All restaurants</option>
-                  <option value="Cheese Burger">Cheese Burger</option>
-                  <option value="Cheesy Restaurant">Cheesy Restaurant</option>
-                  <option value="TEST">TEST</option>
-                  <option value="Frying Nemo">Frying Nemo</option>
-                  <option value="Tasty Lunch">Tasty Lunch</option>
+                  {restaurantsList.map((r) => (
+                    <option key={r._id} value={r.restaurantName || r.name}>{r.restaurantName || r.name}</option>
+                  ))}
                 </select>
                 <ChevronDown className="absolute right-2 bottom-2.5 w-4 h-4 text-slate-500 pointer-events-none" />
               </div>

@@ -15,7 +15,7 @@ export const exportToCSV = (orders, filename = "orders") => {
     headers = ["SI", "Subscription ID", "Order Type", "Duration", "Restaurant", "Customer Name", "Customer Phone", "Status", "Total Orders", "Delivered"]
     rows = orders.map((order, index) => [
       index + 1,
-      order.subscriptionId,
+      order.shortId || order.subscriptionCode || (order.subscriptionId ? (String(order.subscriptionId).startsWith("SUB-") ? order.subscriptionId : `SUB-${String(order.subscriptionId).slice(-6).toUpperCase()}`) : "N/A"),
       order.orderType,
       order.duration,
       order.restaurant,
@@ -26,7 +26,7 @@ export const exportToCSV = (orders, filename = "orders") => {
       order.delivered
     ])
   } else {
-    headers = ["SI", "Order ID", "Order Date", "Customer Name", "Customer Phone", "Restaurant", "Total Amount", "Payment Status", "Order Status", "Delivery Type"]
+    headers = ["SI", "Order ID", "Order Date", "Customer Name", "Customer Phone", "Restaurant", "Total Amount", "Payment Type", "Payment Status", "Order Status", "Delivery Type"]
     rows = orders.map((order, index) => [
       index + 1,
       order.orderId || order.id,
@@ -34,7 +34,8 @@ export const exportToCSV = (orders, filename = "orders") => {
       order.customerName,
       order.customerPhone,
       order.restaurant,
-      order.total || `?${(order.totalAmount || 0).toFixed(2)}`,
+      order.total || `₹${(order.totalAmount || 0).toFixed(2)}`,
+      order.paymentType || order.paymentMethod || "N/A",
       order.paymentStatus || "",
       order.orderStatus || "",
       order.deliveryType || ""
@@ -74,7 +75,7 @@ export const exportToExcel = (orders, filename = "orders") => {
     headers = ["SI", "Subscription ID", "Order Type", "Duration", "Restaurant", "Customer Name", "Customer Phone", "Status", "Total Orders", "Delivered"]
     rows = orders.map((order, index) => [
       index + 1,
-      order.subscriptionId,
+      order.shortId || order.subscriptionCode || (order.subscriptionId ? (String(order.subscriptionId).startsWith("SUB-") ? order.subscriptionId : `SUB-${String(order.subscriptionId).slice(-6).toUpperCase()}`) : "N/A"),
       order.orderType,
       order.duration,
       order.restaurant,
@@ -241,7 +242,7 @@ export const exportToPDF = async (orders, filename = "orders") => {
       headers = [["SI", "Subscription ID", "Order Type", "Duration", "Restaurant", "Customer Name", "Customer Phone", "Status", "Total Orders", "Delivered"]]
       tableData = orders.map((order, index) => [
         index + 1,
-        order.subscriptionId || 'N/A',
+        order.shortId || order.subscriptionCode || (order.subscriptionId ? (String(order.subscriptionId).startsWith("SUB-") ? order.subscriptionId : `SUB-${String(order.subscriptionId).slice(-6).toUpperCase()}`) : "N/A"),
         order.orderType || 'N/A',
         order.duration || 'N/A',
         order.restaurant || 'N/A',

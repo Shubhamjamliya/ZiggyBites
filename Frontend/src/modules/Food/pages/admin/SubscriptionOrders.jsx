@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Calendar, CheckCircle, Loader2, Package, RefreshCw } from "lucide-react"
 import { toast } from "sonner"
 import { adminAPI } from "@food/api"
@@ -129,7 +129,7 @@ export default function SubscriptionOrders() {
   const handleExport = () => {
     const header = ["Subscription ID", "Customer", "Phone", "Restaurant", "Plan", "Status", "Amount"]
     const rows = filteredData.map((item) => [
-      item.subscriptionId,
+      item.shortId || item.subscriptionCode || (item.subscriptionId ? (String(item.subscriptionId).startsWith("SUB-") ? item.subscriptionId : `SUB-${String(item.subscriptionId).slice(-6).toUpperCase()}`) : "N/A"),
       item.customerName,
       item.customerPhone,
       item.restaurant,

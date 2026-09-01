@@ -387,7 +387,9 @@ const transformOrderForTracking = (apiOrder, previousOrder = null, explicitResta
     deliveryPartner: apiOrder?.deliveryPartnerId ? {
       name: apiOrder.deliveryPartnerId.name || apiOrder.deliveryPartnerId.fullName || 'Delivery Partner',
       phone: apiOrder.deliveryPartnerId.phone || apiOrder.deliveryPartnerId.phoneNumber || '',
-      avatar: apiOrder.deliveryPartnerId.avatar || apiOrder.deliveryPartnerId.profilePicture || null
+      avatar: apiOrder.deliveryPartnerId.avatar || apiOrder.deliveryPartnerId.profilePicture || null,
+      rating: apiOrder.deliveryPartnerId.rating ?? null,
+      totalRatings: apiOrder.deliveryPartnerId.totalRatings ?? 0
     } : (previousOrder?.deliveryPartner || null),
     deliveryPartnerId: apiOrder?.deliveryPartnerId?._id || apiOrder?.deliveryPartnerId || apiOrder?.dispatch?.deliveryPartnerId?._id || apiOrder?.dispatch?.deliveryPartnerId || apiOrder?.assignmentInfo?.deliveryPartnerId || null,
     dispatch: apiOrder?.dispatch || previousOrder?.dispatch || null,
@@ -1908,7 +1910,17 @@ export default function OrderTracking() {
                 )}
               </div>
               <div className="flex-1">
-                <p className="font-semibold text-gray-900 dark:text-gray-100">{order.deliveryPartner?.name || 'Delivery Partner'}</p>
+                <div className="flex items-center gap-2">
+                  <p className="font-semibold text-gray-900 dark:text-gray-100">{order.deliveryPartner?.name || 'Delivery Partner'}</p>
+                  {order.deliveryPartner?.rating > 0 && (
+                    <div className="flex items-center gap-0.5 bg-amber-50 dark:bg-amber-950/30 px-1.5 py-0.5 rounded border border-amber-200 dark:border-amber-800/40">
+                      <Star className="w-3 h-3 text-amber-500 fill-amber-500" />
+                      <span className="text-[11px] font-bold text-amber-700 dark:text-amber-400">
+                        {Number(order.deliveryPartner.rating).toFixed(1)}
+                      </span>
+                    </div>
+                  )}
+                </div>
                 <p className="text-sm text-gray-500 dark:text-gray-400">
                   {orderStatus === 'delivered' ? 'Delivered your order' : 'Your delivery partner is arriving'}
                 </p>

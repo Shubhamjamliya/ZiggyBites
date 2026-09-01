@@ -194,6 +194,15 @@ export default function ViewOrderDialog({ isOpen, onOpenChange, order, onAssignD
                   )}
                 </div>
               )}
+              <div className="space-y-1">
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-2">
+                  <CreditCard className="w-4 h-4" />
+                  Payment Method
+                </p>
+                <p className="text-sm font-medium text-slate-900">
+                  {order.paymentType || (order.paymentMethod === 'razorpay' ? 'Online' : (order.payment?.method || order.paymentMethod)) || 'N/A'}
+                </p>
+              </div>
               {(order.paymentStatus || order.paymentCollectionStatus != null) && (
                 <div className="space-y-1">
                   <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-2">

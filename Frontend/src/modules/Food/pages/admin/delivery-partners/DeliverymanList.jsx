@@ -639,10 +639,10 @@ availableCashLimit: deliveryman.availableCashLimit || 0,
                                 >
                                   {dm.name}
                                 </span>
-                                {dm.rating > 0 && (
+                                {dm.rating !== undefined && dm.rating !== null && (
                                   <div className="flex items-center gap-1">
                                     <Star className="w-3 h-3 fill-yellow-400 text-yellow-400" />
-                                    <span className="text-xs text-slate-600">{dm.rating.toFixed(1)}</span>
+                                    <span className="text-xs text-slate-600">{Number(dm.rating || 0).toFixed(1)}</span>
                                   </div>
                                 )}
                               </div>
@@ -870,6 +870,15 @@ availableCashLimit: deliveryman.availableCashLimit || 0,
                     <div>
                       <label className="text-xs font-semibold text-slate-500 uppercase">Delivery ID</label>
                       <p className="text-sm font-medium text-slate-900 mt-1">{viewDetails.deliveryId || "N/A"}</p>
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-slate-500 uppercase flex items-center gap-1">
+                        <Star className="w-3 h-3 text-amber-500 fill-amber-500" /> Rating
+                      </label>
+                      <p className="text-sm font-medium text-slate-900 mt-1 flex items-center gap-1">
+                        <span>{Number(viewDetails.rating || 0).toFixed(1)}</span>
+                        <span className="text-xs text-slate-500">({viewDetails.totalRatings || 0} reviews)</span>
+                      </p>
                     </div>
                     <div>
                       <label className="text-xs font-semibold text-slate-500 uppercase">Status</label>

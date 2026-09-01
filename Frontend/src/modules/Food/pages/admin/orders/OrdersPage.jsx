@@ -258,19 +258,23 @@ export default function OrdersPage({ statusKey = "all" }) {
       )
 
       const paymentMethod = order.payment?.method || order.paymentMethod || order.payment?.paymentMethod || ""
+      const backendStatus = String(order.orderStatus || "").toLowerCase()
+      const method = String(paymentMethod).toLowerCase()
+      const hasRazorpayId = !!(order.payment?.razorpay_payment_id || order.payment?.razorpayPaymentId || order.payment?.razorpay?.paymentId)
+      const isQrPayment = method === "razorpay_qr" || method === "qr" || ((method === "cod" || method === "cash" || method === "cash on delivery") && hasRazorpayId)
+
       let paymentType = order.paymentType
-      if (!paymentType) {
-        if (paymentMethod === "cash" || paymentMethod === "cod" || paymentMethod === "cash on delivery") paymentType = "Cash on Delivery"
-        else if (paymentMethod === "wallet") paymentType = "Wallet"
-        else if (paymentMethod) paymentType = "Online"
+      if (isQrPayment) {
+        paymentType = "COD (QR)"
+      } else if (!paymentType) {
+        if (method === "cash" || method === "cod" || method === "cash on delivery") paymentType = "Cash on Delivery"
+        else if (method === "wallet") paymentType = "Wallet"
+        else if (method && method !== "n/a") paymentType = "Online"
         else paymentType = "N/A"
+      } else if (method === "wallet" && paymentType !== "Wallet") {
+        paymentType = "Wallet"
       }
 
-      const backendStatus = String(order.orderStatus || "").toLowerCase()
-      const method = String(paymentMethod).toLowerCase();
-      const hasRazorpayId = !!(order.payment?.razorpay_payment_id || order.payment?.razorpayPaymentId);
-      const isQrPayment = method === "razorpay_qr" || method === "qr" || (method === "cod" && hasRazorpayId) || (method === "cash" && hasRazorpayId);
-      
       let paymentStatus = order.paymentStatus
       const paymentStatusRaw = order.payment?.status || ""
       if (!paymentStatus) {

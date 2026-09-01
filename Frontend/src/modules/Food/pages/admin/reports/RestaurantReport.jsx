@@ -187,7 +187,7 @@ export default function RestaurantReport() {
                 >
                   <option value="All Zones">All Zones</option>
                   {zones.map(zone => (
-                    <option key={zone._id} value={zone.name}>{zone.name}</option>
+                    <option key={zone._id} value={zone.zoneName || zone.name}>{zone.zoneName || zone.name}</option>
                   ))}
                 </select>
                 <ChevronDown className="absolute right-2 bottom-2.5 w-4 h-4 text-slate-500 pointer-events-none" />

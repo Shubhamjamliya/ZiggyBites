@@ -395,14 +395,24 @@ const transformOrderForTracking = (apiOrder, previousOrder = null, explicitResta
     tracking: apiOrder?.tracking || previousOrder?.tracking || {},
     deliveryState: apiOrder?.deliveryState || previousOrder?.deliveryState || null,
     scheduledAt: apiOrder?.scheduledAt || previousOrder?.scheduledAt || null,
-    createdAt: apiOrder?.createdAt || previousOrder?.createdAt || null,
-    totalAmount: apiOrder?.pricing?.total || apiOrder?.totalAmount || previousOrder?.totalAmount || 0,
-    deliveryFee: apiOrder?.pricing?.deliveryFee || apiOrder?.deliveryFee || previousOrder?.deliveryFee || 0,
-    gst: apiOrder?.pricing?.tax || apiOrder?.pricing?.gst || apiOrder?.gst || apiOrder?.tax || previousOrder?.gst || 0,
-    packagingFee: apiOrder?.pricing?.packagingFee || apiOrder?.packagingFee || 0,
-    platformFee: apiOrder?.pricing?.platformFee || apiOrder?.platformFee || 0,
-    discount: apiOrder?.pricing?.discount || apiOrder?.discount || 0,
-    subtotal: apiOrder?.pricing?.subtotal || apiOrder?.subtotal || 0,
+    pricing: {
+      subtotal: Number(apiOrder?.pricing?.subtotal ?? apiOrder?.subtotal ?? previousOrder?.pricing?.subtotal ?? previousOrder?.subtotal ?? 0),
+      deliveryFee: Number(apiOrder?.pricing?.deliveryFee ?? apiOrder?.deliveryFee ?? apiOrder?.deliveryCharge ?? previousOrder?.pricing?.deliveryFee ?? previousOrder?.deliveryFee ?? 0),
+      tax: Number(apiOrder?.pricing?.tax ?? apiOrder?.pricing?.gst ?? apiOrder?.pricing?.gstOnItem ?? apiOrder?.gst ?? apiOrder?.tax ?? previousOrder?.pricing?.tax ?? previousOrder?.gst ?? 0),
+      gst: Number(apiOrder?.pricing?.gst ?? apiOrder?.pricing?.tax ?? apiOrder?.pricing?.gstOnItem ?? apiOrder?.gst ?? apiOrder?.tax ?? previousOrder?.pricing?.gst ?? previousOrder?.gst ?? 0),
+      packagingFee: Number(apiOrder?.pricing?.packagingFee ?? apiOrder?.packagingFee ?? previousOrder?.pricing?.packagingFee ?? previousOrder?.packagingFee ?? 0),
+      platformFee: Number(apiOrder?.pricing?.platformFee ?? apiOrder?.platformFee ?? previousOrder?.pricing?.platformFee ?? previousOrder?.platformFee ?? 0),
+      discount: Number(apiOrder?.pricing?.discount ?? apiOrder?.discount ?? previousOrder?.pricing?.discount ?? previousOrder?.discount ?? 0),
+      total: Number(apiOrder?.pricing?.total ?? apiOrder?.total ?? apiOrder?.totalAmount ?? previousOrder?.pricing?.total ?? previousOrder?.totalAmount ?? 0),
+    },
+    totalAmount: Number(apiOrder?.pricing?.total ?? apiOrder?.total ?? apiOrder?.totalAmount ?? previousOrder?.pricing?.total ?? previousOrder?.totalAmount ?? 0),
+    deliveryFee: Number(apiOrder?.pricing?.deliveryFee ?? apiOrder?.deliveryFee ?? apiOrder?.deliveryCharge ?? previousOrder?.pricing?.deliveryFee ?? previousOrder?.deliveryFee ?? 0),
+    gst: Number(apiOrder?.pricing?.gst ?? apiOrder?.pricing?.tax ?? apiOrder?.pricing?.gstOnItem ?? apiOrder?.gst ?? apiOrder?.tax ?? previousOrder?.pricing?.gst ?? previousOrder?.gst ?? 0),
+    tax: Number(apiOrder?.pricing?.tax ?? apiOrder?.pricing?.gst ?? apiOrder?.pricing?.gstOnItem ?? apiOrder?.tax ?? apiOrder?.gst ?? previousOrder?.pricing?.tax ?? previousOrder?.gst ?? 0),
+    packagingFee: Number(apiOrder?.pricing?.packagingFee ?? apiOrder?.packagingFee ?? previousOrder?.pricing?.packagingFee ?? previousOrder?.packagingFee ?? 0),
+    platformFee: Number(apiOrder?.pricing?.platformFee ?? apiOrder?.platformFee ?? previousOrder?.pricing?.platformFee ?? previousOrder?.platformFee ?? 0),
+    discount: Number(apiOrder?.pricing?.discount ?? apiOrder?.discount ?? previousOrder?.pricing?.discount ?? previousOrder?.discount ?? 0),
+    subtotal: Number(apiOrder?.pricing?.subtotal ?? apiOrder?.subtotal ?? previousOrder?.pricing?.subtotal ?? previousOrder?.subtotal ?? 0),
     paymentMethod: apiOrder?.paymentMethod || apiOrder?.payment?.method || previousOrder?.paymentMethod || null,
     payment: apiOrder?.payment || previousOrder?.payment || null,
     // Preserve delivery OTP code received via socket event.
@@ -2301,48 +2311,54 @@ export default function OrderTracking() {
             </div>
 
             {/* Bill Summary */}
-            <div className="bg-gray-50 rounded-xl p-4 space-y-3">
-              <p className="text-sm font-bold text-gray-900 uppercase tracking-wider mb-1">Bill Summary</p>
+            <div className="bg-gray-50 dark:bg-gray-800/60 rounded-xl p-4 space-y-3 border border-gray-100 dark:border-gray-700/60">
+              <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Bill Summary</p>
               
               <div className="flex justify-between items-center text-sm">
-                <span className="text-gray-600">Item Total</span>
-                <span className="text-gray-900 font-medium">₹{Number(order?.subtotal || 0).toFixed(2)}</span>
+                <span className="text-gray-600 dark:text-gray-300">Item Total</span>
+                <span className="text-gray-900 dark:text-gray-100 font-semibold">₹{Number(order?.subtotal ?? order?.pricing?.subtotal ?? 0).toFixed(2)}</span>
               </div>
 
-              {Number(order?.packagingFee) > 0 && (
+              {Number(order?.packagingFee ?? order?.pricing?.packagingFee ?? 0) > 0 && (
                 <div className="flex justify-between items-center text-sm">
-                  <span className="text-gray-600">Packaging Charges</span>
-                  <span className="text-gray-900 font-medium">₹{Number(order.packagingFee).toFixed(2)}</span>
+                  <span className="text-gray-600 dark:text-gray-300">Packaging Charges</span>
+                  <span className="text-gray-900 dark:text-gray-100 font-medium">₹{Number(order.packagingFee ?? order.pricing.packagingFee).toFixed(2)}</span>
                 </div>
               )}
 
-              {Number(order?.platformFee) > 0 && (
+              {Number(order?.platformFee ?? order?.pricing?.platformFee ?? 0) > 0 && (
                 <div className="flex justify-between items-center text-sm">
-                  <span className="text-gray-600">Platform Fee</span>
-                  <span className="text-gray-900 font-medium">₹{Number(order.platformFee).toFixed(2)}</span>
+                  <span className="text-gray-600 dark:text-gray-300">Platform Fee</span>
+                  <span className="text-gray-900 dark:text-gray-100 font-medium">₹{Number(order.platformFee ?? order.pricing.platformFee).toFixed(2)}</span>
                 </div>
               )}
 
               <div className="flex justify-between items-center text-sm">
-                <span className="text-gray-600">Delivery Fee</span>
-                <span className="text-gray-900 font-medium">₹{Number(order?.deliveryFee || 0).toFixed(2)}</span>
+                <span className="text-gray-600 dark:text-gray-300">Delivery Fee</span>
+                <div className="flex items-center gap-1.5">
+                  {Number(order?.deliveryFee ?? order?.pricing?.deliveryFee ?? 0) === 0 ? (
+                    <span className="text-xs font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded border border-emerald-200">FREE</span>
+                  ) : (
+                    <span className="text-gray-900 dark:text-gray-100 font-medium">₹{Number(order?.deliveryFee ?? order?.pricing?.deliveryFee ?? 0).toFixed(2)}</span>
+                  )}
+                </div>
               </div>
 
               <div className="flex justify-between items-center text-sm">
-                <span className="text-gray-600">GST</span>
-                <span className="text-gray-900 font-medium">₹{Number(order?.gst || 0).toFixed(2)}</span>
+                <span className="text-gray-600 dark:text-gray-300">GST (Govt. Taxes)</span>
+                <span className="text-gray-900 dark:text-gray-100 font-medium">₹{Number(order?.gst ?? order?.tax ?? order?.pricing?.tax ?? order?.pricing?.gst ?? 0).toFixed(2)}</span>
               </div>
 
-              {Number(order?.discount) > 0 && (
+              {Number(order?.discount ?? order?.pricing?.discount ?? 0) > 0 && (
                 <div className="flex justify-between items-center text-sm text-green-600 font-medium">
                   <span>Discount Applied</span>
-                  <span>-₹{Number(order.discount).toFixed(2)}</span>
+                  <span>-₹{Number(order.discount ?? order.pricing.discount).toFixed(2)}</span>
                 </div>
               )}
 
-              <div className="pt-2 border-t border-gray-200 dark:border-gray-800 flex justify-between items-center">
+              <div className="pt-2.5 border-t border-gray-200 dark:border-gray-700 flex justify-between items-center">
                 <span className="text-base font-bold text-gray-900 dark:text-white">Total Amount</span>
-                <span className="text-lg font-bold text-gray-900 dark:text-white">₹{Number(order?.totalAmount || 0).toFixed(2)}</span>
+                <span className="text-lg font-bold text-gray-900 dark:text-white">₹{Number(order?.totalAmount ?? order?.total ?? order?.pricing?.total ?? 0).toFixed(2)}</span>
               </div>
             </div>
 

@@ -65,49 +65,66 @@ export default function AdminHome() {
 
   // Fetch dashboard stats from backend when filters change
   useEffect(() => {
-    const fetchDashboardStats = async () => {
+    let isMounted = true
+
+    const fetchDashboardStats = async (isBackground = false) => {
       try {
-        setIsLoading(true)
+        if (!isBackground) setIsLoading(true)
         const params = {
           period: selectedPeriod,
           ...(selectedZone !== "all" ? { zoneId: selectedZone } : {}),
         }
         const response = await adminAPI.getDashboardStats(params)
-        if (response.data?.success && response.data?.data) {
+        if (isMounted && response.data?.success && response.data?.data) {
           setDashboardData(response.data.data)
-          debugLog("Dashboard stats fetched:", response.data.data)
-        } else {
-          setDashboardData(null)
-          debugError("Invalid dashboard response format:", response.data)
         }
       } catch (error) {
-        setDashboardData(null)
-        debugError("Error fetching dashboard stats:", error)
+        if (isMounted && !isBackground) {
+          setDashboardData(null)
+          debugError("Error fetching dashboard stats:", error)
+        }
       } finally {
-        setIsLoading(false)
+        if (isMounted && !isBackground) {
+          setIsLoading(false)
+        }
       }
     }
 
-    fetchDashboardStats()
+    fetchDashboardStats(false)
+
+    // Periodic auto-refresh every 20 seconds for live order state monitoring
+    const pollInterval = setInterval(() => {
+      fetchDashboardStats(true)
+    }, 20000)
+
+    const handleOrderEvent = () => fetchDashboardStats(true)
+    window.addEventListener("orderUpdated", handleOrderEvent)
+    window.addEventListener("foodOrderCreated", handleOrderEvent)
+    window.addEventListener("foodOrderStatusChanged", handleOrderEvent)
+
+    return () => {
+      isMounted = false
+      clearInterval(pollInterval)
+      window.removeEventListener("orderUpdated", handleOrderEvent)
+      window.removeEventListener("foodOrderCreated", handleOrderEvent)
+      window.removeEventListener("foodOrderStatusChanged", handleOrderEvent)
+    }
   }, [selectedZone, selectedPeriod])
 
   // Get order stats from real data
   const getOrderStats = () => {
-    if (!dashboardData?.orders?.byStatus) {
-      return [
-        { label: "Delivered", value: 0, color: "#0ea5e9" },
-        { label: "Cancelled", value: 0, color: "#ef4444" },
-        { label: "Refunded", value: 0, color: "#f59e0b" },
-        { label: "Pending", value: 0, color: "#10b981" },
-      ]
-    }
+    const byStatus = dashboardData?.orders?.byStatus || {}
+    const delivered = Number(byStatus.delivered ?? dashboardData?.orderStats?.completed ?? 0)
+    const cancelled = Number(byStatus.cancelled ?? 0)
+    const refunded = Number(byStatus.refunded ?? 0)
+    const pending = Number(byStatus.pending ?? dashboardData?.orderStats?.pending ?? 0)
+    const processing = Number(dashboardData?.orderStats?.processing ?? 0)
 
-    const byStatus = dashboardData.orders.byStatus
     return [
-      { label: "Delivered", value: byStatus.delivered || 0, color: "#0ea5e9" },
-      { label: "Cancelled", value: byStatus.cancelled || 0, color: "#ef4444" },
-      { label: "Refunded", value: 0, color: "#f59e0b" }, // Refunded not tracked separately
-      { label: "Pending", value: byStatus.pending || 0, color: "#10b981" },
+      { label: "Delivered", value: delivered, color: "#0ea5e9" },
+      { label: "Cancelled", value: cancelled, color: "#ef4444" },
+      { label: "Refunded", value: refunded, color: "#f59e0b" },
+      { label: "Pending", value: pending + processing, color: "#10b981" },
     ]
   }
 
@@ -424,31 +441,43 @@ export default function AdminHome() {
                 </span>
               </CardHeader>
               <CardContent className="min-w-0 pt-4">
-                <div className="h-72 w-full min-w-0">
-                  <ResponsiveContainer width="100%" height="100%" minWidth={0}>
-                    <PieChart>
-                      <Pie
-                        data={pieData}
-                        dataKey="value"
-                        nameKey="name"
-                        innerRadius={60}
-                        outerRadius={90}
-                        paddingAngle={4}
-                      >
-                        {pieData.map((entry, index) => (
-                          <Cell key={index} fill={entry.fill} stroke="none" />
-                        ))}
-                      </Pie>
-                      <Tooltip
-                        contentStyle={{ background: "#ffffff", border: "1px solid #e5e7eb", borderRadius: 12 }}
-                        labelStyle={{ color: "#111827" }}
-                        itemStyle={{ color: "#111827" }}
-                      />
-                      <Legend
-                        formatter={(value) => <span style={{ color: "#111827", fontSize: 12 }}>{value}</span>}
-                      />
-                    </PieChart>
-                  </ResponsiveContainer>
+                <div className="h-72 w-full min-w-0 flex items-center justify-center">
+                  {orderStats.reduce((s, o) => s + o.value, 0) > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+                      <PieChart>
+                        <Pie
+                          data={pieData.filter((item) => item.value > 0)}
+                          dataKey="value"
+                          nameKey="name"
+                          innerRadius={60}
+                          outerRadius={90}
+                          paddingAngle={pieData.filter((item) => item.value > 0).length > 1 ? 4 : 0}
+                        >
+                          {pieData
+                            .filter((item) => item.value > 0)
+                            .map((entry, index) => (
+                              <Cell key={index} fill={entry.fill} stroke="none" />
+                            ))}
+                        </Pie>
+                        <Tooltip
+                          contentStyle={{ background: "#ffffff", border: "1px solid #e5e7eb", borderRadius: 12 }}
+                          labelStyle={{ color: "#111827" }}
+                          itemStyle={{ color: "#111827" }}
+                        />
+                        <Legend
+                          formatter={(value) => <span style={{ color: "#111827", fontSize: 12 }}>{value}</span>}
+                        />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center text-center p-6 space-y-2">
+                      <div className="w-20 h-20 rounded-full border-4 border-dashed border-neutral-200 flex items-center justify-center">
+                        <ShoppingBag className="w-8 h-8 text-neutral-300" />
+                      </div>
+                      <p className="text-sm font-medium text-neutral-600">No orders in this period</p>
+                      <p className="text-xs text-neutral-400">Order distribution will show as new orders are placed</p>
+                    </div>
+                  )}
                 </div>
                 <div className="mt-3 grid grid-cols-2 gap-3">
                   {orderStats.map((item) => (

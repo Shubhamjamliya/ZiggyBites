@@ -313,11 +313,12 @@ export async function getRestaurantMenuPdfDownloadUrl(restaurantId) {
     return { url };
 }
 
-const CANCELLED_ORDER_STATUSES = ['cancelled_by_user', 'cancelled_by_restaurant', 'cancelled_by_admin', 'dead'];
-const PENDING_ORDER_STATUSES = ['created', 'confirmed', 'preparing', 'ready_for_pickup', 'picked_up'];
-const DASHBOARD_PENDING_ORDER_STATUSES = ['created', 'confirmed'];
-const DASHBOARD_PROCESSING_ORDER_STATUSES = ['preparing', 'ready_for_pickup'];
-const DELIVERED_ORDER_STATUS_EXPR = { $eq: ['$orderStatus', 'delivered'] };
+const CANCELLED_ORDER_STATUSES = ['cancelled', 'canceled', 'cancelled_by_user', 'cancelled_by_restaurant', 'cancelled_by_admin', 'dead'];
+const PENDING_ORDER_STATUSES = ['pending', 'placed', 'created', 'confirmed', 'preparing', 'ready_for_pickup', 'ready', 'picked_up', 'out_for_delivery', 'outForDelivery'];
+const DASHBOARD_PENDING_ORDER_STATUSES = ['pending', 'placed', 'created', 'confirmed'];
+const DASHBOARD_PROCESSING_ORDER_STATUSES = ['preparing', 'ready_for_pickup', 'ready', 'picked_up', 'out_for_delivery', 'outForDelivery'];
+const REFUNDED_ORDER_STATUSES = ['refunded', 'refund'];
+const DELIVERED_ORDER_STATUS_EXPR = { $in: ['$orderStatus', ['delivered', 'Delivered']] };
 const DASHBOARD_DERIVED_PLATFORM_FEE_EXPR = {
     $max: [
         0,
@@ -411,12 +412,7 @@ export async function getDashboardStats(query = {}) {
         ? new mongoose.Types.ObjectId(query.zoneId)
         : null;
 
-    const orderMatch = {
-        $or: [
-            { "payment.method": { $in: ["cash", "wallet"] } },
-            { "payment.status": { $in: ["paid", "authorized", "captured", "settled", "refunded"] } },
-        ],
-    };
+    const orderMatch = {};
     if (periodRange) {
         orderMatch.createdAt = { $gte: periodRange.start, $lte: periodRange.end };
     }
@@ -459,10 +455,15 @@ export async function getDashboardStats(query = {}) {
                 $group: {
                     _id: null,
                     totalOrders: { $sum: 1 },
-                    delivered: { $sum: { $cond: [{ $eq: ['$orderStatus', 'delivered'] }, 1, 0] } },
+                    delivered: { $sum: { $cond: [DELIVERED_ORDER_STATUS_EXPR, 1, 0] } },
                     cancelled: {
                         $sum: {
                             $cond: [{ $in: ['$orderStatus', CANCELLED_ORDER_STATUSES] }, 1, 0]
+                        }
+                    },
+                    refunded: {
+                        $sum: {
+                            $cond: [{ $in: ['$orderStatus', REFUNDED_ORDER_STATUSES] }, 1, 0]
                         }
                     },
                     pending: {
@@ -697,6 +698,7 @@ export async function getDashboardStats(query = {}) {
             byStatus: {
                 delivered: Number(totals.delivered || 0),
                 cancelled: Number(totals.cancelled || 0),
+                refunded: Number(totals.refunded || 0),
                 pending: Number(totals.pending || 0)
             }
         },

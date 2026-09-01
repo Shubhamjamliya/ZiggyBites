@@ -152,12 +152,13 @@ export default function RegularOrderReport() {
                 ? itemsSubtotal
                 : Number(pricing.subtotal || 0)
 
-            const deliveryCharge = Number(pricing.deliveryFee || 0)
-            const platformFee = Number(pricing.platformFee || 0)
-            const vatTax = Number(pricing.tax || 0)
-            const couponDiscount = Number(pricing.discount || 0)
+            const deliveryCharge = Number(pricing.deliveryFee ?? order.deliveryFee ?? order.deliveryCharge ?? 0)
+            const packagingCharge = Number(pricing.packagingFee ?? order.packagingFee ?? 0)
+            const platformFee = Number(pricing.platformFee ?? order.platformFee ?? 0)
+            const vatTax = Number(pricing.tax ?? pricing.gst ?? order.tax ?? order.gst ?? 0)
+            const couponDiscount = Number(pricing.discount ?? order.discount ?? 0)
             const computedTotal =
-              subtotal + deliveryCharge + platformFee + vatTax - couponDiscount
+              subtotal + deliveryCharge + packagingCharge + platformFee + vatTax - couponDiscount
 
             const totalAmount =
               pricing.total != null
@@ -224,6 +225,7 @@ export default function RegularOrderReport() {
               couponDiscount,
               vatTax,
               deliveryCharge,
+              packagingCharge,
               platformFee,
               totalAmount,
               orderStatus: displayStatus,
@@ -284,6 +286,7 @@ export default function RegularOrderReport() {
       { key: "couponDiscount", label: "Coupon Discount" },
       { key: "vatTax", label: "VAT/Tax" },
       { key: "deliveryCharge", label: "Delivery Charge" },
+      { key: "packagingCharge", label: "Packaging Charge" },
       { key: "platformFee", label: "Platform Fee" },
       { key: "totalAmount", label: "Order Amount" },
       { key: "orderStatus", label: "Status" },
@@ -598,25 +601,28 @@ export default function RegularOrderReport() {
                   <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: "8%" }}>
                     Order Id
                   </th>
-                  <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: "12%" }}>
+                  <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: "11%" }}>
                     Restaurant
                   </th>
-                  <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: "12%" }}>
+                  <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: "11%" }}>
                     Customer Name
                   </th>
                   <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: "8%" }}>
                     Total Item Amount
                   </th>
-                  <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: "7%" }}>
+                  <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: "6%" }}>
                     Coupon Discount
                   </th>
                   <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: "6%" }}>
                     Vat/Tax
                   </th>
-                  <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: "7%" }}>
+                  <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: "6%" }}>
                     Delivery Charge
                   </th>
-                  <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: "7%" }}>
+                  <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: "6%" }}>
+                    Packaging Charge
+                  </th>
+                  <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: "6%" }}>
                     Platform Fee
                   </th>
                   <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: "8%" }}>
@@ -630,7 +636,7 @@ export default function RegularOrderReport() {
               <tbody className="bg-white divide-y divide-slate-100">
                 {paginatedOrders.length === 0 ? (
                   <tr>
-                    <td colSpan={11} className="px-6 py-20 text-center">
+                    <td colSpan={12} className="px-6 py-20 text-center">
                       <div className="flex flex-col items-center justify-center">
                         <p className="text-lg font-semibold text-slate-700 mb-1">No Data Found</p>
                         <p className="text-sm text-slate-500">No orders match your filters</p>
@@ -655,7 +661,7 @@ export default function RegularOrderReport() {
                         <span className="text-[10px] text-slate-700 truncate block">{order.customerName}</span>
                       </td>
                       <td className="px-1.5 py-1">
-                        <span className="text-[10px] text-slate-700">{formatAmount(order.totalAmount)}</span>
+                        <span className="text-[10px] text-slate-700">{formatAmount(order.totalItemAmount)}</span>
                       </td>
                       <td className="px-1.5 py-1">
                         <span className="text-[10px] text-slate-700">{formatAmount(order.couponDiscount)}</span>
@@ -667,10 +673,13 @@ export default function RegularOrderReport() {
                         <span className="text-[10px] text-slate-700">{formatAmount(order.deliveryCharge)}</span>
                       </td>
                       <td className="px-1.5 py-1">
+                        <span className="text-[10px] text-slate-700">{formatAmount(order.packagingCharge)}</span>
+                      </td>
+                      <td className="px-1.5 py-1">
                         <span className="text-[10px] text-slate-700">{formatAmount(order.platformFee)}</span>
                       </td>
                       <td className="px-1.5 py-1">
-                        <span className="text-[10px] font-medium text-slate-900">{formatAmount(order.totalAmount || order.totalItemAmount)}</span>
+                        <span className="text-[10px] font-medium text-slate-900">{formatAmount(order.totalAmount)}</span>
                       </td>
                       <td className="px-1.5 py-1">
                         <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-medium bg-slate-100 text-slate-700">

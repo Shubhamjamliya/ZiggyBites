@@ -10,8 +10,7 @@ import {
   Lock,
   MapPin,
 } from "lucide-react";
-import { toast } from "sonner";
-import { subscriptionAPI } from "@food/api";
+import { subscriptionAPI, adminAPI } from "@food/api";
 import { initRazorpayPayment } from "@food/utils/razorpay";
 import { getCompanyNameAsync } from "@food/utils/businessSettings";
 import { useProfile } from "@food/context/ProfileContext";
@@ -76,14 +75,54 @@ export default function SubscriptionCheckout() {
     };
   }, [navigate]);
 
+  const [feeSettings, setFeeSettings] = useState({
+    packagingFee: 0,
+    platformFee: 5,
+    gstRate: 5,
+    gstOnPlatformFee: 0,
+    gstOnPackagingFee: 0,
+  });
+
+  useEffect(() => {
+    let mounted = true;
+    adminAPI
+      .getPublicFeeSettings()
+      .then((res) => {
+        if (!mounted) return;
+        const fs = res?.data?.data?.feeSettings;
+        if (fs) {
+          setFeeSettings({
+            packagingFee: Number(fs.packagingFee ?? 0),
+            platformFee: Number(fs.platformFee ?? 5),
+            gstRate: Number(fs.gstRate ?? 5),
+            gstOnPlatformFee: Number(fs.gstOnPlatformFee ?? 0),
+            gstOnPackagingFee: Number(fs.gstOnPackagingFee ?? 0),
+          });
+        }
+      })
+      .catch(() => {});
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
   const basePrice = Math.max(0, Number.parseFloat(dish?.price || 0) || 0);
   const mealCount = selectedMeals.length || 1;
   const days = subscriptionPlan?.durationDays || 30;
   const totalFoodCost = roundMoney(basePrice * mealCount * days);
-  const gstAmount = roundMoney(totalFoodCost * (SUBSCRIPTION_GST_RATE / 100));
+
+  const packagingFee = Number(feeSettings.packagingFee || 0);
+  const platformFee = Number(feeSettings.platformFee || 0);
   const deliveryFeePerDay = SUBSCRIPTION_DELIVERY_FEE_PER_DAY;
   const totalDeliveryCharges = roundMoney(deliveryFeePerDay * days);
-  const totalAmount = roundMoney(totalFoodCost + gstAmount + totalDeliveryCharges);
+
+  const gstRate = Number(feeSettings.gstRate || SUBSCRIPTION_GST_RATE);
+  const gstOnFood = roundMoney(totalFoodCost * (gstRate / 100));
+  const gstOnPlatform = roundMoney(platformFee * (Number(feeSettings.gstOnPlatformFee || 0) / 100));
+  const gstOnPackaging = roundMoney(packagingFee * (Number(feeSettings.gstOnPackagingFee || 0) / 100));
+  const gstAmount = roundMoney(gstOnFood + gstOnPlatform + gstOnPackaging);
+
+  const totalAmount = roundMoney(totalFoodCost + packagingFee + platformFee + gstAmount + totalDeliveryCharges);
   const totalDeliveries = mealCount * days;
 
   const savedAddress = getDefaultAddress();
@@ -235,8 +274,10 @@ export default function SubscriptionCheckout() {
         planDays: days,
         itemPrice: basePrice,
         mealCount,
+        packagingFee,
+        platformFee,
         foodSubtotal: totalFoodCost,
-        gstRate: SUBSCRIPTION_GST_RATE,
+        gstRate,
         gstAmount,
         deliveryFeePerDay,
         deliveryCharges: totalDeliveryCharges,
@@ -539,12 +580,18 @@ export default function SubscriptionCheckout() {
 
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
-                <p className="font-semibold text-gray-700">GST</p>
-                <p className="mt-0.5 text-xs font-medium text-gray-400">
-                  {SUBSCRIPTION_GST_RATE}% of food subtotal
-                </p>
+                <p className="font-semibold text-gray-700">Packaging charges</p>
+                <p className="mt-0.5 text-xs font-medium text-gray-400">Packaging fee for subscription</p>
               </div>
-              <span className="shrink-0 font-bold">{formatCurrency(gstAmount)}</span>
+              <span className="shrink-0 font-bold">{formatCurrency(packagingFee)}</span>
+            </div>
+
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <p className="font-semibold text-gray-700">Platform fee</p>
+                <p className="mt-0.5 text-xs font-medium text-gray-400">Platform service charge</p>
+              </div>
+              <span className="shrink-0 font-bold">{formatCurrency(platformFee)}</span>
             </div>
 
             <div className="flex items-start justify-between gap-4">
@@ -555,6 +602,16 @@ export default function SubscriptionCheckout() {
                 </p>
               </div>
               <span className="shrink-0 font-bold">{formatCurrency(totalDeliveryCharges)}</span>
+            </div>
+
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <p className="font-semibold text-gray-700">GST</p>
+                <p className="mt-0.5 text-xs font-medium text-gray-400">
+                  {gstRate}% on subtotal & services
+                </p>
+              </div>
+              <span className="shrink-0 font-bold">{formatCurrency(gstAmount)}</span>
             </div>
 
             <div className="border-t border-dashed border-gray-200 my-4"></div>

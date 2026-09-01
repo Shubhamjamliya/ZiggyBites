@@ -580,13 +580,17 @@ export async function createSubscriptionOrder(userId, dto) {
   }
 
   const foodSubtotal = roundMoney(itemPrice * mealCount * planDays);
+  const packagingFee = roundMoney(dto.packagingFee || 0);
+  const platformFee = roundMoney(dto.platformFee || 0);
   const gstRate = Number.isFinite(Number(dto.gstRate)) ? Number(dto.gstRate) : 5;
-  const gstAmount = roundMoney(foodSubtotal * (gstRate / 100));
+  const gstAmount = Number.isFinite(Number(dto.gstAmount))
+    ? roundMoney(dto.gstAmount)
+    : roundMoney(foodSubtotal * (gstRate / 100));
   const deliveryFeePerDay = Number.isFinite(Number(dto.deliveryFeePerDay))
     ? Number(dto.deliveryFeePerDay)
     : 10;
   const deliveryCharges = roundMoney(deliveryFeePerDay * planDays);
-  const payableAmount = roundMoney(foodSubtotal + gstAmount + deliveryCharges);
+  const payableAmount = roundMoney(foodSubtotal + packagingFee + platformFee + gstAmount + deliveryCharges);
   const dtoTotalAmount = roundMoney(dto.totalAmount || 0);
   if (!Number.isFinite(dtoTotalAmount) || dtoTotalAmount <= 0) {
     throw new ValidationError('Total amount must be greater than 0');

@@ -12,6 +12,8 @@ const createSubscriptionOrderSchema = z.object({
   itemPrice: z.number().min(0).optional(),
   mealCount: z.number().int().min(1).optional(),
   foodSubtotal: z.number().min(0).optional(),
+  packagingFee: z.number().min(0).optional(),
+  platformFee: z.number().min(0).optional(),
   gstRate: z.number().min(0).max(100).optional(),
   gstAmount: z.number().min(0).optional(),
   deliveryFeePerDay: z.number().min(0).optional(),

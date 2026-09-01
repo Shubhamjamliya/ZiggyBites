@@ -259,6 +259,11 @@ export function useOrdersManagement(orders, statusKey, title) {
     })
   }
 
+  // Remove a single filter key individually
+  const removeFilter = (key) => {
+    setFilters(prev => ({ ...prev, [key]: "" }))
+  }
+
   const handleExport = (format) => {
     const filename = title.toLowerCase().replace(/\s+/g, "_")
     switch (format) {
@@ -631,6 +636,7 @@ export function useOrdersManagement(orders, statusKey, title) {
     restaurants,
     handleApplyFilters,
     handleResetFilters,
+    removeFilter,
     handleExport,
     handleViewOrder,
     handlePrintOrder,

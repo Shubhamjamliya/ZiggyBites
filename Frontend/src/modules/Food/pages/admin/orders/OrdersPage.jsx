@@ -389,6 +389,7 @@ export default function OrdersPage({ statusKey = "all" }) {
     restaurants,
     handleApplyFilters,
     handleResetFilters,
+    removeFilter,
     handleExport,
     handleViewOrder,
     handlePrintOrder,
@@ -767,6 +768,9 @@ export default function OrdersPage({ statusKey = "all" }) {
         activeFiltersCount={activeFiltersCount}
         onExport={handleExport}
         onSettingsClick={() => setIsSettingsOpen(true)}
+        filters={filters}
+        onRemoveFilter={removeFilter}
+        onResetFilters={handleResetFilters}
       />
       <FilterPanel
         isOpen={isFilterOpen}

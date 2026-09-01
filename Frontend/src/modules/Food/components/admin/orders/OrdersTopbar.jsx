@@ -1,4 +1,4 @@
-import { Search, Filter, Download, ChevronDown, Settings } from "lucide-react"
+import { Search, Filter, Download, ChevronDown, Settings, X } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -9,6 +9,31 @@ import {
 } from "@food/components/ui/dropdown-menu"
 import { FileSpreadsheet, FileText } from "lucide-react"
 
+// Human-readable label for each filter key
+const FILTER_LABELS = {
+  paymentStatus: "Payment",
+  deliveryType: "Delivery",
+  minAmount: "Min ₹",
+  maxAmount: "Max ₹",
+  fromDate: "From",
+  toDate: "To",
+  restaurant: "Restaurant",
+  status: "Status",
+}
+
+const formatFilterValue = (key, value) => {
+  if (!value) return ""
+  if (key === "deliveryType") {
+    return value.split("_").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ")
+  }
+  if (key === "fromDate" || key === "toDate") {
+    try {
+      return new Date(value).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })
+    } catch { return value }
+  }
+  return String(value).charAt(0).toUpperCase() + String(value).slice(1)
+}
+
 export default function OrdersTopbar({
   title,
   count,
@@ -18,7 +43,12 @@ export default function OrdersTopbar({
   activeFiltersCount,
   onExport,
   onSettingsClick,
+  filters = {},
+  onRemoveFilter,
+  onResetFilters,
 }) {
+  const activeChips = Object.entries(filters).filter(([, v]) => v !== "" && v !== undefined && v !== null)
+
   return (
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -90,6 +120,39 @@ export default function OrdersTopbar({
           </button>
         </div>
       </div>
+
+      {/* Active Filter Chips */}
+      {activeChips.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 mt-4 pt-4 border-t border-slate-100">
+          <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide mr-1">Active:</span>
+          {activeChips.map(([key, value]) => (
+            <span
+              key={key}
+              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold"
+            >
+              <span className="text-emerald-500">{FILTER_LABELS[key] ?? key}:</span>
+              <span>{formatFilterValue(key, value)}</span>
+              {onRemoveFilter && (
+                <button
+                  onClick={() => onRemoveFilter(key)}
+                  className="ml-0.5 rounded-full hover:bg-emerald-200 p-0.5 transition-colors"
+                  aria-label={`Remove ${FILTER_LABELS[key] ?? key} filter`}
+                >
+                  <X className="w-3 h-3 text-emerald-700" />
+                </button>
+              )}
+            </span>
+          ))}
+          {onResetFilters && (
+            <button
+              onClick={onResetFilters}
+              className="text-xs text-slate-500 hover:text-rose-600 font-semibold underline underline-offset-2 transition-colors ml-1"
+            >
+              Clear all
+            </button>
+          )}
+        </div>
+      )}
     </div>
   )
 }

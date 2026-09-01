@@ -29,23 +29,36 @@ function shouldSkipSplashScreen() {
     }
   } catch {}
 
-  // 3. Skip if on Delivery registration, Delivery auth, or partner/admin routes
+  // 3. Skip if on Delivery, Kitchen / Restaurant, Admin, Auth, or partner routes
   const pathname = String(window.location.pathname || '').toLowerCase()
   const hash = String(window.location.hash || '').toLowerCase()
-  const fullPath = `${pathname} ${hash}`
+  const search = String(window.location.search || '').toLowerCase()
+  const fullPath = `${pathname} ${hash} ${search}`
 
-  if (
+  const isPartnerOrAdminRoute =
     fullPath.includes('/delivery') ||
     fullPath.includes('/signup') ||
     fullPath.includes('/register') ||
     fullPath.includes('/admin') ||
     fullPath.includes('/restaurant') ||
+    fullPath.includes('/kitchen') ||
     fullPath.includes('/terms') ||
     fullPath.includes('/privacy') ||
     fullPath.includes('/support')
-  ) {
+
+  if (isPartnerOrAdminRoute) {
     return true
   }
+
+  // 4. Skip if authenticated as restaurant, delivery, or admin
+  try {
+    const restaurantToken = localStorage.getItem('restaurant_token') || localStorage.getItem('auth_token_restaurant')
+    const adminToken = localStorage.getItem('admin_token') || localStorage.getItem('auth_token_admin')
+    const deliveryToken = localStorage.getItem('delivery_token') || localStorage.getItem('auth_token_delivery')
+    if (restaurantToken || adminToken || deliveryToken) {
+      return true
+    }
+  } catch {}
 
   return false
 }

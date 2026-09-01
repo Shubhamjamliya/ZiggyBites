@@ -2189,34 +2189,23 @@ export default function Inventory() {
               </div>
 
               <div className="flex gap-2 flex-wrap items-center">
-                <button
-                  onClick={() => setFilterOpen(true)}
-                  className="relative flex h-12 items-center justify-center gap-2 rounded-[20px] border border-[#e7d5e0] bg-white px-4 text-sm font-semibold text-secondary transition-colors hover:border-[#d5bdd0] hover:bg-[#f9f0f7]"
-                >
-                <SlidersHorizontal className="w-4 h-4 text-primary" />
-                <span>Filters</span>
-                {selectedFilter !== "all" && (
-                  <span className="absolute right-1.5 top-1.5 h-2.5 w-2.5 rounded-full bg-primary ring-2 ring-white" />
+                {activeTab !== "add-ons" && (
+                  <button
+                    onClick={() => setIsAddPopupOpen(true)}
+                    className="h-12 rounded-[20px] bg-primary px-4 text-sm font-semibold text-white shadow-[0_18px_32px_-24px_rgba(126,56,102,0.7)] transition-colors hover:bg-secondary"
+                  >
+                    + Add item
+                  </button>
                 )}
-              </button>
 
-              {activeTab !== "add-ons" && (
-                <button
-                  onClick={() => setIsAddPopupOpen(true)}
-                  className="h-12 rounded-[20px] bg-primary px-4 text-sm font-semibold text-white shadow-[0_18px_32px_-24px_rgba(126,56,102,0.7)] transition-colors hover:bg-secondary"
-                >
-                  + Add item
-                </button>
-              )}
-
-              {activeTab === "add-ons" && (
-                <button
-                  onClick={() => setIsAddAddonOpen((v) => !v)}
-                  className="h-12 rounded-[20px] bg-primary px-4 text-sm font-semibold text-white shadow-[0_18px_32px_-24px_rgba(126,56,102,0.7)] transition-colors hover:bg-secondary"
-                  style={{ minWidth: "128px" }}
-                >
-                  {isAddAddonOpen ? "Close" : "Add Add-on"}
-                </button>
+                {activeTab === "add-ons" && (
+                  <button
+                    onClick={() => setIsAddAddonOpen((v) => !v)}
+                    className="h-12 rounded-[20px] bg-primary px-4 text-sm font-semibold text-white shadow-[0_18px_32px_-24px_rgba(126,56,102,0.7)] transition-colors hover:bg-secondary"
+                    style={{ minWidth: "128px" }}
+                  >
+                    {isAddAddonOpen ? "Close" : "Add Add-on"}
+                  </button>
                 )}
               </div>
             </div>

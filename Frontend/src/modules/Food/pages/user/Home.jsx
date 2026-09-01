@@ -2112,7 +2112,7 @@ export default function Home() {
         <div
           ref={isMobile ? mobileHeroShellRef : heroShellRef}
           data-home-hero-shell="true"
-          className="relative w-full overflow-hidden aspect-[1.7/1] sm:aspect-[1.9/1] lg:aspect-[2.1/1] min-h-[180px] sm:min-h-[220px] lg:min-h-[260px] rounded-2xl shadow-sm group cursor-pointer bg-white"
+          className="relative w-full overflow-hidden aspect-[1.7/1] sm:aspect-[1.9/1] lg:aspect-[2.1/1] min-h-[180px] sm:min-h-[220px] lg:min-h-[260px] rounded-2xl shadow-sm group cursor-pointer bg-white dark:bg-[#1a1a1a]"
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
@@ -2308,7 +2308,7 @@ export default function Home() {
           `}</style>
         </div>
 
-        <div className="md:hidden relative overflow-x-clip bg-[#fff9f2] min-h-screen pb-24">
+        <div className="md:hidden relative overflow-x-clip bg-[#fff9f2] dark:bg-[#0a0a0a] min-h-screen pb-24 transition-colors duration-200">
           <MobileHeader 
   effectiveLocation={effectiveLocation} 
   handleLocationClick={handleLocationClick} 

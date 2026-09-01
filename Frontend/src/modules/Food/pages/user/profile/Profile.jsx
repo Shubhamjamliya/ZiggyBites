@@ -154,6 +154,18 @@ export default function Profile() {
     ? userProfile.email
     : userProfile?.phone || "Not available";
 
+  const resolveProfileImageUrl = (img) => {
+    if (!img) return undefined;
+    if (typeof img === "string") {
+      const trimmed = img.trim();
+      return trimmed && trimmed !== "null" && trimmed !== "undefined" ? trimmed : undefined;
+    }
+    if (typeof img === "object") {
+      return img.url || img.secure_url || img.imageUrl || img.src || undefined;
+    }
+    return undefined;
+  };
+
   // Calculate profile completion percentage
   const calculateProfileCompletion = () => {
     if (!userProfile) return 0;
@@ -199,14 +211,9 @@ export default function Profile() {
     );
     const hasContact = hasPhone || hasValidEmail;
 
-    // Check profile image - must have URL string
-    const hasImage = !!(
-      userProfile.profileImage &&
-      typeof userProfile.profileImage === "string" &&
-      userProfile.profileImage.trim() !== "" &&
-      userProfile.profileImage !== "null" &&
-      userProfile.profileImage !== "undefined"
-    );
+    // Check profile image - must have valid URL string
+    const profileImgUrl = resolveProfileImageUrl(userProfile.profileImage);
+    const hasImage = !!profileImgUrl;
 
     // Check date of birth
     const hasDateOfBirth = isDateFilled(userProfile.dateOfBirth);
@@ -506,17 +513,10 @@ export default function Profile() {
                 whileHover={{ scale: 1.1, rotate: 5 }}
                 transition={{ duration: 0.3, type: "spring", stiffness: 300 }}>
                 <Avatar className="h-16 w-16 bg-primary/20 border-0">
-                  {userProfile?.profileImage && (
-                    <AvatarImage
-                      src={
-                        userProfile.profileImage &&
-                          userProfile.profileImage.trim()
-                          ? userProfile.profileImage
-                          : undefined
-                      }
-                      alt={displayName}
-                    />
-                  )}
+                  <AvatarImage
+                    src={resolveProfileImageUrl(userProfile?.profileImage)}
+                    alt={displayName}
+                  />
                   <AvatarFallback className="bg-primary text-white text-2xl font-semibold">
                     {avatarInitial}
                   </AvatarFallback>

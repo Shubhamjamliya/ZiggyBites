@@ -295,42 +295,49 @@ export default function ChooseMeal() {
     }
   };
 
+  const darkSlotClasses = {
+    breakfast: "dark:!bg-[#241c10] dark:border-amber-900/40",
+    lunch: "dark:!bg-[#261315] dark:border-rose-900/40",
+    snacks: "dark:!bg-[#1d162b] dark:border-purple-900/40",
+    dinner: "dark:!bg-[#121b2b] dark:border-blue-900/40",
+  };
+
   return (
-    <div className="min-h-screen bg-white text-[#171724] font-['Poppins',sans-serif]">
+    <div className="min-h-screen bg-white dark:bg-[#0a0a0a] text-[#171724] dark:text-white font-['Poppins',sans-serif] transition-colors duration-200">
       <div className="mx-auto flex min-h-screen w-full max-w-md flex-col px-4 pb-28 pt-3">
         <header className="flex items-center justify-between">
           <button
             type="button"
             onClick={() => navigate(-1)}
-            className="flex h-9 w-9 items-center justify-center rounded-full text-[#171724] active:bg-gray-100"
+            className="flex h-9 w-9 items-center justify-center rounded-full text-[#171724] dark:text-white hover:bg-gray-100 dark:hover:bg-gray-800 active:bg-gray-200 dark:active:bg-gray-700 transition-colors"
             aria-label="Go back"
           >
             <ArrowLeft className="h-5 w-5" strokeWidth={2.5} />
           </button>
-          <h1 className="flex-1 text-left text-xl font-black tracking-tight">
+          <h1 className="flex-1 text-left text-xl font-black tracking-tight text-gray-900 dark:text-white">
             Choose your meal
           </h1>
           <button
             type="button"
             onClick={() => navigate("/food/user/profile")}
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-50 text-gray-600 shadow-sm ring-1 ring-gray-200"
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-300 shadow-sm ring-1 ring-gray-200 dark:ring-gray-700"
             aria-label="Profile"
           >
             <UserCircle2 className="h-6 w-6" strokeWidth={2} />
           </button>
         </header>
 
-        <p className="mt-4 pl-10 pr-6 text-[12px] font-semibold leading-5 text-[#6d6a7d]">
+        <p className="mt-4 pl-10 pr-6 text-[12px] font-semibold leading-5 text-[#6d6a7d] dark:text-gray-400">
           Pick your preferred meal dish and delivery slots to get started.
         </p>
 
         {/* Selected Meal / Dish Selector */}
         <section className="mt-5">
           <div className="flex items-center justify-between mb-2">
-            <h2 className="text-sm font-bold text-gray-900">
+            <h2 className="text-sm font-bold text-gray-900 dark:text-white">
               Selected Meal Dish
             </h2>
-            <span className="text-[11px] font-bold text-[#e32c31]">
+            <span className="text-[11px] font-bold text-[#e32c31] dark:text-[#ff5257]">
               ₹{Number(dish.price || 99).toFixed(0)}/meal
             </span>
           </div>
@@ -360,11 +367,11 @@ export default function ChooseMeal() {
                     }}
                     className={`shrink-0 w-36 rounded-2xl p-2.5 border cursor-pointer transition active:scale-95 ${
                       isSelected
-                        ? "border-[#e32c31] bg-red-50/50 shadow-sm"
-                        : "border-gray-100 bg-white hover:border-gray-200"
+                        ? "border-[#e32c31] dark:border-[#ff5257] bg-red-50/50 dark:bg-red-950/30 shadow-sm"
+                        : "border-gray-100 dark:border-gray-800 bg-white dark:bg-[#1a1a1a] hover:border-gray-200 dark:hover:border-gray-700"
                     }`}
                   >
-                    <div className="relative h-20 w-full rounded-xl overflow-hidden bg-gray-100 mb-2">
+                    <div className="relative h-20 w-full rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-800 mb-2">
                       {item.image ? (
                         <img
                           src={getImageUrl(item.image)}
@@ -380,10 +387,10 @@ export default function ChooseMeal() {
                         ₹{item.price || 99}
                       </span>
                     </div>
-                    <p className="text-xs font-bold text-gray-900 truncate">
+                    <p className="text-xs font-bold text-gray-900 dark:text-white truncate">
                       {item.name}
                     </p>
-                    <p className="text-[10px] text-gray-500 truncate">
+                    <p className="text-[10px] text-gray-500 dark:text-gray-400 truncate">
                       {item.restaurantName || "Kitchen"}
                     </p>
                   </div>
@@ -391,12 +398,12 @@ export default function ChooseMeal() {
               })}
             </div>
           ) : (
-            <div className="p-3 rounded-xl bg-orange-50/80 border border-orange-100 flex items-center justify-between">
+            <div className="p-3 rounded-xl bg-orange-50/80 dark:bg-orange-950/30 border border-orange-100 dark:border-orange-900/40 flex items-center justify-between">
               <div>
-                <p className="text-xs font-bold text-gray-900">{dish.name}</p>
-                <p className="text-[11px] text-gray-500">{dish.restaurantName || "Homestyle Kitchen"}</p>
+                <p className="text-xs font-bold text-gray-900 dark:text-white">{dish.name}</p>
+                <p className="text-[11px] text-gray-500 dark:text-gray-400">{dish.restaurantName || "Homestyle Kitchen"}</p>
               </div>
-              <span className="text-xs font-bold text-[#e32c31]">
+              <span className="text-xs font-bold text-[#e32c31] dark:text-[#ff5257]">
                 ₹{dish.price}/meal
               </span>
             </div>
@@ -405,10 +412,10 @@ export default function ChooseMeal() {
 
         <section className="mt-6">
           <div className="flex items-end justify-between">
-            <h2 className="text-lg font-black tracking-tight">
+            <h2 className="text-lg font-black tracking-tight text-gray-900 dark:text-white">
               Select Meal Time
             </h2>
-            <span className="flex items-center gap-1 text-[9px] font-black uppercase tracking-wide text-[#e32c31]">
+            <span className="flex items-center gap-1 text-[9px] font-black uppercase tracking-wide text-[#e32c31] dark:text-[#ff5257]">
               Daily Schedule
               <CalendarDays className="h-3.5 w-3.5" strokeWidth={2.4} />
             </span>
@@ -418,6 +425,7 @@ export default function ChooseMeal() {
             {mealSlots.map((slot) => {
               const Icon = slot.icon;
               const active = selectedSlots.includes(slot.id);
+              const darkSlotClass = darkSlotClasses[slot.id] || "dark:!bg-[#1a1a1a]";
               return (
                 <button
                   key={slot.id}
@@ -425,23 +433,23 @@ export default function ChooseMeal() {
                   onClick={() => toggleSlot(slot.id)}
                   className={`relative min-h-[164px] overflow-hidden rounded-[14px] border px-4 pb-3 pt-3 text-left shadow-sm transition active:scale-[0.98] ${
                     active
-                      ? "border-[#e32c31] ring-2 ring-[#e32c31]/10"
-                      : "border-transparent"
-                  }`}
+                      ? "border-[#e32c31] dark:border-[#ff5257] ring-2 ring-[#e32c31]/10 dark:ring-[#ff5257]/20"
+                      : "border-transparent dark:border-gray-800"
+                  } ${darkSlotClass}`}
                   style={{
                     backgroundColor: slot.backgroundColor,
                   }}
                 >
-                  <span className="absolute right-3 top-3 h-4 w-4 rounded-full border-2 border-[#a4a0a5] bg-white">
+                  <span className="absolute right-3 top-3 h-4 w-4 rounded-full border-2 border-[#a4a0a5] dark:border-gray-600 bg-white dark:bg-[#1a1a1a]">
                     {active && (
-                      <span className="absolute inset-[3px] rounded-full bg-[#e32c31]" />
+                      <span className="absolute inset-[3px] rounded-full bg-[#e32c31] dark:bg-[#ff5257]" />
                     )}
                   </span>
                   <div className="absolute left-4 top-3 z-10 max-w-[76%]">
-                    <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white shadow-sm">
+                    <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white dark:bg-[#1e1e1e] shadow-sm">
                       <Icon className="h-5 w-5" style={{ color: slot.accentColor }} strokeWidth={2.3} />
                     </span>
-                    <p className="mt-2 text-[14px] font-black leading-tight">{slot.title}</p>
+                    <p className="mt-2 text-[14px] font-black leading-tight text-gray-900 dark:text-white">{slot.title}</p>
                     <p
                       className="mt-1 text-[9px] font-black uppercase tracking-wide"
                       style={{ color: slot.accentColor }}
@@ -456,7 +464,7 @@ export default function ChooseMeal() {
                       className="absolute bottom-0 left-1/2 h-[76px] w-[92%] -translate-x-1/2 object-contain"
                     />
                   ) : (
-                    <span className="absolute bottom-5 left-1/2 flex h-16 w-16 -translate-x-1/2 items-center justify-center rounded-full bg-white/70 text-2xl font-black opacity-80" style={{ color: slot.accentColor }}>
+                    <span className="absolute bottom-5 left-1/2 flex h-16 w-16 -translate-x-1/2 items-center justify-center rounded-full bg-white/70 dark:bg-black/40 text-2xl font-black opacity-80" style={{ color: slot.accentColor }}>
                       {String(slot.title).slice(0, 1).toUpperCase()}
                     </span>
                   )}
@@ -471,11 +479,11 @@ export default function ChooseMeal() {
           )}
         </section>
 
-        <section className="mt-4 flex min-h-[88px] overflow-hidden rounded-[14px] bg-[#fff0ec]">
+        <section className="mt-4 flex min-h-[88px] overflow-hidden rounded-[14px] bg-[#fff0ec] dark:bg-[#201511] border border-transparent dark:border-[#3d241c] transition-colors">
           <div className="min-w-0 flex-1 px-4 py-3">
-            <p className="text-lg font-black leading-5 text-[#171724]">Good food.</p>
-            <p className="text-lg font-black leading-5 text-[#e32c31]">Made with care.</p>
-            <p className="mt-2 max-w-[170px] text-[9px] font-semibold leading-3 text-[#777184]">
+            <p className="text-lg font-black leading-5 text-[#171724] dark:text-white">Good food.</p>
+            <p className="text-lg font-black leading-5 text-[#e32c31] dark:text-[#ff5257]">Made with care.</p>
+            <p className="mt-2 max-w-[170px] text-[9px] font-semibold leading-3 text-[#777184] dark:text-gray-400">
               Fresh ingredients, hygienic kitchens and on-time delivery every single day.
             </p>
           </div>
@@ -487,7 +495,7 @@ export default function ChooseMeal() {
                 className="absolute bottom-0 right-2 h-24 w-28 rounded-full object-cover"
               />
             ) : (
-              <div className="absolute bottom-2 right-3 flex h-20 w-20 items-center justify-center rounded-full bg-white text-3xl font-black text-[#e32c31]">
+              <div className="absolute bottom-2 right-3 flex h-20 w-20 items-center justify-center rounded-full bg-white dark:bg-[#1a1a1a] text-3xl font-black text-[#e32c31] dark:text-[#ff5257]">
                 {String(dish.name || "M").slice(0, 1).toUpperCase()}
               </div>
             )}
@@ -501,7 +509,7 @@ export default function ChooseMeal() {
           <button
             type="button"
             onClick={continueToPlans}
-            className="fixed bottom-[74px] left-4 right-4 z-30 mx-auto h-12 max-w-md rounded-xl bg-[#e32c31] text-sm font-black text-white shadow-lg shadow-red-200 active:scale-[0.98] flex items-center justify-center gap-1.5"
+            className="fixed bottom-[74px] left-4 right-4 z-30 mx-auto h-12 max-w-md rounded-xl bg-[#e32c31] hover:bg-[#c92429] text-sm font-black text-white shadow-lg shadow-red-200 dark:shadow-none active:scale-[0.98] flex items-center justify-center gap-1.5 transition-colors"
           >
             {location.state?.subscriptionPlan ? "Proceed to Checkout" : "Continue to Plans"}
           </button>

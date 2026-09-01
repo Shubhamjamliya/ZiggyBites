@@ -3266,7 +3266,9 @@ export default function Inventory() {
       )}
 
       {/* Bottom Navigation */}
-      <BottomNavOrders />
+      {!isAddAddonOpen && !isAddPopupOpen && !showBulkUpload && !filterOpen && !togglePopupOpen && !showCalendar && !showTimePicker && !isMenuOpen && (
+        <BottomNavOrders />
+      )}
     </div>
   )
 }

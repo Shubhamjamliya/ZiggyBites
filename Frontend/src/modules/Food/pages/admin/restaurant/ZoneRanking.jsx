@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react"
 import { MapPin, Search } from "lucide-react"
 import { adminAPI } from "@food/api"
+import { toast } from "sonner"
 
 export default function ZoneRanking() {
   const [zones, setZones] = useState([])
@@ -77,15 +78,15 @@ export default function ZoneRanking() {
     try {
       setIsSaving(true);
       await Promise.all(
-        changes.map(([restaurantId, rank]) => 
+        changes.map(([restaurantId, rank]) =>
           adminAPI.updateRestaurantZoneRank(restaurantId, rank)
         )
       );
-      alert("Rankings saved successfully");
+      toast.success("Rankings saved successfully");
       setChangedRanks({});
     } catch (error) {
       console.error("Error saving rankings:", error);
-      alert("Failed to save some rankings. Please try again.");
+      toast.error("Failed to save some rankings. Please try again.");
     } finally {
       setIsSaving(false);
     }

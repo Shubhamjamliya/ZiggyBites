@@ -35,6 +35,7 @@ const RestaurantsBulkImport = lazy(() => import("@food/pages/admin/restaurant/Re
 const RestaurantsBulkExport = lazy(() => import("@food/pages/admin/restaurant/RestaurantsBulkExport"));
 const RestaurantDiscount = lazy(() => import("@food/pages/admin/restaurant/RestaurantDiscount"));
 const MenuBulkUpload = lazy(() => import("@food/pages/admin/restaurant/MenuBulkUpload"));
+const ZoneRanking = lazy(() => import("@food/pages/admin/restaurant/ZoneRanking"));
 const StatusMonitor = lazy(() => import("@food/pages/admin/StatusMonitor"));
 // Food Management
 const FoodsList = lazy(() => import("@food/pages/admin/foods/FoodsList"));
@@ -309,7 +310,7 @@ export default function AdminRouter() {
             <Route path="addon-activation" element={<AddonActivation />} />
             <Route path="env-managements" element={<EnvManagements />} />
             <Route path="app-intro-ads" element={<AdsList />} />
-            <Route path="zone-ranking" element={<ZoneSetup />} />
+            <Route path="zone-ranking" element={<ZoneRanking />} />
             <Route path="hero-banner-management" element={<LandingPageManagement />} />
             <Route path="meal-time-management" element={<MealTimeManagement />} />
             <Route path="subscription-plan-management" element={<SubscriptionPlanManagement />} />

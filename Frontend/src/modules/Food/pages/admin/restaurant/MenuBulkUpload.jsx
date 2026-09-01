@@ -1,8 +1,29 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { adminAPI } from '../../../../../services/api/index.js';
-import { Loader2, UploadCloud, FileSpreadsheet, RefreshCw, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { Loader2, UploadCloud, FileSpreadsheet, RefreshCw, AlertTriangle, CheckCircle2, ChevronDown, FileDown, Database } from 'lucide-react';
 import { toast } from 'sonner';
+
+// ─── CSV helpers ──────────────────────────────────────────────────────────────
+const CSV_HEADERS = 'Name,Description,Price,Category Name,Food Type (Veg/Non-Veg),Preparation Time,Is Available (TRUE/FALSE),Image URL,Variants (Name:Price, ...)';
+
+const SAMPLE_ROWS = [
+  'Chicken Dum Biryani,Authentic slow-cooked chicken,350,Biryani,Non-Veg,30 mins,TRUE,,"Half:180, Full:350"',
+  'Paneer Tikka,Grilled cottage cheese cubes,280,Starters,Veg,20 mins,TRUE,,',
+  'Paneer Pizza,Cheesy paneer loaded pizza,349,Pizza,Veg,20 mins,TRUE,,',
+];
+
+const triggerCSVDownload = (content, filename) => {
+  const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.setAttribute('download', filename);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+};
 
 const MenuBulkUpload = () => {
   const [restaurants, setRestaurants] = useState([]);
@@ -11,6 +32,9 @@ const MenuBulkUpload = () => {
   const [isUploading, setIsUploading] = useState(false);
   const [menuData, setMenuData] = useState([]);
   const [totalQueued, setTotalQueued] = useState(0);
+  const [isDownloadOpen, setIsDownloadOpen] = useState(false);
+  const [isDownloadingData, setIsDownloadingData] = useState(false);
+  const downloadRef = useRef(null);
 
   // Polling ref to track interval
   const pollRef = useRef(null);
@@ -133,20 +157,64 @@ const MenuBulkUpload = () => {
     }
   };
 
-  const handleDownloadTemplate = () => {
-    const headers = 'Name,Description,Price,Category Name,Food Type (Veg/Non-Veg),Preparation Time,Is Available (TRUE/FALSE),Image URL,Variants (Name:Price, ...)';
-    const row1 = 'Chicken Dum Biryani,Authentic slow-cooked chicken,350,Biryani,Non-Veg,30 mins,TRUE,,"Half:180, Full:350"';
-    const row2 = 'Paneer Tikka,Grilled cottage cheese cubes,280,Starters,Veg,20 mins,TRUE,,';
-    const row3 = 'Paneer Pizza,Cheesy paneer loaded pizza,349,Pizza,Veg,20 mins,TRUE,,';
-    const csvContent = `${headers}\n${row1}\n${row2}\n${row3}`;
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', 'sample-menu-template.csv');
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handler = (e) => {
+      if (downloadRef.current && !downloadRef.current.contains(e.target)) {
+        setIsDownloadOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  // Download blank template (sample rows only)
+  const handleDownloadBlank = () => {
+    const csvContent = `${CSV_HEADERS}\n${SAMPLE_ROWS.join('\n')}`;
+    triggerCSVDownload(csvContent, 'menu-template-blank.csv');
+    setIsDownloadOpen(false);
+  };
+
+  // Download template pre-filled with current restaurant's live menu data
+  const handleDownloadWithData = async () => {
+    if (!selectedRestaurant) {
+      toast.error('Please select a restaurant first to export its current menu.');
+      setIsDownloadOpen(false);
+      return;
+    }
+    setIsDownloadingData(true);
+    setIsDownloadOpen(false);
+    try {
+      const res = await adminAPI.getFoods({ restaurantId: selectedRestaurant, limit: 2000 });
+      const foods = res?.data?.data?.foods || res?.data?.foods || res?.data?.data || [];
+      if (!Array.isArray(foods) || foods.length === 0) {
+        toast.info('No menu items found for this restaurant. Downloading blank template instead.');
+        handleDownloadBlank();
+        return;
+      }
+      const rows = foods.map(f => {
+        const name = (f.name || '').replace(/,/g, ' ');
+        const desc = (f.description || '').replace(/,/g, ' ');
+        const price = f.price || '';
+        const category = (f.categoryName || f.category?.name || '').replace(/,/g, ' ');
+        const foodType = (f.foodType || f.type || '').toLowerCase().includes('veg') && !(f.foodType || f.type || '').toLowerCase().includes('non') ? 'Veg' : 'Non-Veg';
+        const prepTime = f.preparationTime || '';
+        const available = f.isAvailable !== false ? 'TRUE' : 'FALSE';
+        const image = f.image || f.thumbnail || '';
+        const variants = Array.isArray(f.variants) && f.variants.length > 0
+          ? `"${f.variants.map(v => `${v.name}:${v.price}`).join(', ')}"`
+          : '';
+        return `${name},${desc},${price},${category},${foodType},${prepTime},${available},${image},${variants}`;
+      });
+      const restaurantName = restaurants.find(r => r._id === selectedRestaurant)?.restaurantName || 'restaurant';
+      const filename = `menu-${restaurantName.replace(/\s+/g, '-').toLowerCase()}-current.csv`;
+      triggerCSVDownload(`${CSV_HEADERS}\n${rows.join('\n')}`, filename);
+      toast.success(`Downloaded ${foods.length} items from ${restaurantName}`);
+    } catch {
+      toast.error('Failed to fetch menu data. Please try again.');
+    } finally {
+      setIsDownloadingData(false);
+    }
   };
 
   // Stats from current menu state
@@ -164,12 +232,66 @@ const MenuBulkUpload = () => {
           <h1 className="text-3xl font-black text-gray-900 tracking-tight">Bulk Menu Upload</h1>
           <p className="text-sm font-medium text-gray-500 mt-1">Upload Excel/CSV — Images auto-generated by FLUX.1 AI</p>
         </div>
-        <button
-          onClick={handleDownloadTemplate}
-          className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-xl text-sm font-bold text-gray-700 shadow-sm hover:bg-gray-50 active:scale-95 transition-all"
-        >
-          <FileSpreadsheet className="w-4 h-4 text-green-600" /> Download Template
-        </button>
+        {/* Download Template Split Button */}
+        <div className="relative" ref={downloadRef}>
+          <div className="flex items-center rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+            {/* Main button: blank template */}
+            <button
+              onClick={handleDownloadBlank}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-bold text-gray-700 hover:bg-gray-50 active:scale-95 transition-all"
+            >
+              <FileSpreadsheet className="w-4 h-4 text-green-600" />
+              Download Spreadsheet Template
+            </button>
+            {/* Divider + chevron */}
+            <div className="w-px h-6 bg-gray-200" />
+            <button
+              onClick={() => setIsDownloadOpen(prev => !prev)}
+              className="px-2.5 py-2 text-gray-500 hover:bg-gray-50 hover:text-gray-800 transition-all"
+              aria-label="More download options"
+            >
+              <ChevronDown className={`w-4 h-4 transition-transform ${isDownloadOpen ? 'rotate-180' : ''}`} />
+            </button>
+          </div>
+
+          {/* Dropdown */}
+          {isDownloadOpen && (
+            <div className="absolute right-0 mt-1.5 w-64 bg-white border border-gray-200 rounded-xl shadow-xl z-50 overflow-hidden">
+              <div className="px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-gray-400 border-b border-gray-100">
+                Choose Template Type
+              </div>
+              <button
+                onClick={handleDownloadBlank}
+                className="w-full flex items-start gap-3 px-4 py-3 hover:bg-gray-50 transition-colors text-left"
+              >
+                <FileDown className="w-4 h-4 text-blue-500 mt-0.5 shrink-0" />
+                <div>
+                  <p className="text-sm font-bold text-gray-800">Without Any Data</p>
+                  <p className="text-xs text-gray-500 mt-0.5">Blank template with sample rows to guide format</p>
+                </div>
+              </button>
+              <div className="h-px bg-gray-100 mx-3" />
+              <button
+                onClick={handleDownloadWithData}
+                disabled={isDownloadingData}
+                className="w-full flex items-start gap-3 px-4 py-3 hover:bg-gray-50 transition-colors text-left disabled:opacity-60"
+              >
+                {isDownloadingData
+                  ? <Loader2 className="w-4 h-4 text-emerald-500 mt-0.5 shrink-0 animate-spin" />
+                  : <Database className="w-4 h-4 text-emerald-500 mt-0.5 shrink-0" />
+                }
+                <div>
+                  <p className="text-sm font-bold text-gray-800">With Current Data</p>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    {selectedRestaurant
+                      ? 'Export live menu of selected restaurant'
+                      : 'Select a restaurant first to use this option'}
+                  </p>
+                </div>
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Upload Card */}

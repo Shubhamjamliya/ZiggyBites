@@ -468,6 +468,13 @@ export const adminAPI = {
     }),
   deleteRestaurant: (id) =>
     apiClient.delete(`/food/admin/restaurants/${id}`, { contextModule: "admin" }),
+  /** Update restaurant zone rank (admin). rank: number | null */
+  updateRestaurantZoneRank: (id, rank) =>
+    apiClient.patch(
+      `/food/admin/restaurants/${String(id)}/zone-rank`,
+      { rank },
+      { contextModule: "admin" },
+    ),
   /** Update restaurant status (admin). Body: { status: boolean } */
   updateRestaurantStatus: (id, status) =>
     apiClient.patch(

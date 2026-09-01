@@ -268,8 +268,12 @@ export default function SubscriptionDetails() {
                     </p>
                   )}
                 </div>
-                <div className="rounded-full bg-[#55254b]/10 dark:bg-[#55254b]/30 px-3 py-1 text-xs font-semibold text-[#55254b] dark:text-[#d38abf]">
-                  {subscription.status || "pending"}
+                <div className={`rounded-full px-3 py-1 text-xs font-semibold uppercase ${
+                  String(subscription.status || '').toLowerCase() === 'active'
+                    ? 'bg-green-50 dark:bg-green-950/40 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800'
+                    : 'bg-[#55254b]/10 dark:bg-[#55254b]/30 text-[#55254b] dark:text-[#d38abf]'
+                }`}>
+                  {subscription.status || "active"}
                 </div>
               </div>
 

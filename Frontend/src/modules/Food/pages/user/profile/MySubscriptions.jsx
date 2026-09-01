@@ -56,9 +56,11 @@ const getSubscriptionDateRange = (subscription) => {
 
 const getStatusClasses = (status) => {
   const normalized = String(status || "").toLowerCase();
-  if (normalized === "active") return "bg-green-50 text-green-700 border-green-200";
-  if (normalized.includes("failed")) return "bg-red-50 text-red-700 border-red-200";
-  return "bg-amber-50 text-amber-700 border-amber-200";
+  if (normalized === "active") return "bg-green-50 text-green-700 border-green-200 dark:bg-green-950/40 dark:text-green-300 dark:border-green-800";
+  if (normalized === "completed") return "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800";
+  if (normalized === "expired") return "bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700";
+  if (normalized.includes("failed") || normalized === "cancelled") return "bg-red-50 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-300 dark:border-red-800";
+  return "bg-green-50 text-green-700 border-green-200 dark:bg-green-950/40 dark:text-green-300 dark:border-green-800";
 };
 
 const formatSubscriptionId = (subscriptionOrId) => {
@@ -280,7 +282,7 @@ export default function MySubscriptions() {
                             <span
                               className={`shrink-0 rounded-full border px-3 py-1 text-[11px] font-bold uppercase ${getStatusClasses(subscription.status)}`}
                             >
-                              {subscription.status || "pending"}
+                              {subscription.status || "active"}
                             </span>
                           </div>
 

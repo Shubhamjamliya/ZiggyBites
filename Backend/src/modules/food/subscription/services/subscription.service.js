@@ -1535,14 +1535,21 @@ export async function sendTestSubscriptionReminder(type = 'dish') {
 export async function listSubscriptionsForUser(userId) {
   const subscriptions = await FoodSubscription.find({
     userId: new mongoose.Types.ObjectId(userId),
+    status: { $nin: ['pending_payment', 'draft'] },
+    paymentStatus: { $in: ['paid', 'completed'] },
   })
     .sort({ createdAt: -1 })
     .lean();
 
   return {
-    subscriptions: subscriptions.map((subscription) =>
-      normalizeSubscriptionForClient(subscription),
-    ),
+    subscriptions: subscriptions.map((subscription) => {
+      const normalized = normalizeSubscriptionForClient(subscription);
+      const computedStatus = getSubscriptionDateStatus(subscription);
+      return {
+        ...normalized,
+        status: computedStatus,
+      };
+    }),
   };
 }
 

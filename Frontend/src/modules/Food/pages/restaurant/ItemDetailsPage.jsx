@@ -65,7 +65,7 @@ export default function ItemDetailsPage() {
     if (!target) return
     window.setTimeout(() => {
       try {
-        target.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" })
+        target.scrollIntoView({ behavior: "smooth", block: "start", inline: "nearest" })
       } catch {}
 
       const container = scrollContainerRef.current
@@ -73,13 +73,13 @@ export default function ItemDetailsPage() {
         const containerRect = container.getBoundingClientRect()
         const targetRect = target.getBoundingClientRect()
         const offsetTop = targetRect.top - containerRect.top + container.scrollTop
-        const desiredScrollTop = Math.max(0, offsetTop - (container.clientHeight / 2) + (targetRect.height / 2))
+        const desiredScrollTop = Math.max(0, offsetTop - 60)
         container.scrollTo({
           top: desiredScrollTop,
           behavior: "smooth"
         })
       }
-    }, 150)
+    }, 80)
   }
 
   // Initialize state with empty values - will be populated from API
@@ -987,10 +987,15 @@ export default function ItemDetailsPage() {
               <input
                 type="text"
                 value={itemName}
-                onChange={(e) => setItemName(e.target.value)}
+                onChange={(e) => {
+                  setItemName(e.target.value)
+                  if (e.target.value.length === 1) {
+                    scrollToElement(e.target)
+                  }
+                }}
                 onFocus={(e) => scrollToElement(e.target)}
                 maxLength={maxNameLength}
-                className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent scroll-mt-28"
+                className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent scroll-mt-20"
                 placeholder="Enter item name"
               />
               <button className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full hover:bg-gray-100">
@@ -1013,12 +1018,17 @@ export default function ItemDetailsPage() {
             <div className="relative">
               <textarea
                 value={itemDescription}
-                onChange={(e) => setItemDescription(e.target.value)}
+                onChange={(e) => {
+                  setItemDescription(e.target.value)
+                  if (e.target.value.length === 1) {
+                    scrollToElement(e.target)
+                  }
+                }}
                 onFocus={(e) => scrollToElement(e.target)}
                 maxLength={maxDescriptionLength}
                 rows={4}
                 placeholder="Eg: Yummy veg paneer burger with a soft patty, veggies, cheese, and special sauce"
-                className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none scroll-mt-28"
+                className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none scroll-mt-20"
               />
               <button className="absolute right-3 top-3 p-1 rounded-full hover:bg-gray-100">
                 <EditIcon className="w-4 h-4 text-gray-500" />

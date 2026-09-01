@@ -2776,7 +2776,7 @@ export default function RestaurantOnboarding() {
   return (
     <LocalizationProvider dateAdapter={AdapterDayjs}>
       <div className="min-h-screen bg-gray-100 flex flex-col">
-        <header className="px-4 py-4 sm:px-6 sm:py-5 bg-white flex items-center justify-between border-b">
+        <header className="sticky top-0 z-50 px-4 py-4 sm:px-6 sm:py-4 bg-white flex items-center justify-between border-b shadow-sm">
           <div className="flex items-center gap-3">
             <button
               onClick={() => navigate("/food/restaurant/explore")}
@@ -2855,7 +2855,7 @@ export default function RestaurantOnboarding() {
           </div>
         )}
 
-        <footer className={`px-4 sm:px-6 py-3 bg-white ${keyboardInset ? "hidden" : ""}`}>
+        <footer className={`sticky bottom-0 z-50 px-4 sm:px-6 py-3.5 bg-white border-t shadow-lg ${keyboardInset ? "hidden" : ""}`}>
           <div className="flex justify-between items-center">
             <Button
               variant="ghost"

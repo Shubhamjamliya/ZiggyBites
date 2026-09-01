@@ -611,14 +611,14 @@ export default function SignupStep2() {
   return (
     <div className="min-h-screen bg-gray-100">
       {/* Header */}
-      <div className="bg-white px-4 py-3 flex items-center gap-4 border-b border-gray-200">
+      <div className="sticky top-0 z-40 bg-white px-4 py-3.5 flex items-center gap-4 border-b border-gray-200 shadow-sm">
         <button
           onClick={goBack}
           className="p-2 hover:bg-gray-100 rounded-full transition-colors"
         >
           <ArrowLeft className="w-5 h-5" />
         </button>
-        <h1 className="text-lg font-medium">Upload Documents</h1>
+        <h1 className="text-lg font-bold text-gray-900">Upload Documents</h1>
       </div>
 
       {/* Content */}

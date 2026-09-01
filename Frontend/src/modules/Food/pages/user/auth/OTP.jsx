@@ -424,7 +424,7 @@ export default function OTP() {
         </div>
 
         {/* Header */}
-        <div className="flex items-center px-6 py-4 border-b border-gray-100 dark:border-gray-800">
+        <div className="sticky top-0 z-20 bg-white dark:bg-[#1a1a1a] flex items-center px-6 py-4 border-b border-gray-100 dark:border-gray-800 shadow-sm">
           <button
             onClick={() => navigate("/food/user/auth/login")}
             className="p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors"

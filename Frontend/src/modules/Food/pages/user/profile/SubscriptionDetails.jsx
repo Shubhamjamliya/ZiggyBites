@@ -61,6 +61,24 @@ const getSubscriptionDateRange = (sub) => {
   return `${startText} to ${endText}`;
 };
 
+const formatSubscriptionId = (subscriptionOrId) => {
+  if (!subscriptionOrId) return "SUB-000000";
+  
+  if (typeof subscriptionOrId === "object") {
+    if (subscriptionOrId.shortId) return subscriptionOrId.shortId;
+    if (subscriptionOrId.subscriptionCode) return subscriptionOrId.subscriptionCode;
+    const raw = subscriptionOrId.subscriptionId || subscriptionOrId._id || subscriptionOrId.id;
+    return formatSubscriptionId(raw);
+  }
+
+  const str = String(subscriptionOrId).trim();
+  if (str.startsWith("SUB-") && str.length <= 12) return str;
+
+  const clean = str.replace(/[^a-zA-Z0-9]/g, "");
+  const last6 = clean.slice(-6).toUpperCase();
+  return `SUB-${last6 || "000000"}`;
+};
+
 const getAddressText = (address = {}) => {
   if (!address) return "";
   if (typeof address === "string") return address;
@@ -158,7 +176,9 @@ export default function SubscriptionDetails() {
           </Button>
           <div>
             <h1 className="text-xl font-bold text-gray-900 dark:text-white">Subscription details</h1>
-            <p className="text-xs text-gray-500 dark:text-gray-400">{subscription.restaurantName || "Restaurant"}</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              {subscription.restaurantName || "Restaurant"} • <span className="font-semibold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-[11px]">{formatSubscriptionId(subscription)}</span>
+            </p>
           </div>
         </div>
 

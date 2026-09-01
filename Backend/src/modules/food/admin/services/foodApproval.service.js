@@ -32,7 +32,7 @@ export async function listPendingFoodApprovals(query = {}) {
         .sort({ requestedAt: -1, createdAt: -1 })
         .skip(skip)
         .limit(limit)
-        .select('restaurantId categoryName name price variants image foodType approvalStatus requestedAt createdAt')
+        .select('restaurantId categoryName name price priceOnOtherPlatforms otherPlatformGst variants variations image foodType tag nutrition isAvailable preparationTime description approvalStatus requestedAt createdAt')
         .lean();
 
     const addonList = await FoodAddon.find({ approvalStatus: 'pending' })
@@ -51,26 +51,34 @@ export async function listPendingFoodApprovals(query = {}) {
         : [];
     const restaurantMap = new Map(restaurants.map((r) => [String(r._id), r.restaurantName]));
 
-    const foodRequests = foodList.map((f) => ({
-        _id: f._id,
-        id: f._id,
-        entityType: 'food',
-        type: 'food',
-        restaurantName: restaurantMap.get(String(f.restaurantId)) || 'Unknown Restaurant',
-        restaurantId: toRestaurantDisplayId(f.restaurantId),
-        category: f.categoryName || '',
-        itemName: f.name,
-        foodType: f.foodType || 'Non-Veg',
-        sectionName: f.categoryName || '',
-        subsectionName: '',
-        approvalStatus: f.approvalStatus || 'pending',
-        price: getFoodDisplayPrice(f),
-        variants: serializeFoodVariants(f.variants),
-        image: f.image || '',
-        images: f.image ? [f.image] : [],
-        requestedAt: f.requestedAt || f.createdAt,
-        isActionable: (f.approvalStatus || 'pending') === 'pending'
-    }));
+    const foodRequests = foodList.map((f) => {
+        const itemVariants = serializeFoodVariants(f.variants || f.variations || []);
+        return {
+            _id: f._id,
+            id: f._id,
+            entityType: 'food',
+            type: 'food',
+            restaurantName: restaurantMap.get(String(f.restaurantId)) || 'Unknown Restaurant',
+            restaurantId: toRestaurantDisplayId(f.restaurantId),
+            category: f.categoryName || '',
+            itemName: f.name,
+            foodType: f.foodType || 'Non-Veg',
+            sectionName: f.categoryName || '',
+            subsectionName: '',
+            approvalStatus: f.approvalStatus || 'pending',
+            price: getFoodDisplayPrice(f),
+            variants: itemVariants,
+            variations: itemVariants,
+            image: f.image || '',
+            images: f.image ? [f.image] : [],
+            description: f.description || '',
+            preparationTime: f.preparationTime || '',
+            tag: f.tag || 'Normal',
+            priceOnOtherPlatforms: f.priceOnOtherPlatforms || null,
+            requestedAt: f.requestedAt || f.createdAt,
+            isActionable: (f.approvalStatus || 'pending') === 'pending'
+        };
+    });
 
     const addonRequests = addonList.map((a) => ({
         _id: a._id,

@@ -383,7 +383,16 @@ export default function FoodApproval() {
                             </span>
                           </td>
                           <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-700 font-semibold">
-                            {request.price !== null && request.price !== undefined ? `Rs ${request.price}` : '-'}
+                            {request.price !== null && request.price !== undefined ? (
+                              <div className="flex flex-col">
+                                <span>₹{request.price}</span>
+                                {Array.isArray(request.variants) && request.variants.length > 0 && (
+                                  <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded w-fit mt-0.5">
+                                    {request.variants.length} {request.variants.length === 1 ? "variant" : "variants"}
+                                  </span>
+                                )}
+                              </div>
+                            ) : '-'}
                           </td>
                           <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-500">
                             {request.requestedAt ? new Date(request.requestedAt).toLocaleDateString() : '-'}
@@ -486,7 +495,58 @@ export default function FoodApproval() {
                             <p className="text-sm text-gray-700">{new Date(selectedRequest.requestedAt).toLocaleString()}</p>
                         </div>
                     )}
+                    {selectedRequest.preparationTime && (
+                        <div>
+                            <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Preparation Time</label>
+                            <p className="text-sm text-gray-700">{selectedRequest.preparationTime}</p>
+                        </div>
+                    )}
+                    {selectedRequest.priceOnOtherPlatforms && (
+                        <div>
+                            <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Other Platforms Price</label>
+                            <p className="text-sm text-gray-700">₹{selectedRequest.priceOnOtherPlatforms}</p>
+                        </div>
+                    )}
                 </div>
+
+                {/* Variants / Variations */}
+                {(() => {
+                  const variantsList = selectedRequest.variants || selectedRequest.variations || [];
+                  if (!Array.isArray(variantsList) || variantsList.length === 0) return null;
+
+                  return (
+                    <div className="col-span-full space-y-2.5 pt-2 border-t border-slate-100">
+                      <div className="flex items-center justify-between">
+                        <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                          Variant Details & Pricing ({variantsList.length})
+                        </label>
+                        <span className="text-xs font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100">
+                          Multi-variant Item
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {variantsList.map((v, idx) => (
+                          <div
+                            key={idx}
+                            className="flex items-center justify-between p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 shadow-sm"
+                          >
+                            <div className="flex items-center gap-2.5">
+                              <span className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 text-[10px] font-bold flex items-center justify-center">
+                                {idx + 1}
+                              </span>
+                              <span className="text-sm font-semibold text-slate-800">
+                                {v.name || v.title || `Variant ${idx + 1}`}
+                              </span>
+                            </div>
+                            <span className="text-sm font-bold text-emerald-600">
+                              ₹{v.price}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {selectedRequest.description && (
                   <div className="col-span-full">

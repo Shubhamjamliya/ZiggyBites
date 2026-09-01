@@ -11,6 +11,8 @@ import {
   Plus,
   X,
   Camera,
+  Upload,
+  Image as ImageIcon,
   ThumbsUp,
   ChevronLeft,
   ChevronRight,
@@ -22,7 +24,7 @@ import api from "@food/api"
 import { restaurantAPI, uploadAPI } from "@food/api"
 import { toast } from "sonner"
 import { ImageSourcePicker } from "@food/components/ImageSourcePicker"
-import { isFlutterBridgeAvailable } from "@food/utils/imageUploadUtils"
+import { isFlutterBridgeAvailable, openGallery } from "@food/utils/imageUploadUtils"
 import { getFoodVariants } from "@food/utils/foodVariants"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
@@ -428,9 +430,12 @@ export default function ItemDetailsPage() {
     }
   }
 
-  const handleCameraClick = () => {
+  const handleUploadClick = () => {
     if (isFlutterBridgeAvailable()) {
-      setIsPhotoPickerOpen(true)
+      openGallery({
+        onSelectFile: handleImageAdd,
+        fileNamePrefix: "item-photo"
+      })
     } else {
       fileInputRef.current?.click()
     }
@@ -926,10 +931,10 @@ export default function ItemDetailsPage() {
             <div className="relative w-full h-80 bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center">
               <div className="text-center">
                 <div className="w-20 h-20 bg-white/80 rounded-full flex items-center justify-center mx-auto mb-3 shadow-lg">
-                  <Camera className="w-10 h-10 text-gray-400" />
+                  <ImageIcon className="w-10 h-10 text-gray-400" />
                 </div>
                 <p className="text-sm font-medium text-gray-600">No images added yet</p>
-                <p className="text-xs text-gray-500 mt-1">Tap the button below to add one image</p>
+                <p className="text-xs text-gray-500 mt-1">Tap the button below to upload from device</p>
               </div>
             </div>
           )}
@@ -944,13 +949,13 @@ export default function ItemDetailsPage() {
               className="hidden"
             />
             <button
-              onClick={handleCameraClick}
+              onClick={handleUploadClick}
               className="w-full flex items-center justify-center gap-2.5 px-6 py-3.5 bg-gradient-to-r from-gray-900 to-gray-800 text-white rounded-xl text-sm font-semibold cursor-pointer hover:from-gray-800 hover:to-gray-700 transition-all shadow-md hover:shadow-lg active:scale-95"
             >
               <div className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center">
-                <Plus className="w-4 h-4" />
+                <Upload className="w-4 h-4" />
               </div>
-              <span>Add Image</span>
+              <span>Upload from Device</span>
             </button>
           </div>
         </div>
@@ -1410,6 +1415,7 @@ export default function ItemDetailsPage() {
         description="Choose how to upload your item image"
         fileNamePrefix="item-photo"
         galleryInputRef={fileInputRef}
+        hideCamera={true}
       />
     </div>
   )

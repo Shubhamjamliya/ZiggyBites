@@ -61,6 +61,24 @@ const getStatusClasses = (status) => {
   return "bg-amber-50 text-amber-700 border-amber-200";
 };
 
+const formatSubscriptionId = (subscriptionOrId) => {
+  if (!subscriptionOrId) return "SUB-000000";
+  
+  if (typeof subscriptionOrId === "object") {
+    if (subscriptionOrId.shortId) return subscriptionOrId.shortId;
+    if (subscriptionOrId.subscriptionCode) return subscriptionOrId.subscriptionCode;
+    const raw = subscriptionOrId.subscriptionId || subscriptionOrId._id || subscriptionOrId.id;
+    return formatSubscriptionId(raw);
+  }
+
+  const str = String(subscriptionOrId).trim();
+  if (str.startsWith("SUB-") && str.length <= 12) return str;
+
+  const clean = str.replace(/[^a-zA-Z0-9]/g, "");
+  const last6 = clean.slice(-6).toUpperCase();
+  return `SUB-${last6 || "000000"}`;
+};
+
 export default function MySubscriptions() {
   const navigate = useNavigate();
   const { subscriptions, loading, refreshSubscriptions } = useSubscriptions();
@@ -299,7 +317,9 @@ export default function MySubscriptions() {
                           </div>
 
                           <div className="mt-4 flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
-                            <span>ID: {id || "-"}</span>
+                            <span className="font-semibold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md text-[11px]">
+                              ID: {formatSubscriptionId(subscription)}
+                            </span>
                             <span className="inline-flex items-center gap-1 font-medium text-[#e32c31]">
                               Details
                               <ChevronRight className="h-3.5 w-3.5" />

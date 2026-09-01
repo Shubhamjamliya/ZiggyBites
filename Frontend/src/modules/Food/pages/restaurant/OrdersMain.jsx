@@ -925,7 +925,27 @@ function SearchResults({ query, results, isLoading, onSelectOrder }) {
     );
   }
 
-  const transformedResults = (results || []).map(transformOrderForList);
+  const rawList = results || [];
+  const queryLower = (query || "").toLowerCase().trim();
+
+  const filtered = queryLower
+    ? rawList.filter((order) => {
+        const orderId = String(order.orderId || order._id || order.id || "").toLowerCase();
+        const customerName = String(order.customerName || order.customer?.name || order.userName || order.userId?.name || "").toLowerCase();
+        const customerPhone = String(order.customerPhone || order.customer?.phone || order.userPhone || order.userId?.phone || "").toLowerCase();
+        const itemsText = Array.isArray(order.items)
+          ? order.items.map((it) => String(it.name || it.title || "")).join(" ").toLowerCase()
+          : "";
+        return (
+          orderId.includes(queryLower) ||
+          customerName.includes(queryLower) ||
+          customerPhone.includes(queryLower) ||
+          itemsText.includes(queryLower)
+        );
+      })
+    : rawList;
+
+  const transformedResults = filtered.map(transformOrderForList);
 
   return (
     <div className="pt-4 pb-6">
@@ -1428,14 +1448,20 @@ export default function OrdersMain() {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [isSearchActive, setIsSearchActive] = useState(false);
 
   // Global search listener
   useEffect(() => {
     const handleSearch = (event) => {
-      const { query, results, isLoading } = event.detail;
+      const { query, results, isLoading, isSearchActive: active } = event.detail || {};
       setSearchQuery(query || "");
       setSearchResults(results || []);
       setIsSearching(isLoading || false);
+      if (typeof active === "boolean") {
+        setIsSearchActive(active);
+      } else if (query && query.trim()) {
+        setIsSearchActive(true);
+      }
     };
 
     window.addEventListener("restaurantSearchUpdated", handleSearch);
@@ -3839,7 +3865,9 @@ export default function OrdersMain() {
       </AnimatePresence>
 
       {/* Bottom Navigation - Sticky */}
-      <BottomNavOrders />
+      {!isSearchActive && !searchQuery.trim() && !isSearching && !isSheetOpen && (
+        <BottomNavOrders />
+      )}
     </div>
   );
 }

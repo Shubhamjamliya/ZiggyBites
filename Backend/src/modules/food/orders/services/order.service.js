@@ -1130,6 +1130,30 @@ export async function listOrdersRestaurant(restaurantId, query) {
       { "payment.status": { $in: ["paid", "authorized", "captured", "settled", "refunded"] } },
     ],
   };
+
+  const search = String(query?.search || query?.q || "").trim();
+  if (search) {
+    const escaped = search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const regex = new RegExp(escaped, "i");
+    const orConditions = [
+      { orderId: regex },
+      { "items.name": regex },
+      { "customer.name": regex },
+      { "customer.phone": regex },
+      { "deliveryAddress.address": regex },
+    ];
+    if (mongoose.Types.ObjectId.isValid(search)) {
+      orConditions.push({ _id: new mongoose.Types.ObjectId(search) });
+    }
+    filter.$and = filter.$and || [];
+    filter.$and.push({ $or: orConditions });
+  }
+
+  const status = String(query?.status || query?.orderStatus || "").trim();
+  if (status && status !== "all") {
+    filter.orderStatus = status;
+  }
+
   const [docs, total] = await Promise.all([
     FoodOrder.find(filter)
       .populate("userId", "name phone email profileImage")

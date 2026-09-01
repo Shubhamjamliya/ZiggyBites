@@ -334,11 +334,21 @@ export default function RestaurantNavbar({
 
   const handleSearchClick = () => {
     setIsSearchActive(true)
+    window.dispatchEvent(
+      new CustomEvent("restaurantSearchUpdated", {
+        detail: { query: searchValue, results: [], isLoading: false, isSearchActive: true },
+      }),
+    )
   }
 
   const handleSearchClose = () => {
     setIsSearchActive(false)
     setSearchValue("")
+    window.dispatchEvent(
+      new CustomEvent("restaurantSearchUpdated", {
+        detail: { query: "", results: [], isLoading: false, isSearchActive: false },
+      }),
+    )
   }
 
   const handleSearchChange = (e) => {

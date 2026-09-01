@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
-import { ArrowLeft, IndianRupee, Plus, ArrowDownCircle, ArrowUpCircle, RefreshCw, Loader2 } from "lucide-react"
+import { ArrowLeft, IndianRupee, Plus, ArrowDownCircle, ArrowUpCircle, RefreshCw, Loader2, AlertCircle } from "lucide-react"
 import { Button } from "@food/components/ui/button"
 import { Card, CardContent } from "@food/components/ui/card"
 import AnimatedPage from "@food/components/user/AnimatedPage"
@@ -43,11 +43,18 @@ export default function Wallet() {
       if (walletData) {
         setWallet(walletData)
         setTransactions(walletData.transactions || [])
+      } else {
+        setWallet({ balance: 0, referralEarnings: 0, transactions: [] })
+        setTransactions([])
       }
     } catch (err) {
       debugError("Error fetching wallet:", err)
-      setError(err?.response?.data?.message || "Failed to load wallet")
-      toast.error("Failed to load wallet data")
+      const status = err?.response?.status
+      const msg =
+        status === 401
+          ? "Please sign in to view your wallet."
+          : err?.response?.data?.message || "Failed to load wallet data. Please try again."
+      setError(msg)
     } finally {
       setLoading(false)
     }
@@ -168,8 +175,28 @@ export default function Wallet() {
         )}
 
         {error && !loading && (
-          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 md:p-6">
-            <p className="text-red-600 dark:text-red-400 text-sm md:text-base">{error}</p>
+          <div className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/50 rounded-2xl p-6 text-center max-w-md mx-auto space-y-4 my-8">
+            <div className="w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400 flex items-center justify-center mx-auto">
+              <AlertCircle className="w-6 h-6" />
+            </div>
+            <p className="text-red-700 dark:text-red-300 font-medium text-sm md:text-base">
+              {error}
+            </p>
+            <div className="flex items-center justify-center gap-3">
+              <Button
+                variant="outline"
+                onClick={fetchWalletData}
+                className="border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/40"
+              >
+                Try Again
+              </Button>
+              <Button
+                onClick={() => navigate("/food/user")}
+                className="bg-[#e32c31] hover:bg-[#c42226] text-white"
+              >
+                Go to Home
+              </Button>
+            </div>
           </div>
         )}
 

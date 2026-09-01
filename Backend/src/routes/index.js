@@ -46,18 +46,18 @@ router.use('/v1/food/delivery', deliveryRoutes);
 router.use('/v1/food/restaurant', restaurantRoutes);
 router.use('/v1/food', landingRoutes);
 router.use('/v1/food/search', searchRoutes);
-router.use('/v1/food/subscriptions', authMiddleware, requireRoles('USER'), subscriptionUserRoutes);
+router.use('/v1/food/subscriptions', authMiddleware, requireRoles('USER', 'CUSTOMER', 'ADMIN', 'SUPER_ADMIN'), subscriptionUserRoutes);
 router.use('/v1/food/promocodes', promocodeRoutes);
 router.get('/v1/food/dining/categories/public', getPublicDiningCategories);
 router.get('/v1/food/dining/restaurants/public', getPublicDiningRestaurants);
 router.get('/v1/food/dining/restaurants/:restaurantId/occupied-seats/public', getPublicRestaurantOccupiedSeats);
 
 // Dining Booking Routes
-router.post('/v1/food/dining/bookings', authMiddleware, requireRoles('USER'), createBooking);
-router.get('/v1/food/dining/bookings/my', authMiddleware, requireRoles('USER'), getMyBookings);
-router.post('/v1/food/dining/bookings/:bookingId/review', authMiddleware, requireRoles('USER'), createReview);
-router.get('/v1/food/dining/bookings/restaurant/:restaurantId', authMiddleware, requireRoles('RESTAURANT', 'ADMIN'), getRestaurantBookings);
-router.patch('/v1/food/dining/bookings/:bookingId/status', authMiddleware, requireRoles('RESTAURANT', 'ADMIN'), updateBookingStatus);
+router.post('/v1/food/dining/bookings', authMiddleware, requireRoles('USER', 'CUSTOMER', 'ADMIN', 'SUPER_ADMIN'), createBooking);
+router.get('/v1/food/dining/bookings/my', authMiddleware, requireRoles('USER', 'CUSTOMER', 'ADMIN', 'SUPER_ADMIN'), getMyBookings);
+router.post('/v1/food/dining/bookings/:bookingId/review', authMiddleware, requireRoles('USER', 'CUSTOMER', 'ADMIN', 'SUPER_ADMIN'), createReview);
+router.get('/v1/food/dining/bookings/restaurant/:restaurantId', authMiddleware, requireRoles('RESTAURANT', 'ADMIN', 'SUPER_ADMIN'), getRestaurantBookings);
+router.patch('/v1/food/dining/bookings/:bookingId/status', authMiddleware, requireRoles('RESTAURANT', 'ADMIN', 'SUPER_ADMIN'), updateBookingStatus);
 
 router.use('/v1/uploads', optionalAuthMiddleware, uploadRateLimiter, uploadRoutes);
 
@@ -65,10 +65,10 @@ router.use('/v1/uploads', optionalAuthMiddleware, uploadRateLimiter, uploadRoute
 router.get('/v1/food/admin/business-settings/public', businessSettingsController.getBusinessSettings);
 
 router.use('/v1/food/admin/env', envSettingRoutes);
-router.use('/v1/food/admin', authMiddleware, requireRoles('ADMIN'), restaurantAdminRoutes);
-router.use('/v1/food/user', authMiddleware, requireRoles('USER'), userRoutes);
-router.use('/v1/food/notifications', authMiddleware, requireRoles('USER', 'RESTAURANT', 'DELIVERY_PARTNER'), notificationRoutes);
-router.use('/v1/food/orders', authMiddleware, requireRoles('USER'), orderUserRoutes);
+router.use('/v1/food/admin', authMiddleware, requireRoles('ADMIN', 'SUPER_ADMIN'), restaurantAdminRoutes);
+router.use('/v1/food/user', authMiddleware, requireRoles('USER', 'CUSTOMER', 'ADMIN', 'SUPER_ADMIN'), userRoutes);
+router.use('/v1/food/notifications', authMiddleware, requireRoles('USER', 'CUSTOMER', 'ADMIN', 'SUPER_ADMIN', 'RESTAURANT', 'DELIVERY_PARTNER'), notificationRoutes);
+router.use('/v1/food/orders', authMiddleware, requireRoles('USER', 'CUSTOMER', 'ADMIN', 'SUPER_ADMIN'), orderUserRoutes);
 router.use('/v1/food/payments', authMiddleware, paymentRoutes);
 router.use('/v1/payments/webhook', webhookRoutes);
 router.use('/v1/fcm-tokens', fcmRoutes);

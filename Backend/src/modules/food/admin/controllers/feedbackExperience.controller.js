@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import { FeedbackExperience } from '../models/feedbackExperience.model.js';
 import { sendResponse, sendError } from '../../../../utils/response.js';
 
@@ -90,12 +91,13 @@ export const getFeedbackExperiences = async (req, res) => {
 
         const skip = (parseInt(page) - 1) * parseInt(limit);
         
-        const feedbacks = await FeedbackExperience.find(query)
-            .populate('userId', 'name phone email restaurantName ownerPhone ownerEmail')
+        const rawFeedbacks = await FeedbackExperience.find(query)
+            .populate('userId', 'name phone email restaurantName ownerPhone ownerEmail fullName userPhone userEmail')
             .populate('restaurantId', 'restaurantName')
             .sort({ createdAt: -1 })
             .skip(skip)
-            .limit(parseInt(limit));
+            .limit(parseInt(limit))
+            .lean();
 
         const total = await FeedbackExperience.countDocuments(query);
 
@@ -121,14 +123,49 @@ export const getFeedbackExperiences = async (req, res) => {
             maxRating
         };
 
+        // Ensure user details are populated even if refPath was missing/unmatched
+        const userIdsToLookup = [];
+        for (const fb of rawFeedbacks) {
+            if (!fb.userId || typeof fb.userId !== 'object' || (!fb.userId.name && !fb.userId.phone && !fb.userId.email && !fb.userId.restaurantName)) {
+                const uid = fb.userId?._id || fb.userId;
+                if (uid && mongoose.Types.ObjectId.isValid(uid)) {
+                    userIdsToLookup.push(new mongoose.Types.ObjectId(uid));
+                }
+            }
+        }
+
+        const userMap = {};
+        if (userIdsToLookup.length > 0) {
+            try {
+                const [users, restaurants, deliveryPartners] = await Promise.all([
+                    mongoose.model('FoodUser').find({ _id: { $in: userIdsToLookup } }).select('name phone email').lean(),
+                    mongoose.model('FoodRestaurant').find({ _id: { $in: userIdsToLookup } }).select('restaurantName ownerPhone ownerEmail email phone').lean(),
+                    mongoose.model('FoodDeliveryPartner').find({ _id: { $in: userIdsToLookup } }).select('name phone email').lean()
+                ]);
+
+                users.forEach(u => { userMap[String(u._id)] = { name: u.name, phone: u.phone, email: u.email }; });
+                restaurants.forEach(r => { userMap[String(r._id)] = { name: r.restaurantName, phone: r.phone || r.ownerPhone, email: r.email || r.ownerEmail }; });
+                deliveryPartners.forEach(d => { userMap[String(d._id)] = { name: d.name, phone: d.phone, email: d.email }; });
+            } catch (e) {
+                console.warn('Fallback lookup error in getFeedbackExperiences:', e);
+            }
+        }
+
         // Normalize the feedback data to have consistent user fields
-        const normalizedFeedbacks = feedbacks.map(fb => {
-            const user = fb.userId || {};
+        const normalizedFeedbacks = rawFeedbacks.map(fb => {
+            const populatedUser = (typeof fb.userId === 'object' && fb.userId !== null) ? fb.userId : {};
+            const fallbackUser = userMap[String(fb.userId?._id || fb.userId)] || {};
+            
+            const name = populatedUser.name || populatedUser.restaurantName || fallbackUser.name || 'Anonymous User';
+            const phone = populatedUser.phone || populatedUser.ownerPhone || fallbackUser.phone || '';
+            const email = populatedUser.email || populatedUser.ownerEmail || fallbackUser.email || '';
+
             return {
-                ...fb.toObject(),
-                userName: user.name || user.restaurantName || 'N/A',
-                userPhone: user.phone || user.ownerPhone || 'N/A',
-                userEmail: user.email || user.ownerEmail || 'N/A'
+                ...fb,
+                userName: name,
+                userPhone: phone,
+                userEmail: email,
+                restaurantName: fb.restaurantId?.restaurantName || populatedUser.restaurantName || fallbackUser.name || 'N/A'
             };
         });
 

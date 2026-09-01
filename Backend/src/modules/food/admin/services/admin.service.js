@@ -1117,7 +1117,7 @@ export async function getRestaurantReport(query = {}) {
 export async function getTaxReport(query = {}) {
     const { fromDate, toDate, search } = query;
     const match = {
-        orderStatus: 'delivered' // Typically tax is reported on delivered/completed orders
+        orderStatus: { $nin: ['cancelled', 'Cancelled', 'cancelled_by_user', 'cancelled_by_restaurant', 'cancelled_by_admin', 'dead'] }
     };
 
     if (fromDate && toDate) {
@@ -1125,19 +1125,28 @@ export async function getTaxReport(query = {}) {
     }
 
     if (search) {
-        // Search by order ID if provided
         match.orderId = { $regex: search, $options: 'i' };
     }
 
-    // Aggregate tax by income source (Restaurants, Delivery, Platform)
-    // For now, we'll group by Restaurant as the primary income source
+    // Aggregate tax by income source (grouped by Restaurant)
     const taxData = await FoodOrder.aggregate([
         { $match: match },
         {
             $group: {
                 _id: '$restaurantId',
-                totalIncome: { $sum: { $ifNull: ['$pricing.total', 0] } },
-                totalTax: { $sum: { $ifNull: ['$pricing.tax', 0] } },
+                totalIncome: {
+                    $sum: {
+                        $ifNull: ['$pricing.total', { $ifNull: ['$totalAmount', 0] }]
+                    }
+                },
+                totalTax: {
+                    $sum: {
+                        $ifNull: [
+                            '$pricing.tax',
+                            { $ifNull: ['$pricing.gstOnItem', { $ifNull: ['$pricing.gst', { $ifNull: ['$tax', { $ifNull: ['$gst', 0] }] }] }] }
+                        ]
+                    }
+                },
                 orderCount: { $sum: 1 }
             }
         },
@@ -1196,7 +1205,7 @@ export async function getTaxReportDetail(restaurantId, query = {}) {
     const { fromDate, toDate } = query;
     const match = {
         restaurantId: new mongoose.Types.ObjectId(restaurantId),
-        orderStatus: 'delivered'
+        orderStatus: { $nin: ['cancelled', 'Cancelled', 'cancelled_by_user', 'cancelled_by_restaurant', 'cancelled_by_admin', 'dead'] }
     };
 
     if (fromDate && toDate) {
@@ -1204,7 +1213,7 @@ export async function getTaxReportDetail(restaurantId, query = {}) {
     }
 
     const orders = await FoodOrder.find(match)
-        .select('orderId pricing createdAt orderStatus')
+        .select('orderId pricing totalAmount tax gst createdAt orderStatus')
         .sort({ createdAt: -1 })
         .lean();
 
@@ -1212,13 +1221,17 @@ export async function getTaxReportDetail(restaurantId, query = {}) {
 
     return {
         restaurantName: restaurant?.restaurantName || 'Unknown Restaurant',
-        orders: orders.map(o => ({
-            id: o._id,
-            orderId: o.orderId,
-            totalAmount: `\u20B9${(o.pricing?.total || 0).toFixed(2)}`,
-            taxAmount: `\u20B9${(o.pricing?.tax || 0).toFixed(2)}`,
-            date: o.createdAt
-        }))
+        orders: orders.map(o => {
+            const tax = Number(o.pricing?.tax ?? o.pricing?.gstOnItem ?? o.pricing?.gst ?? o.tax ?? o.gst ?? 0);
+            const total = Number(o.pricing?.total ?? o.totalAmount ?? 0);
+            return {
+                id: o._id,
+                orderId: o.orderId,
+                totalAmount: `\u20B9${total.toFixed(2)}`,
+                taxAmount: `\u20B9${tax.toFixed(2)}`,
+                date: o.createdAt
+            };
+        })
     };
 }
 

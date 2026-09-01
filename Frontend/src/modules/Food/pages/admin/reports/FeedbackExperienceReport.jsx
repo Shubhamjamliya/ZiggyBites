@@ -46,17 +46,24 @@ export default function FeedbackExperienceReport() {
       const response = await adminAPI.getFeedbackExperiences(params)
       if (response.data && response.data.data) {
         const rawData = response.data.data.feedbacks || []
-        const formattedData = rawData.map(fb => ({
-          _id: fb._id,
-          userName: fb.userName || 'N/A',
-          userEmail: fb.userEmail || 'N/A',
-          userPhone: fb.userPhone || 'N/A',
-          restaurantName: fb.restaurantId?.restaurantName || 'N/A',
-          rating: fb.rating * 2, // Convert 1-5 back to 1-10 for UI
-          experience: fb.comment || 'N/A',
-          module: fb.module,
-          createdAt: fb.createdAt
-        }))
+        const formattedData = rawData.map(fb => {
+          const uName = fb.userName && fb.userName !== 'N/A' ? fb.userName : (fb.userId?.name || fb.userId?.restaurantName || 'Anonymous');
+          const uEmail = fb.userEmail && fb.userEmail !== 'N/A' ? fb.userEmail : (fb.userId?.email || fb.userId?.ownerEmail || '');
+          const uPhone = fb.userPhone && fb.userPhone !== 'N/A' ? fb.userPhone : (fb.userId?.phone || fb.userId?.ownerPhone || '');
+          const rName = fb.restaurantName && fb.restaurantName !== 'N/A' ? fb.restaurantName : (fb.restaurantId?.restaurantName || 'N/A');
+
+          return {
+            _id: fb._id,
+            userName: uName,
+            userEmail: uEmail,
+            userPhone: uPhone,
+            restaurantName: rName,
+            rating: fb.rating * 2, // Convert 1-5 back to 1-10 for UI
+            experience: fb.comment || 'N/A',
+            module: fb.module,
+            createdAt: fb.createdAt
+          }
+        })
         setFeedbackExperiences(formattedData)
         setStatistics(response.data.data.statistics || null)
       }

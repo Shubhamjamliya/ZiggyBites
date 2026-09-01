@@ -108,74 +108,53 @@ export default function BottomNavOrders() {
   }
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-60 px-2 pb-[max(0.4rem,env(safe-area-inset-bottom))]">
-      <div className="mx-auto flex w-full max-w-md items-end gap-2">
-        <div className="flex-1 min-w-0">
-          <div className="relative overflow-visible rounded-[30px] bg-primary py-2 pl-3 pr-2 shadow-2xl shadow-primary/35">
-            <div className="relative flex items-end justify-around gap-1">
-              {tabs.map((tab) => {
-                const Icon = tab.icon
-                const isActive = activeTab === tab.id
+    <div className="fixed bottom-0 left-0 right-0 z-50 bg-primary border-t border-primary/20 shadow-[0_-4px_20px_rgba(0,0,0,0.15)] pb-[env(safe-area-inset-bottom)]">
+      <div className="mx-auto flex w-full max-w-md items-center justify-around px-2 py-1.5">
+        {tabs.map((tab) => {
+          const Icon = tab.icon
+          const isActive = activeTab === tab.id
 
-                return (
-                  <motion.button
-                    key={tab.id}
-                    onClick={() => handleTabClick(tab)}
-                    aria-current={isActive ? "page" : undefined}
-                    className="relative z-10 flex min-w-0 flex-1 flex-col items-center justify-center gap-1 overflow-visible rounded-full px-2 py-2"
-                    whileHover={{ 
-                      scale: 1.1,
-                      y: -4,
-                      transition: { type: "spring", stiffness: 400, damping: 10 }
-                    }}
-                    whileTap={{ scale: 0.9 }}
-                  >
-                    {isActive && (
-                        <motion.div
-                          layoutId="bottomNavActive"
-                          className="absolute inset-0 -z-10 rounded-full bg-white/25 shadow-[0_0_15px_rgba(255,255,255,0.2)]"
-                          initial={false}
-                          transition={{ type: "spring", stiffness: 500, damping: 30 }}
-                        />
-                    )}
-                    <motion.div
-                      animate={{ 
-                        scale: isActive ? [1, 1.2, 1] : 1,
-                        rotate: isActive ? [0, -10, 10, 0] : 0
-                      }}
-                      transition={{ duration: 0.4 }}
-                    >
-                      <Icon
-                        className={`relative z-10 h-5 w-5 transition-colors duration-300 ease-in-out ${
-                          isActive ? "text-white" : "text-white/70"
-                        }`}
-                      />
-                    </motion.div>
-                    {/* Notification Dot */}
-                    {((tab.id === 'orders' && (newOrder || newReservation)) || 
-                      (tab.id === 'feedback' && unreadCount > 0)) && (
-                      <span className="absolute top-2 right-2">
-                        <span className="absolute inset-0 rounded-full bg-red-400 animate-ping opacity-75" />
-                        <span className="relative block w-2.5 h-2.5 rounded-full bg-red-500 border border-white shadow-sm" />
-                      </span>
-                    )}
-                    <motion.span
-                      animate={{ 
-                        scale: isActive ? 1.1 : 1,
-                        fontWeight: isActive ? 800 : 500
-                      }}
-                      className={`relative z-10 whitespace-nowrap text-[11px] leading-none transition-colors duration-300 ease-in-out ${
-                        isActive ? "text-white" : "text-white/70"
-                      }`}
-                    >
-                      {tab.label}
-                    </motion.span>
-                  </motion.button>
-                )
-              })}
-            </div>
-          </div>
-        </div>
+          return (
+            <motion.button
+              key={tab.id}
+              onClick={() => handleTabClick(tab)}
+              aria-current={isActive ? "page" : undefined}
+              className="relative flex min-w-0 flex-1 flex-col items-center justify-center gap-1 py-1.5 px-2 rounded-xl transition-all cursor-pointer"
+              whileTap={{ scale: 0.95 }}
+            >
+              {isActive && (
+                <motion.div
+                  layoutId="bottomNavActive"
+                  className="absolute inset-0 rounded-xl bg-white/20 shadow-sm"
+                  initial={false}
+                  transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                />
+              )}
+              <div className="relative">
+                <Icon
+                  className={`h-5 w-5 transition-colors duration-200 ${
+                    isActive ? "text-white scale-105" : "text-white/70 hover:text-white"
+                  }`}
+                />
+                {/* Notification Dot */}
+                {((tab.id === 'orders' && (newOrder || newReservation)) || 
+                  (tab.id === 'feedback' && unreadCount > 0)) && (
+                  <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75" />
+                    <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-red-500 border border-white shadow-sm" />
+                  </span>
+                )}
+              </div>
+              <span
+                className={`relative z-10 whitespace-nowrap text-[11px] leading-tight transition-colors duration-200 ${
+                  isActive ? "text-white font-extrabold" : "text-white/70 font-medium"
+                }`}
+              >
+                {tab.label}
+              </span>
+            </motion.button>
+          )
+        })}
       </div>
     </div>
   )

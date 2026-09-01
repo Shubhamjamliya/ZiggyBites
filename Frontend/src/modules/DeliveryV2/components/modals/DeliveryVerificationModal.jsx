@@ -24,24 +24,24 @@ const DeliveryInstructionsPanel = ({ note }) => {
   if (!text) return null
 
   return (
-    <div className="w-full rounded-3xl mb-6 overflow-hidden border border-orange-100 shadow-sm">
-      <div className="bg-linear-to-r from-orange-500 to-amber-500 px-5 py-3 flex items-center justify-between">
+    <div className="w-full rounded-2xl mb-5 overflow-hidden border border-orange-200 shadow-sm">
+      <div className="bg-gradient-to-r from-orange-500 to-amber-500 px-4 py-2.5 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className="w-9 h-9 bg-white/20 rounded-2xl flex items-center justify-center text-white">
-            <Package className="w-5 h-5" />
+          <div className="w-7 h-7 bg-white/20 rounded-lg flex items-center justify-center text-white">
+            <Package className="w-4 h-4" />
           </div>
           <div>
-            <p className="text-[10px] font-black text-white uppercase tracking-[0.2em]">
+            <p className="text-[10px] font-black text-white uppercase tracking-wider">
               Delivery instruction
             </p>
-            <p className="text-[11px] font-semibold text-white/90">
+            <p className="text-[11px] font-semibold text-white/95">
               Read before handover
             </p>
           </div>
         </div>
       </div>
-      <div className="bg-orange-50 px-5 py-4">
-        <p className="text-sm font-bold text-gray-950 leading-relaxed wrap-break-word">
+      <div className="bg-orange-50/90 px-4 py-3 border-t border-orange-100">
+        <p className="text-xs font-bold text-gray-900 leading-relaxed break-words">
           “{text}”
         </p>
       </div>
@@ -55,35 +55,16 @@ const OtpModal = ({ order, onVerified, onClose }) => {
   const [isOtpVerified, setIsOtpVerified] = useState(false);
   const inputRefs = [useRef(), useRef(), useRef(), useRef()];
 
-  useEffect(() => {
-    const savedCode = order?.deliveryVerification?.dropOtp?.code;
-    if (savedCode && String(savedCode).length === 4) {
-      setOtp(String(savedCode).split(''));
-    }
-    const timer = setTimeout(() => {
-      inputRefs[0].current?.focus();
-    }, 500);
-    return () => clearTimeout(timer);
-  }, [order?.deliveryVerification?.dropOtp?.code]);
-
   const orderId = order.orderId || order._id || 'ORD';
+  const isAlreadyVerified = order?.deliveryVerification?.dropOtp?.verified;
 
-  const handleOtpChange = (index, value) => {
-    if (value && !/^\d+$/.test(value)) return;
-    const newOtp = [...otp];
-    newOtp[index] = value.substring(value.length - 1);
-    setOtp(newOtp);
-    if (value && index < 3) inputRefs[index + 1].current?.focus();
-  };
-
-  const handleKeyDown = (index, e) => {
-    if (e.key === 'Backspace' && !otp[index] && index > 0) inputRefs[index - 1].current?.focus();
-  };
-
-  const verifyOtp = async () => {
-    const otpString = otp.join('');
-    if (otpString.length < 4) return;
+  const verifyOtp = async (codeToVerify = null) => {
+    const otpString = typeof codeToVerify === 'string' ? codeToVerify : otp.join('');
+    if (otpString.length < 4 || isVerifyingOtp || isOtpVerified || isAlreadyVerified) return;
     setIsVerifyingOtp(true);
+    // Dismiss virtual keyboard on completion
+    inputRefs.forEach((r) => r.current?.blur?.());
+
     try {
       const res = await deliveryAPI.verifyDropOtp(orderId, otpString);
       if (res?.data?.success) {
@@ -108,8 +89,7 @@ const OtpModal = ({ order, onVerified, onClose }) => {
         }
 
         setIsOtpVerified(true);
-        // toast.success("OTP Verified Successfully");
-        setTimeout(() => onVerified(otpString), 600);
+        setTimeout(() => onVerified(otpString), 500);
       }
     } catch (err) {
       toast.error(
@@ -117,60 +97,135 @@ const OtpModal = ({ order, onVerified, onClose }) => {
           err?.response?.data?.message ||
           "Invalid OTP entered",
       );
+      setOtp(['', '', '', '']);
+      setTimeout(() => inputRefs[0].current?.focus?.(), 100);
       throw err;
     } finally {
       setIsVerifyingOtp(false);
     }
   };
 
-  const isAlreadyVerified = order?.deliveryVerification?.dropOtp?.verified;
+  useEffect(() => {
+    const savedCode = order?.deliveryVerification?.dropOtp?.code;
+    if (savedCode && String(savedCode).length === 4) {
+      setOtp(String(savedCode).split(''));
+    }
+    const timer = setTimeout(() => {
+      inputRefs[0].current?.focus?.();
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [order?.deliveryVerification?.dropOtp?.code]);
+
+  const handleOtpChange = (index, value) => {
+    // Handle 4-digit paste
+    if (value && value.length > 1) {
+      const digits = value.replace(/\D/g, '').slice(0, 4).split('');
+      if (digits.length > 0) {
+        const next = ['', '', '', ''];
+        digits.forEach((d, i) => { next[i] = d; });
+        setOtp(next);
+        const nextIdx = Math.min(digits.length, 3);
+        inputRefs[nextIdx]?.current?.focus?.();
+        if (digits.length === 4) {
+          verifyOtp(next.join(''));
+        }
+        return;
+      }
+    }
+
+    if (value && !/^\d+$/.test(value)) return;
+    const singleDigit = value ? value.slice(-1) : '';
+    const newOtp = [...otp];
+    newOtp[index] = singleDigit;
+    setOtp(newOtp);
+
+    if (singleDigit && index < 3) {
+      inputRefs[index + 1]?.current?.focus?.();
+    }
+
+    // Auto-verify when all 4 digits are completed
+    if (singleDigit && index === 3 && newOtp.every(Boolean)) {
+      verifyOtp(newOtp.join(''));
+    }
+  };
+
+  const handleKeyDown = (index, e) => {
+    if (e.key === 'Backspace') {
+      if (!otp[index] && index > 0) {
+        const newOtp = [...otp];
+        newOtp[index - 1] = '';
+        setOtp(newOtp);
+        inputRefs[index - 1]?.current?.focus?.();
+      } else {
+        const newOtp = [...otp];
+        newOtp[index] = '';
+        setOtp(newOtp);
+      }
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-120 p-0 sm:p-4 flex items-end justify-center pointer-events-none">
       <Backdrop onClose={onClose} />
       <motion.div 
         initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
-        className="w-full max-w-md sm:max-w-lg bg-white rounded-t-3xl sm:rounded-t-[2.5rem] shadow-[0_-20px_60px_rgba(0,0,0,0.3)] p-4 sm:p-6 pb-6 sm:pb-12 pointer-events-auto max-h-[84vh] overflow-y-auto"
+        className="w-full max-w-md sm:max-w-lg bg-white rounded-t-3xl sm:rounded-t-[2.5rem] shadow-[0_-20px_60px_rgba(0,0,0,0.3)] p-4 sm:p-6 pb-8 sm:pb-12 pointer-events-auto max-h-[90vh] overflow-y-auto flex flex-col"
       >
-        <div className="w-12 h-1.5 bg-gray-200 rounded-full mx-auto mb-6" />
-        <div className="flex justify-between items-center mb-6">
+        <div className="w-12 h-1.5 bg-gray-200 rounded-full mx-auto mb-4" />
+        <div className="flex justify-between items-center mb-3">
            <div className="flex items-center gap-3">
-             <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${isOtpVerified ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-500'}`}>
-               <ShieldCheck className="w-7 h-7" />
+             <div className={`w-11 h-11 rounded-2xl flex items-center justify-center ${isOtpVerified ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-500'}`}>
+               <ShieldCheck className="w-6 h-6" />
              </div>
              <div>
-               <h2 className="text-xl font-bold text-gray-900">Handover Code</h2>
+               <h2 className="text-lg sm:text-xl font-bold text-gray-900">Handover Code</h2>
                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Step 1 of Verification</p>
              </div>
            </div>
            <button onClick={onClose} className="p-2 bg-gray-50 rounded-full text-gray-400 hover:text-gray-600"><X className="w-5 h-5"/></button>
         </div>
 
+        {/* Handover Code Instruction Text */}
+        <div className="mb-3.5 p-3 rounded-2xl bg-blue-50/80 border border-blue-100 flex items-start gap-2.5">
+          <Info className="w-4 h-4 text-blue-600 mt-0.5 shrink-0" />
+          <p className="text-xs text-blue-900 leading-relaxed font-medium">
+            Please ask <span className="font-bold">{order?.userName || order?.customerName || order?.user?.name || 'the customer'}</span> for the <strong className="text-blue-950 font-bold">4-digit Handover Code</strong> shown on their tracking screen.
+          </p>
+        </div>
+
         <DeliveryInstructionsPanel note={order?.note} />
 
-        <div className="flex justify-center gap-2.5 sm:gap-3 mb-6 sm:mb-8">
+        <div className="flex justify-center gap-2.5 sm:gap-3 mb-2">
           {otp.map((digit, i) => (
             <input
               key={i}
               ref={inputRefs[i]}
-              type="number"
-              disabled={isOtpVerified}
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              autoComplete="one-time-code"
+              maxLength={1}
+              disabled={isOtpVerified || isVerifyingOtp}
               value={digit}
               onChange={(e) => handleOtpChange(i, e.target.value)}
               onKeyDown={(e) => handleKeyDown(i, e)}
-              className={`w-12 sm:w-14 h-16 sm:h-18 bg-gray-50 border-2 rounded-2xl text-center text-2xl sm:text-3xl font-bold transition-all ${
-                isOtpVerified ? 'border-green-500 bg-green-50 text-green-700' : 'border-gray-200 focus:border-green-600 text-gray-700'
+              className={`w-12 sm:w-14 h-14 sm:h-16 bg-gray-50 border-2 rounded-2xl text-center text-2xl sm:text-3xl font-bold transition-all shrink-0 focus:outline-none ${
+                isOtpVerified ? 'border-green-500 bg-green-50 text-green-700' : 'border-gray-200 focus:border-green-600 text-gray-800'
               }`}
             />
           ))}
         </div>
+
+        <p className="text-center text-xs text-gray-500 mb-5">
+          {isOtpVerified ? "✓ Handover code verified" : isVerifyingOtp ? "Verifying code..." : "Enter 4-digit code provided by customer"}
+        </p>
 
         <ActionSlider 
           key="action-otp"
           label={isVerifyingOtp ? "Verifying..." : isAlreadyVerified ? "Code already verified ✓" : "Slide to Verify OTP"} 
           successLabel="Verified!"
           disabled={otp.some(d => !d) || isVerifyingOtp || isOtpVerified || isAlreadyVerified}
-          onConfirm={verifyOtp}
+          onConfirm={() => verifyOtp()}
           color="bg-gray-900"
         />
       </motion.div>

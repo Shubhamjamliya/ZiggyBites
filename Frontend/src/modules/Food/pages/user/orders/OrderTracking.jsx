@@ -1713,9 +1713,9 @@ export default function OrderTracking() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.28 }}
           >
-            <p className="text-xs font-semibold text-blue-700 dark:text-blue-400 uppercase tracking-wide">Delivery OTP</p>
+            <p className="text-xs font-bold text-blue-700 dark:text-blue-400 uppercase tracking-wider">Handover Code (OTP)</p>
             <p className="text-2xl font-extrabold text-blue-900 dark:text-blue-200 mt-1 tracking-widest">{customerDeliveryOtp}</p>
-            <p className="text-xs text-blue-700 dark:text-blue-400 mt-1">Share this 4-digit OTP with your delivery partner at drop-off.</p>
+            <p className="text-xs text-blue-700 dark:text-blue-400 mt-1">Share this 4-digit handover code with your delivery partner at drop-off.</p>
           </motion.div>
         )}
 

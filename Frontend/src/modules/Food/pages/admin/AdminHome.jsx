@@ -183,7 +183,7 @@ export default function AdminHome() {
           </div>
         )}
 
-        <div className="flex flex-col gap-4 border-b border-neutral-200 bg-linear-to-br from-white via-neutral-50 to-neutral-100 px-6 py-5 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-col gap-4 border-b border-neutral-200 bg-gradient-to-br from-white via-neutral-50 to-neutral-100 px-6 py-5 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-center gap-4">
             <div>
               <p className="text-xs uppercase tracking-[0.2em] text-neutral-500">Admin Overview</p>

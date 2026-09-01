@@ -84,7 +84,7 @@ export default function Checkout() {
 
   if (cart.length === 0) {
     return (
-      <AnimatedPage className="min-h-screen bg-linear-to-b from-orange-50/30 via-white to-orange-50/20 p-4">
+      <AnimatedPage className="min-h-screen bg-gradient-to-b from-orange-50/30 via-white to-orange-50/20 p-4">
         <div className="max-w-4xl mx-auto space-y-6">
           <Card>
             <CardHeader>
@@ -105,7 +105,7 @@ export default function Checkout() {
   }
 
   return (
-    <AnimatedPage className="min-h-screen bg-linear-to-b from-orange-50/30 via-white to-orange-50/20 dark:from-[#0a0a0a] dark:via-[#1a1a1a] dark:to-[#0a0a0a] p-4 sm:p-6 md:p-8">
+    <AnimatedPage className="min-h-screen bg-gradient-to-b from-orange-50/30 via-white to-orange-50/20 dark:from-[#0a0a0a] dark:via-[#1a1a1a] dark:to-[#0a0a0a] p-4 sm:p-6 md:p-8">
       <div className="max-w-7xl mx-auto space-y-6 md:space-y-8">
         <ScrollReveal>
           <div className="flex items-center gap-4 mb-6 md:mb-8">

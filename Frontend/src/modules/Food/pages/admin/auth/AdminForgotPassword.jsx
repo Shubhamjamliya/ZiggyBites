@@ -211,7 +211,7 @@ export default function AdminForgotPassword() {
   }
 
   return (
-    <div className="min-h-screen bg-linear-to-br from-neutral-50 via-gray-100 to-white relative">
+    <div className="min-h-screen bg-gradient-to-br from-neutral-50 via-gray-100 to-white relative">
       <div className="absolute inset-0 -z-10 overflow-hidden">
         <div className="absolute -left-24 -top-24 h-64 w-64 rounded-full bg-neutral-900/5 blur-3xl" />
         <div className="absolute right-[-80px] bottom-[-80px] h-72 w-72 rounded-full bg-gray-700/5 blur-3xl" />

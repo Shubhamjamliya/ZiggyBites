@@ -14,14 +14,14 @@ export default function HomeCategories({
           Array.from({ length: 5 }).map((_, index) => (
             <div 
               key={`home-category-skeleton-${index}`} 
-              className="flex-shrink-0 w-24 h-24 rounded-xl border border-orange-100 bg-white shadow-sm flex flex-col items-center justify-start gap-1.5 p-2 overflow-hidden"
+              className="flex-shrink-0 w-24 h-24 rounded-xl border border-orange-100 dark:border-gray-800 bg-white dark:bg-[#1a1a1a] shadow-sm flex flex-col items-center justify-start gap-1.5 p-2 overflow-hidden"
             >
-              <div className="h-13 w-20 animate-pulse bg-orange-100 rounded-full mx-auto" />
-              <div className="h-2 w-12 animate-pulse rounded bg-orange-100 my-0.5 mx-auto" />
+              <div className="h-13 w-20 animate-pulse bg-orange-100 dark:bg-gray-800 rounded-full mx-auto" />
+              <div className="h-2 w-12 animate-pulse rounded bg-orange-100 dark:bg-gray-800 my-0.5 mx-auto" />
             </div>
           ))
         ) : homeCategoryTiles.length === 0 ? (
-          <div className="w-full py-4 text-center text-xs font-semibold text-gray-500">
+          <div className="w-full py-4 text-center text-xs font-semibold text-gray-500 dark:text-gray-400">
             No categories available
           </div>
         ) : (
@@ -46,10 +46,10 @@ export default function HomeCategories({
                 className="flex-shrink-0 w-24 text-left focus:outline-none"
               >
                 <div
-                  className={`relative rounded-xl bg-white border shadow-sm flex flex-col items-center justify-start gap-1.5 p-2 h-24 overflow-hidden transition-all duration-300 ${
+                  className={`relative rounded-xl bg-white dark:bg-[#1a1a1a] border shadow-sm flex flex-col items-center justify-start gap-1.5 p-2 h-24 overflow-hidden transition-all duration-300 ${
                     isSelected
-                      ? "border-[#e92823] ring-2 ring-[#e92823]/15 scale-[1.02]"
-                      : "border-orange-100 hover:border-orange-200"
+                      ? "border-[#e92823] dark:border-[#ff5257] ring-2 ring-[#e92823]/15 scale-[1.02]"
+                      : "border-orange-100 dark:border-gray-800 hover:border-orange-200 dark:hover:border-gray-700"
                   }`}
                 >
                   {category.healthy && (
@@ -59,7 +59,7 @@ export default function HomeCategories({
                   )}
                   
                   {/* Category Image Container - oval container */}
-                  <div className="h-13 w-20 overflow-hidden rounded-full bg-orange-50/50 flex items-center justify-center relative shrink-0">
+                  <div className="h-13 w-20 overflow-hidden rounded-full bg-orange-50/50 dark:bg-gray-800/60 flex items-center justify-center relative shrink-0">
                     {category.image ? (
                       <img 
                         src={category.image} 
@@ -67,7 +67,7 @@ export default function HomeCategories({
                         className="h-full w-full object-cover transform hover:scale-105 transition-transform duration-300" 
                       />
                     ) : (
-                      <span className="flex h-full w-full items-center justify-center text-xl font-black text-[#e92823]">
+                      <span className="flex h-full w-full items-center justify-center text-xl font-black text-[#e92823] dark:text-[#ff5257]">
                         {String(category.name || "M").slice(0, 1).toUpperCase()}
                       </span>
                     )}
@@ -75,7 +75,7 @@ export default function HomeCategories({
                   
                   <span
                     className={`text-[9px] leading-tight font-extrabold text-center line-clamp-2 w-full px-1 ${
-                      isSelected ? "text-[#e92823]" : "text-gray-700"
+                      isSelected ? "text-[#e92823] dark:text-[#ff5257]" : "text-gray-700 dark:text-gray-300"
                     }`}
                   >
                     {category.name}

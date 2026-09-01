@@ -42,7 +42,7 @@ export default function BottomNavigation() {
   const { pathname } = useLocation()
 
   return (
-    <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 border-t border-gray-100 bg-white shadow-[0_-2px_10px_rgba(15,23,42,0.06)]">
+    <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 border-t border-gray-100 dark:border-gray-800 bg-white/95 dark:bg-[#121212]/95 backdrop-blur-md shadow-[0_-2px_10px_rgba(15,23,42,0.06)] dark:shadow-[0_-2px_10px_rgba(0,0,0,0.5)] transition-colors duration-200">
       <div className="mx-auto grid h-[54px] max-w-md grid-cols-4 px-2">
         {navItems.map((item) => {
           const Icon = item.icon
@@ -53,11 +53,13 @@ export default function BottomNavigation() {
               key={item.label}
               to={item.to}
               className={`flex flex-col items-center justify-center gap-0.5 text-[10px] font-semibold transition-all active:scale-95 active:opacity-70 ${
-                isActive ? "text-[#e32c31]" : "text-[#4f4b5c]"
+                isActive
+                  ? "text-[#e32c31] dark:text-[#ff5257]"
+                  : "text-[#4f4b5c] dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
               }`}
             >
               <Icon
-                className={`h-5 w-5 ${isActive ? "fill-[#e32c31]/10" : ""}`}
+                className={`h-5 w-5 ${isActive ? "fill-[#e32c31]/10 dark:fill-[#ff5257]/10" : ""}`}
                 strokeWidth={isActive ? 2.8 : 2.2}
               />
               <span>{item.label}</span>

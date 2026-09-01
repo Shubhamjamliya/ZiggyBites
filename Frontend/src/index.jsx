@@ -21,12 +21,20 @@ import('./modules/Food/utils/themeSettings.js')
   .catch(() => { /* Silently fail */ })
 
 // Apply saved theme
-const savedTheme = localStorage.getItem('appTheme') || 'light'
-if (savedTheme === 'dark') {
-  document.documentElement.classList.add('dark')
-} else {
-  document.documentElement.classList.remove('dark')
+const applyCurrentTheme = (theme) => {
+  const current = theme || localStorage.getItem('appTheme') || 'light'
+  if (current === 'dark') {
+    document.documentElement.classList.add('dark')
+  } else {
+    document.documentElement.classList.remove('dark')
+  }
 }
+
+applyCurrentTheme()
+window.addEventListener('appThemeChanged', (e) => applyCurrentTheme(e.detail?.theme))
+window.addEventListener('storage', (e) => {
+  if (e.key === 'appTheme') applyCurrentTheme(e.newValue)
+})
 
 function isNativeLikeShell() {
   if (typeof window === 'undefined') return false

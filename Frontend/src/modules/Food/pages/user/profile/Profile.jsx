@@ -136,6 +136,7 @@ export default function Profile() {
     }
     // Save to localStorage
     localStorage.setItem("appTheme", appearance);
+    window.dispatchEvent(new CustomEvent("appThemeChanged", { detail: { theme: appearance } }));
   }, [appearance]);
 
   // Get first letter of name for avatar

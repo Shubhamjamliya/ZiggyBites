@@ -21,7 +21,7 @@ export default function CategoryRailSection({
         style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
       >
         <div
-          className="flex-shrink-0 w-[100px] sm:w-[122px] rounded-2xl border border-gray-100 bg-white shadow-[0_3px_12px_rgba(15,23,42,0.08)] p-1.5 flex flex-col items-center justify-between cursor-pointer transition-transform hover:-translate-y-0.5 active:scale-95"
+          className="flex-shrink-0 w-[100px] sm:w-[122px] rounded-2xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-[#1a1a1a] shadow-[0_3px_12px_rgba(15,23,42,0.08)] dark:shadow-none p-1.5 flex flex-col items-center justify-between cursor-pointer transition-transform hover:-translate-y-0.5 active:scale-95"
           onClick={() => navigate("/user/under-250")}
         >
           <div className="h-12 sm:h-14 w-full overflow-hidden">
@@ -37,7 +37,7 @@ export default function CategoryRailSection({
             <Link
               key={category.id || index}
               to={`/food/user/category/${category.slug || category.name.toLowerCase().replace(/\s+/g, "-")}`}
-              className="flex-shrink-0 w-[100px] sm:w-[122px] rounded-2xl border border-gray-100 bg-white shadow-[0_3px_12px_rgba(15,23,42,0.08)] p-1.5 flex flex-col items-center justify-between group transition-all duration-300 hover:-translate-y-0.5"
+              className="flex-shrink-0 w-[100px] sm:w-[122px] rounded-2xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-[#1a1a1a] shadow-[0_3px_12px_rgba(15,23,42,0.08)] dark:shadow-none p-1.5 flex flex-col items-center justify-between group transition-all duration-300 hover:-translate-y-0.5"
               style={{ animation: `fade-in-up 0.5s ease-out forwards ${index * 0.05}s`, opacity: 0 }}
             >
               <div className="h-12 sm:h-14 w-full overflow-hidden">
@@ -60,7 +60,7 @@ export default function CategoryRailSection({
             className="flex-shrink-0 flex flex-col items-center gap-2 cursor-pointer group"
             onClick={() => navigate("/food/user/categories")}
           >
-            <div className="w-[100px] sm:w-[122px] h-[78px] sm:h-[90px] rounded-2xl bg-white flex items-center justify-center border border-gray-100 shadow-[0_3px_12px_rgba(15,23,42,0.08)] group-hover:border-[#7e3866] transition-all">
+            <div className="w-[100px] sm:w-[122px] h-[78px] sm:h-[90px] rounded-2xl bg-white dark:bg-[#1a1a1a] flex items-center justify-center border border-gray-100 dark:border-gray-800 shadow-[0_3px_12px_rgba(15,23,42,0.08)] dark:shadow-none group-hover:border-[#7e3866] transition-all">
               <Plus className="w-6 h-6 text-[#7e3866]" />
             </div>
             <span className="sr-only">See All</span>

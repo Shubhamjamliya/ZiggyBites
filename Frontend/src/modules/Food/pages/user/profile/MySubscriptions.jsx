@@ -28,6 +28,32 @@ const formatDate = (value) => {
   });
 };
 
+const getSubscriptionDateRange = (subscription) => {
+  let start = subscription?.startDate ? new Date(subscription.startDate) : null;
+  let end = subscription?.endDate ? new Date(subscription.endDate) : null;
+
+  if ((!start || Number.isNaN(start.getTime())) && subscription?.createdAt) {
+    start = new Date(subscription.createdAt);
+  }
+
+  const days = Number(subscription?.planDays || 30);
+  if ((!end || Number.isNaN(end.getTime())) && start && !Number.isNaN(start.getTime())) {
+    end = new Date(start);
+    end.setDate(end.getDate() + days - 1);
+  }
+
+  const startText = formatDate(start);
+  const endText = formatDate(end);
+
+  if (startText === "-" && endText === "-") {
+    return "Ongoing plan";
+  }
+  if (startText !== "-" && endText === "-") {
+    return `From ${startText}`;
+  }
+  return `${startText} to ${endText}`;
+};
+
 const getStatusClasses = (status) => {
   const normalized = String(status || "").toLowerCase();
   if (normalized === "active") return "bg-green-50 text-green-700 border-green-200";
@@ -268,7 +294,7 @@ export default function MySubscriptions() {
                             </p>
                             <p className="flex items-center gap-2">
                               <Clock3 className="h-4 w-4 text-[#e32c31]" />
-                              Active: <span className="font-medium">{formatDate(subscription.startDate)} to {formatDate(subscription.endDate)}</span>
+                              Active: <span className="font-medium">{getSubscriptionDateRange(subscription)}</span>
                             </p>
                           </div>
 

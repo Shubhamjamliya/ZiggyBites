@@ -617,6 +617,11 @@ export async function createSubscriptionOrder(userId, dto) {
     `sub_${Date.now()}`,
   );
 
+  const { startDate, endDate } = buildSubscriptionDates(
+    planDays,
+    appSettings.subscriptionOrders,
+  );
+
   const subscription = await FoodSubscription.create({
     userId: new mongoose.Types.ObjectId(userId),
     restaurantId: new mongoose.Types.ObjectId(dto.restaurantId),
@@ -639,6 +644,8 @@ export async function createSubscriptionOrder(userId, dto) {
     razorpayPlanId: '',
     razorpaySubscriptionId: '',
     razorpayOrderId: razorpayOrder.id,
+    startDate,
+    endDate,
     status: 'pending_payment',
     paymentStatus: 'created',
   });
@@ -1605,8 +1612,16 @@ function normalizeSubscriptionForAdmin(subscription, scheduleSummary = {}) {
     meals: Array.isArray(subscription?.meals) ? subscription.meals : [],
     deliveryAddress: subscription?.deliveryAddress || null,
     createdAt: subscription?.createdAt || null,
-    startDate: subscription?.startDate || null,
-    endDate: subscription?.endDate || null,
+    startDate:
+      subscription?.startDate ||
+      (subscription?.createdAt
+        ? buildSubscriptionDates(subscription?.planDays || 30).startDate
+        : null),
+    endDate:
+      subscription?.endDate ||
+      (subscription?.createdAt
+        ? buildSubscriptionDates(subscription?.planDays || 30).endDate
+        : null),
   };
 }
 

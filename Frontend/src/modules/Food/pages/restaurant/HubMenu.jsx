@@ -2219,7 +2219,7 @@ export default function HubMenu() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4"
+            className="fixed inset-0 z-[75] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4"
             onClick={() => setIsAddAddonModalOpen(false)}
           >
             <motion.div
@@ -2367,9 +2367,9 @@ export default function HubMenu() {
             </motion.div>
           </motion.div>
         )}
-      </AnimatePresence>
-
-      <BottomNavOrders />
+      {!isAddAddonModalOpen && !isCategoryOptionsOpen && !isEditCategoryOpen && !isAddSubCategoryOpen && !isAddCategoryPopupOpen && !isSearchOpen && (
+        <BottomNavOrders />
+      )}
     </div>
   )
 }

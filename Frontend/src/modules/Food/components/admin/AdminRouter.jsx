@@ -122,6 +122,7 @@ const PageMetaData = lazy(() => import("@food/pages/admin/system/PageMetaData"))
 const ReactSite = lazy(() => import("@food/pages/admin/system/ReactSite"));
 const CleanDatabase = lazy(() => import("@food/pages/admin/system/CleanDatabase"));
 const AddonActivation = lazy(() => import("@food/pages/admin/system/AddonActivation"));
+const EnvManagements = lazy(() => import("@food/pages/admin/system/EnvManagements"));
 const LandingPageManagement = lazy(() => import("@food/pages/admin/system/LandingPageManagement"));
 const MealTimeManagement = lazy(() => import("@food/pages/admin/system/MealTimeManagement"));
 const SubscriptionPlanManagement = lazy(() => import("@food/pages/admin/system/SubscriptionPlanManagement"));
@@ -175,6 +176,7 @@ export default function AdminRouter() {
             <Route path="orders/payment-failed" element={<OrdersPage statusKey="payment-failed" />} />
             <Route path="orders/refunded" element={<OrdersPage statusKey="refunded" />} />
             <Route path="orders/offline-payments" element={<OrdersPage statusKey="offline-payments" />} />
+            <Route path="toggle-management" element={<AppCustomization />} />
             <Route path="app-customization" element={<AppCustomization />} />
             <Route path="app-customization/time-management" element={<TimeManagement />} />
             <Route path="order-detect-delivery" element={<OrderDetectDelivery />} />
@@ -299,6 +301,9 @@ export default function AdminRouter() {
             <Route path="react-site" element={<ReactSite />} />
             <Route path="clean-database" element={<CleanDatabase />} />
             <Route path="addon-activation" element={<AddonActivation />} />
+            <Route path="env-managements" element={<EnvManagements />} />
+            <Route path="app-intro-ads" element={<AdsList />} />
+            <Route path="zone-ranking" element={<ZoneSetup />} />
             <Route path="hero-banner-management" element={<LandingPageManagement />} />
             <Route path="meal-time-management" element={<MealTimeManagement />} />
             <Route path="subscription-plan-management" element={<SubscriptionPlanManagement />} />

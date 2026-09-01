@@ -111,21 +111,21 @@ export default function Restaurants() {
 
   return (
     <AnimatedPage className="min-h-screen bg-gradient-to-b from-yellow-50/30 dark:from-[#0a0a0a] via-white dark:via-[#0a0a0a] to-orange-50/20 dark:to-[#0a0a0a]">
-      <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 xl:px-12 py-4 sm:py-6 md:py-8 lg:py-10 space-y-4 sm:space-y-6 lg:space-y-8">
-        <ScrollReveal>
-          <div className="flex items-center gap-3 sm:gap-4 lg:gap-5 mb-4 lg:mb-6">
-            <Link to="/">
-              <Button variant="ghost" size="icon" className="rounded-full h-8 w-8 sm:h-10 sm:w-10 lg:h-12 lg:w-12 hover:bg-gray-100 dark:hover:bg-gray-800">
-                <ArrowLeft className="h-4 w-4 sm:h-5 sm:w-5 lg:h-6 lg:w-6 text-gray-900 dark:text-gray-100" />
-              </Button>
-            </Link>
-            <TextReveal className="flex items-center gap-2 sm:gap-3 lg:gap-4">
-              <h1 className="text-lg sm:text-xl md:text-2xl lg:text-3xl xl:text-4xl font-bold text-gray-900 dark:text-white">
-                All Restaurants
-              </h1>
-            </TextReveal>
+      <div className="sticky top-0 z-30 px-3 sm:px-4 md:px-6 lg:px-8 xl:px-12 py-3 sm:py-4 bg-white/95 dark:bg-[#0a0a0a]/95 backdrop-blur-md border-b border-gray-100 dark:border-gray-800/80 shadow-xs">
+        <div className="max-w-7xl mx-auto flex items-center gap-3 sm:gap-4 lg:gap-5">
+          <Link to="/">
+            <Button variant="ghost" size="icon" className="rounded-full h-8 w-8 sm:h-10 sm:w-10 lg:h-12 lg:w-12 hover:bg-gray-100 dark:hover:bg-gray-800">
+              <ArrowLeft className="h-4 w-4 sm:h-5 sm:w-5 lg:h-6 lg:w-6 text-gray-900 dark:text-gray-100" />
+            </Button>
+          </Link>
+          <div className="flex items-center gap-2 sm:gap-3 lg:gap-4">
+            <h1 className="text-lg sm:text-xl md:text-2xl lg:text-3xl xl:text-4xl font-bold text-gray-900 dark:text-white">
+              All Restaurants
+            </h1>
           </div>
-        </ScrollReveal>
+        </div>
+      </div>
+      <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 xl:px-12 py-4 sm:py-6 md:py-8 lg:py-10 space-y-4 sm:space-y-6 lg:space-y-8">
 
         {showRestaurantsSkeleton ? (
           <RestaurantGridSkeleton count={4} />

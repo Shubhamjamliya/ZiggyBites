@@ -314,105 +314,56 @@ function RestaurantDetailsContent() {
           // Check if this is a dining restaurant with nested restaurant data
           const actualRestaurant = apiRestaurant?.restaurant || apiRestaurant
 
-          // Helper function to format address with zone and pin code
-          const formatRestaurantAddress = (locationObj) => {
-            if (!locationObj) return "Location"
+          // Helper function to format full restaurant address
+          const formatRestaurantAddress = (rest, locationObj) => {
+            if (typeof rest?.address === 'string' && rest.address.trim()) {
+              return rest.address.trim();
+            }
+            if (typeof rest?.formattedAddress === 'string' && rest.formattedAddress.trim()) {
+              return rest.formattedAddress.trim().replace(/^[A-Z0-9]+\+[A-Z0-9]+,\s*/i, '');
+            }
+            if (!locationObj) return rest?.address || "Location";
 
-            // If location is a string, return it as is
             if (typeof locationObj === 'string') {
-              return locationObj
+              return locationObj.trim();
             }
 
-            // PRIORITY 1: Use formattedAddress if it's complete and has pin code
-            // formattedAddress usually has the most complete information from Google Maps
-            if (locationObj.formattedAddress && locationObj.formattedAddress.trim() !== "" && locationObj.formattedAddress !== "Select location") {
-              const isCoordinates = /^-?\d+\.\d+,\s*-?\d+\.\d+$/.test(locationObj.formattedAddress.trim())
+            // If formattedAddress exists and is not coordinates
+            if (locationObj.formattedAddress && locationObj.formattedAddress.trim() && locationObj.formattedAddress !== "Select location") {
+              const isCoordinates = /^-?\d+\.\d+,\s*-?\d+\.\d+$/.test(locationObj.formattedAddress.trim());
               if (!isCoordinates) {
-                const formattedAddr = locationObj.formattedAddress.trim()
-                // Check if it contains a pin code (6 digit number)
-                const hasPinCode = /\b\d{6}\b/.test(formattedAddr)
-                // If it has pin code, it's complete - use it directly
-                if (hasPinCode) {
-                  // Clean up the address - remove Google Plus Code if present (e.g., "PV6X+JXX, ")
-                  const cleanedAddr = formattedAddr.replace(/^[A-Z0-9]+\+[A-Z0-9]+,\s*/i, '')
-                  return cleanedAddr
-                }
-                // If it has multiple parts (3+), it's likely complete
-                if (formattedAddr.split(',').length >= 3) {
-                  const cleanedAddr = formattedAddr.replace(/^[A-Z0-9]+\+[A-Z0-9]+,\s*/i, '')
-                  return cleanedAddr
-                }
+                return locationObj.formattedAddress.trim().replace(/^[A-Z0-9]+\+[A-Z0-9]+,\s*/i, '');
               }
             }
 
-            // PRIORITY 2: Build address from location object components (with zone and pin code)
-            // This ensures we always show zone and pin code if available
-            const addressParts = []
-
-            // Add addressLine1 if available
-            if (locationObj.addressLine1 && locationObj.addressLine1.trim() !== "") {
-              addressParts.push(locationObj.addressLine1.trim())
-            }
-
-            // Add addressLine2 if available
-            if (locationObj.addressLine2 && locationObj.addressLine2.trim() !== "") {
-              addressParts.push(locationObj.addressLine2.trim())
-            }
-
-            // Add area (zone) if available
-            if (locationObj.area && locationObj.area.trim() !== "") {
-              addressParts.push(locationObj.area.trim())
-            }
-
-            // Add city if available
-            if (locationObj.city && locationObj.city.trim() !== "") {
-              addressParts.push(locationObj.city.trim())
-            }
-
-            // Add state if available
-            if (locationObj.state && locationObj.state.trim() !== "") {
-              addressParts.push(locationObj.state.trim())
-            }
-
-            // Add pin code (priority: pincode > zipCode > postalCode)
-            const pinCode = locationObj.pincode || locationObj.zipCode || locationObj.postalCode
-            if (pinCode && pinCode.toString().trim() !== "") {
-              addressParts.push(pinCode.toString().trim())
-            }
-
-            // If we have at least 3 parts (complete address), use it
-            if (addressParts.length >= 3) {
-              return addressParts.join(', ')
-            }
-
-            // If we have at least 2 parts, use it
-            if (addressParts.length >= 2) {
-              return addressParts.join(', ')
-            }
-
-            // PRIORITY 3: Fallback to formattedAddress (even if incomplete)
-            if (locationObj.formattedAddress && locationObj.formattedAddress.trim() !== "" && locationObj.formattedAddress !== "Select location") {
-              const isCoordinates = /^-?\d+\.\d+,\s*-?\d+\.\d+$/.test(locationObj.formattedAddress.trim())
-              if (!isCoordinates) {
-                const cleanedAddr = locationObj.formattedAddress.trim().replace(/^[A-Z0-9]+\+[A-Z0-9]+,\s*/i, '')
-                return cleanedAddr
+            // Build full address combining all parts
+            const parts = [];
+            const addPart = (p) => {
+              if (p && typeof p === 'string' && p.trim() && !parts.includes(p.trim())) {
+                parts.push(p.trim());
               }
+            };
+
+            addPart(locationObj.addressLine1);
+            addPart(locationObj.addressLine2);
+            addPart(locationObj.street);
+            addPart(locationObj.address);
+            addPart(locationObj.area || locationObj.zoneName);
+            addPart(locationObj.city);
+            addPart(locationObj.state);
+            const pin = locationObj.pincode || locationObj.zipCode || locationObj.postalCode;
+            if (pin) addPart(String(pin));
+
+            if (parts.length > 0) {
+              return parts.join(', ');
             }
 
-            // PRIORITY 4: Fallback to address field
-            if (locationObj.address && locationObj.address.trim() !== "") {
-              return locationObj.address.trim()
-            }
-
-            // PRIORITY 5: Last fallback - use area or city
-            return locationObj.area || locationObj.city || "Location"
-          }
+            return locationObj.area || locationObj.city || "Location";
+          };
 
           // Get location object for address formatting
           const locationObj = actualRestaurant?.location || apiRestaurant?.location
-          debugLog('? Location Object for formatting:', locationObj)
-          debugLog('? formattedAddress field:', locationObj?.formattedAddress)
-          const formattedAddress = formatRestaurantAddress(locationObj)
+          const formattedAddress = formatRestaurantAddress(actualRestaurant, locationObj)
           debugLog('? Final Formatted Address:', formattedAddress)
 
           // Calculate distance from user to restaurant
@@ -2480,8 +2431,8 @@ function RestaurantDetailsContent() {
         />
       )}
 
-      {/* Header - Back, Search, Menu (like reference image) */}
-      <div className="px-4 sm:px-6 md:px-8 lg:px-10 xl:px-12 pt-3 md:pt-4 lg:pt-5 pb-2 md:pb-3 bg-white dark:bg-[#0a0a0a]">
+      {/* Fixed Sticky Header - Back, Search, Menu */}
+      <div className="sticky top-0 z-40 px-4 sm:px-6 md:px-8 lg:px-10 xl:px-12 pt-3 md:pt-4 lg:pt-5 pb-2 md:pb-3 bg-white/95 dark:bg-[#0a0a0a]/95 backdrop-blur-md border-b border-gray-100 dark:border-gray-800/80 shadow-xs">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           {/* Back Button */}
           <Button
@@ -2579,11 +2530,12 @@ function RestaurantDetailsContent() {
 
             <div className="flex items-center justify-between gap-3">
               <div
-                className="flex items-center gap-1 text-sm text-gray-700 dark:text-gray-300 min-w-0"
+                className="flex items-start gap-1.5 text-sm text-gray-700 dark:text-gray-300 min-w-0"
               >
-                <MapPin className="h-4 w-4" />
-                <span className="truncate">
-                  {restaurant?.distance || "1.2 km"} | {restaurant?.location || "Location"}
+                <MapPin className="h-4 w-4 shrink-0 mt-0.5 text-rose-500" />
+                <span className="leading-snug break-words">
+                  {restaurant?.distance ? <strong className="font-semibold text-gray-900 dark:text-white">{restaurant.distance} • </strong> : null}
+                  {restaurant?.location || "Location"}
                 </span>
               </div>
               <span
@@ -3548,27 +3500,6 @@ function RestaurantDetailsContent() {
                         <span className="text-sm text-gray-400">No image available</span>
                       </div>
                     )}
-                    {/* Bookmark and Share Icons Overlay */}
-                    <div className="absolute bottom-4 right-4 flex items-center gap-3">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleBookmarkClick(selectedItem)
-                        }}
-                        className={`h-10 w-10 rounded-full border flex items-center justify-center transition-all duration-300 ${isDishFavorite(selectedItem.id, restaurant?.restaurantId || restaurant?._id || restaurant?.id)
-                          ? "border-red-500 dark:border-red-400 bg-red-50 dark:bg-red-900/30 text-red-500 dark:text-red-400"
-                          : "border-white dark:border-gray-800 bg-white/90 dark:bg-[#1a1a1a]/90 text-gray-600 dark:text-gray-300 hover:bg-white dark:hover:bg-[#2a2a2a]"
-                          }`}
-                      >
-                        <Bookmark
-                          className={`h-5 w-5 transition-all duration-300 ${isDishFavorite(selectedItem.id, restaurant?.restaurantId || restaurant?._id || restaurant?.id) ? "fill-red-500 dark:fill-red-400" : ""
-                            }`}
-                        />
-                      </button>
-                      <button className="h-10 w-10 rounded-full border border-white dark:border-gray-800 bg-white/90 dark:bg-[#1a1a1a]/90 text-gray-600 dark:text-gray-300 hover:bg-white dark:hover:bg-[#2a2a2a] flex items-center justify-center transition-colors">
-                        <Share2 className="h-5 w-5" />
-                      </button>
-                    </div>
                   </div>
 
                   {/* Content Section */}

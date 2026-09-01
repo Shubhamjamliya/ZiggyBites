@@ -2560,7 +2560,6 @@ function RestaurantDetailsContent() {
                   <h1 className="text-2xl font-bold text-gray-900 dark:text-white truncate">
                     {restaurant?.name || "Unknown Restaurant"}
                   </h1>
-                  <Info className="h-5 w-5 text-gray-400" />
                 </div>
                 <div className="mt-1 flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
                   <Utensils className="h-4 w-4" />

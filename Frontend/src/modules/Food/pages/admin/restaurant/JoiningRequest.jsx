@@ -17,6 +17,40 @@ const formatTime12Hour = (timeStr) => {
   return `${String(hour).padStart(2, "0")}:${String(m).padStart(2, "0")} ${period}`
 }
 
+// Format Restaurant ID to compact REST format (e.g., REST422829)
+const formatRestaurantId = (id) => {
+  if (!id) return "REST000000"
+
+  const idString = String(id)
+  const parts = idString.split(/[-.]/)
+  let lastDigits = ""
+
+  if (parts.length > 0) {
+    const lastPart = parts[parts.length - 1]
+    const digits = lastPart.match(/\d+/g)
+    if (digits && digits.length > 0) {
+      const allDigits = digits.join("")
+      lastDigits = allDigits.slice(-6).padStart(6, "0")
+    } else {
+      const allParts = parts.join("")
+      const allDigits = allParts.match(/\d+/g)
+      if (allDigits && allDigits.length > 0) {
+        const combinedDigits = allDigits.join("")
+        lastDigits = combinedDigits.slice(-6).padStart(6, "0")
+      }
+    }
+  }
+
+  if (!lastDigits) {
+    const hash = idString.split("").reduce((acc, char) => {
+      return ((acc << 5) - acc) + char.charCodeAt(0) | 0
+    }, 0)
+    lastDigits = Math.abs(hash).toString().slice(-6).padStart(6, "0")
+  }
+
+  return `REST${lastDigits}`
+}
+
 
 export default function JoiningRequest() {
   const [activeTab, setActiveTab] = useState("pending")
@@ -855,9 +889,9 @@ export default function JoiningRequest() {
                             </span>
                           </div>
                         )}
-                        <div className="flex items-center gap-1 text-slate-600">
-                          <Building2 className="w-4 h-4" />
-                          <span className="text-sm">{r?.restaurantId || r?._id || "N/A"}</span>
+                        <div className="flex items-center gap-1.5 text-slate-600 bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-200">
+                          <Building2 className="w-4 h-4 text-slate-400" />
+                          <span className="text-xs font-bold tracking-wider">{formatRestaurantId(r?.restaurantId || r?._id)}</span>
                         </div>
                         <span className={`px-3 py-1 rounded-full text-xs font-medium ${
                           approvalStatus === "approved" ? "bg-green-100 text-green-700" : approvalStatus === "rejected" ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"
@@ -1271,10 +1305,10 @@ export default function JoiningRequest() {
                             </div>
                           </div>
                         )}
-                        {r.restaurantId && (
+                        {(r.restaurantId || r._id) && (
                           <div>
                             <p className="text-xs text-slate-500 mb-1">Restaurant ID</p>
-                            <p className="font-medium text-slate-900">{r.restaurantId}</p>
+                            <p className="font-medium text-slate-900">{formatRestaurantId(r.restaurantId || r._id)}</p>
                           </div>
                         )}
                         {r.approvedAt != null && (

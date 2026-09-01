@@ -1109,7 +1109,7 @@ export default function ExploreMore() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
-              className="fixed inset-0 bg-black/50 z-50"
+              className="fixed inset-0 bg-black/50 z-[70]"
               onClick={() => {
                 setSearchOpen(false)
                 setSearchQuery("")
@@ -1126,7 +1126,7 @@ export default function ExploreMore() {
                 damping: 30,
                 stiffness: 300
               }}
-              className="fixed top-0 left-0 right-0 bg-white shadow-lg z-50 h-screen"
+              className="fixed top-0 left-0 right-0 bg-white shadow-lg z-[70] h-screen"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Search Header */}
@@ -1775,7 +1775,9 @@ export default function ExploreMore() {
           </>
         )}
       </AnimatePresence>
-      <BottomNavOrders />
+      {!searchOpen && !profileOpen && !scheduleOffOpen && !dateTimePickerOpen && !existingScheduleOpen && (
+        <BottomNavOrders />
+      )}
     </motion.div>
   )
 }

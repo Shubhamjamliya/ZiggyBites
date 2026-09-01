@@ -28,28 +28,54 @@ export default function BottomNavOrders() {
   const { pathname } = useLocation()
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false)
 
-  // Hide bottom nav when keyboard is open (standard mobile UX)
+  // Hide bottom nav when keyboard is open or when mobile inputs are focused
   useEffect(() => {
-    const handleResize = () => {
+    if (typeof window === "undefined") return
+
+    const checkKeyboardState = () => {
+      // 1. Visual Viewport check
       if (window.visualViewport) {
-        // If the visual viewport is significantly smaller than innerHeight, keyboard is open
-        const isKeyboardOpen = window.visualViewport.height < window.innerHeight * 0.85
-        setIsKeyboardVisible(isKeyboardOpen)
+        const isShrunk = window.visualViewport.height < window.innerHeight * 0.85
+        if (isShrunk) {
+          setIsKeyboardVisible(true)
+          return
+        }
       }
+
+      // 2. Focused editable element check on mobile/touch screens
+      const activeEl = document.activeElement
+      const isInputActive =
+        activeEl &&
+        (activeEl.tagName === "INPUT" ||
+          activeEl.tagName === "TEXTAREA" ||
+          activeEl.isContentEditable)
+
+      const isMobile = window.innerWidth < 768
+      if (isMobile && isInputActive) {
+        setIsKeyboardVisible(true)
+        return
+      }
+
+      setIsKeyboardVisible(false)
     }
 
     if (window.visualViewport) {
-      window.visualViewport.addEventListener('resize', handleResize)
-      // Initial check
-      handleResize()
-      return () => window.visualViewport.removeEventListener('resize', handleResize)
-    } else {
-      // Fallback for older browsers
-      const handleWindowResize = () => {
-        setIsKeyboardVisible(window.innerHeight < 550)
+      window.visualViewport.addEventListener("resize", checkKeyboardState)
+    }
+    window.addEventListener("focusin", checkKeyboardState)
+    window.addEventListener("focusout", checkKeyboardState)
+    window.addEventListener("resize", checkKeyboardState)
+
+    // Initial check
+    checkKeyboardState()
+
+    return () => {
+      if (window.visualViewport) {
+        window.visualViewport.removeEventListener("resize", checkKeyboardState)
       }
-      window.addEventListener('resize', handleWindowResize)
-      return () => window.removeEventListener('resize', handleWindowResize)
+      window.removeEventListener("focusin", checkKeyboardState)
+      window.removeEventListener("focusout", checkKeyboardState)
+      window.removeEventListener("resize", checkKeyboardState)
     }
   }, [])
 

@@ -505,6 +505,10 @@ export const getCurrentRestaurantProfile = async (restaurantId) => {
                 'status',
                 'approvedAt',
                 'pendingUpdateReason',
+                'rating',
+                'totalRatings',
+                'averageRating',
+                'reviewCount',
                 'createdAt',
                 'updatedAt'
             ].join(' ')

@@ -357,11 +357,15 @@ export default function OutletInfo() {
         {/* Ratings */}
         <div className="px-4 py-4 border-b border-gray-100 flex items-center gap-3.5">
           <div className="bg-[#E91E63] px-2 py-1 rounded-[6px] flex items-center gap-1 shadow-sm">
-            <span className="text-white font-black text-sm">{restaurantData?.rating?.toFixed(1) || "5.0"}</span>
+            <span className="text-white font-black text-sm">
+              {Number(restaurantData?.rating || restaurantData?.averageRating || 0) > 0
+                ? Number(restaurantData?.rating || restaurantData?.averageRating).toFixed(1)
+                : "5.0"}
+            </span>
             <Star className="w-3.5 h-3.5 text-white fill-white mb-[1px]" />
           </div>
           <div className="flex items-center text-[#E91E63] font-black text-sm uppercase tracking-wide cursor-pointer hover:underline" onClick={() => navigate("/food/restaurant/feedback")}>
-            {restaurantData?.totalRatings || 1} DELIVERY REVIEWS
+            {Number(restaurantData?.totalRatings || restaurantData?.reviewCount || 0)} DELIVERY REVIEWS
             <ChevronRight className="w-4 h-4 ml-0.5" />
           </div>
         </div>

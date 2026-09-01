@@ -97,8 +97,9 @@ export const HistoryV2 = () => {
      return trips.reduce((acc, trip) => {
         if (trip.status === 'Completed') {
            acc.earnings += Number(trip.deliveryEarning || trip.amount || trip.earningAmount || 0);
-           const isCOD = (trip.paymentMethod || '').toLowerCase() === 'cash' || (trip.paymentMethod || '').toLowerCase() === 'cod';
-           if (isCOD) acc.cod += Number(trip.codCollectedAmount || trip.orderTotal || 0);
+           const rawMethod = String(trip.paymentMethod || trip.paymentType || '').toLowerCase();
+           const isCOD = (rawMethod === 'cash' || rawMethod === 'cod') && rawMethod !== 'razorpay_qr';
+           if (isCOD) acc.cod += Number(trip.codCollectedAmount || trip.codAmount || trip.orderTotal || 0);
         }
         return acc;
      }, { earnings: 0, cod: 0 });
@@ -225,16 +226,34 @@ export const HistoryV2 = () => {
                    const isCancelled = (trip.status || '').toLowerCase() === 'cancelled';
                    const isPending = !isCompleted && !isCancelled;
                    const payout = Number(trip.deliveryEarning || trip.amount || trip.earningAmount || 0);
-                   const collection = Number(trip.codCollectedAmount || trip.orderTotal || 0);
-                   const isQR = (trip.paymentMethod || '').toLowerCase() === 'razorpay_qr';
-                   const isCOD = (trip.paymentMethod || '').toLowerCase() === 'cash' || (trip.paymentMethod || '').toLowerCase() === 'cod';
+
+                   const rawMethod = String(trip.paymentMethod || trip.paymentType || '').toLowerCase();
+                   const isQR = rawMethod === 'razorpay_qr' || rawMethod === 'qr' || rawMethod.includes('qr') || trip.paymentType === 'COD (QR)';
+                   const isCOD = !isQR && (rawMethod === 'cash' || rawMethod === 'cod' || rawMethod === 'cash on delivery' || trip.paymentType === 'Cash on Delivery');
+                   const isWallet = rawMethod === 'wallet' || trip.paymentType === 'Wallet';
+
+                   const collection = Number(trip.codCollectedAmount || (isCOD ? (trip.codAmount || trip.orderTotal) : 0) || 0);
+
+                   const tripTime = (() => {
+                     const dateVal = trip.deliveredAt || trip.completedAt || trip.createdAt || trip.date;
+                     if (!dateVal) return trip.time || '--:--';
+                     try {
+                       return new Date(dateVal).toLocaleTimeString('en-IN', {
+                         hour: '2-digit',
+                         minute: '2-digit',
+                         hour12: true
+                       });
+                     } catch {
+                       return trip.time || '--:--';
+                     }
+                   })();
 
                    return (
                       <div key={trip.orderId || idx} className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm active:scale-[0.99] transition-all">
                          <div className="flex justify-between items-start mb-2">
                              <div>
                                 <h4 className="text-base font-bold text-gray-950">{trip.orderId || 'ORDER-ID'}</h4>
-                                <p className="text-sm font-medium text-gray-500 mt-0.5">{trip.restaurant || trip.restaurantName || 'Sayaji'}</p>
+                                <p className="text-sm font-medium text-gray-500 mt-0.5">{trip.restaurant || trip.restaurantName || 'Restaurant'}</p>
                                 <p className="text-xs text-gray-400 font-medium mt-0.5 line-clamp-1">{extractItems(trip)}</p>
                              </div>
                              <span className={`text-sm font-bold ${isCompleted ? 'text-[#10B981]' : isCancelled ? 'text-red-500' : 'text-orange-500'}`}>
@@ -243,15 +262,20 @@ export const HistoryV2 = () => {
                          </div>
                          
                          <div className="flex gap-2 mb-4 mt-3">
-                             <span className={`text-[10px] font-bold px-3 py-1 rounded-full ${(isCOD || isQR) ? 'bg-orange-50 text-orange-600' : 'bg-green-50 text-[#10B981]'}`}>
-                                {isQR ? 'COD (QR)' : isCOD ? 'COD' : 'Online'}
+                             <span className={`text-[10px] font-bold px-3 py-1 rounded-full ${
+                               isQR ? 'bg-blue-50 text-blue-600' :
+                               isCOD ? 'bg-orange-50 text-orange-600' :
+                               isWallet ? 'bg-purple-50 text-purple-600' :
+                               'bg-green-50 text-[#10B981]'
+                             }`}>
+                                {isQR ? 'COD (QR)' : isCOD ? 'COD' : isWallet ? 'Wallet' : 'Online'}
                              </span>
                          </div>
 
                          <div className="grid grid-cols-3 gap-4 pt-4 border-t border-gray-50">
                              <div>
                                 <p className="text-[11px] font-medium text-gray-400 mb-1">Time</p>
-                                <p className="text-sm font-bold text-gray-950">{trip.time || '--:--'}</p>
+                                <p className="text-sm font-bold text-gray-950">{tripTime}</p>
                              </div>
                              <div className="text-center">
                                 <p className="text-[11px] font-medium text-gray-400 mb-1">COD</p>

@@ -38,7 +38,7 @@ const SelectDropLocation = lazy(() => import("@food/pages/delivery/SelectDropLoc
 const ReferAndEarn = lazy(() => import("@food/pages/delivery/ReferAndEarn"))
 const YourReferrals = lazy(() => import("@food/pages/delivery/YourReferrals"))
 const Earnings = lazy(() => import("@food/pages/delivery/Earnings"))
-const TripHistory = lazy(() => import("@food/pages/delivery/TripHistory"))
+const TripHistory = lazy(() => import("../pages/HistoryV2"))
 const TimeOnOrders = lazy(() => import("@food/pages/delivery/TimeOnOrders"))
 const PocketBalancePage = lazy(() => import("@food/pages/delivery/PocketBalance"))
 const CustomerTipsBalancePage = lazy(() => import("@food/pages/delivery/CustomerTips"))

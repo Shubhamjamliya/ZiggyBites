@@ -589,9 +589,19 @@ const toTripDto = (order) => {
     const deliveredAt = order?.deliveryState?.deliveredAt || order?.deliveredAt || order?.completedAt || null;
     const dateForUi = deliveredAt || createdAt || order?.updatedAt || null;
 
-    const time = dateForUi
-        ? new Date(dateForUi).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
-        : '';
+    let time = '';
+    if (dateForUi) {
+        try {
+            time = new Date(dateForUi).toLocaleTimeString('en-IN', {
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: true,
+                timeZone: 'Asia/Kolkata'
+            });
+        } catch {
+            time = new Date(dateForUi).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+        }
+    }
 
     const orderStatus = String(order?.orderStatus || order?.status || '').toLowerCase();
     const isDelivered = orderStatus === 'delivered' || String(order?.deliveryState?.currentPhase || '').toLowerCase() === 'delivered';
@@ -605,31 +615,53 @@ const toTripDto = (order) => {
         order?.restaurant?.restaurantName ||
         '';
 
-    const paymentMethod = order?.payment?.method || order?.paymentMethod || '';
-    const pricingTotal = Number(order?.pricing?.total) || Number(order?.totalAmount) || 0;
+    const rawPaymentMethod = String(order?.payment?.method || order?.paymentMethod || order?.payment?.paymentMethod || '').toLowerCase();
+    const hasRazorpayId = !!(order?.payment?.razorpay_payment_id || order?.payment?.razorpayPaymentId || order?.payment?.razorpay?.paymentId);
+    const isQrPayment = rawPaymentMethod === 'razorpay_qr' || rawPaymentMethod === 'qr' || ((rawPaymentMethod === 'cash' || rawPaymentMethod === 'cod' || rawPaymentMethod === 'cash on delivery') && hasRazorpayId);
 
-    const earningAmount = Number(order?.riderEarning ?? order?.deliveryEarning ?? 0) || 0;
-    const codAmount = paymentMethod === 'cash' ? Number(order?.payment?.amountDue) || 0 : 0;
-    const codCollectedAmount = paymentMethod === 'cash' && order?.payment?.status === 'paid' ? codAmount : 0;
+    let paymentMethod = 'online';
+    let paymentType = 'Online';
+    if (isQrPayment) {
+        paymentMethod = 'razorpay_qr';
+        paymentType = 'COD (QR)';
+    } else if (rawPaymentMethod === 'cash' || rawPaymentMethod === 'cod' || rawPaymentMethod === 'cash on delivery') {
+        paymentMethod = 'cash';
+        paymentType = 'Cash on Delivery';
+    } else if (rawPaymentMethod === 'wallet') {
+        paymentMethod = 'wallet';
+        paymentType = 'Wallet';
+    } else if (rawPaymentMethod) {
+        paymentMethod = rawPaymentMethod;
+        paymentType = 'Online';
+    }
+
+    const pricingTotal = Number(order?.pricing?.total) || Number(order?.totalAmount) || 0;
+    const earningAmount = Number(order?.riderEarning ?? order?.deliveryEarning ?? order?.pricing?.deliveryFee ?? 0) || 0;
+
+    const isCOD = paymentMethod === 'cash';
+    const codAmount = isCOD ? (Number(order?.payment?.amountDue) || pricingTotal) : 0;
+    const codCollectedAmount = isCOD && (order?.payment?.status === 'paid' || isDelivered || order?.paymentCollectionStatus === true) ? codAmount : 0;
+
     return {
         id: order?._id,
         _id: order?._id,
-        orderId: order?.orderId || order?._id,
+        orderId: order?.orderId || (order?._id ? `ORD-${order._id.toString().slice(-8).toUpperCase()}` : 'N/A'),
         status,
         restaurantName,
         restaurant: restaurantName,
         items: order?.items || order?.orderItems || [],
         orderItems: order?.orderItems || order?.items || [],
         paymentMethod,
+        paymentType,
         totalAmount: pricingTotal,
         orderTotal: pricingTotal,
-        codAmount: codAmount,
+        codAmount,
         codCollectedAmount,
         deliveryEarning: earningAmount,
-        earningAmount: earningAmount,
+        earningAmount,
         amount: earningAmount, // legacy fallback
         createdAt: order?.createdAt,
-        deliveredAt: deliveredAt,
+        deliveredAt,
         completedAt: deliveredAt,
         date: dateForUi,
         time
@@ -654,10 +686,20 @@ export const getDeliveryPartnerTripHistory = async (deliveryPartnerId, query = {
     const sf = String(statusFilter || '').toLowerCase();
     if (sf === 'completed') {
         match.orderStatus = 'delivered';
-        match['deliveryState.deliveredAt'] = { $gte: start, $lte: end };
+        match.$or = [
+            { 'deliveryState.deliveredAt': { $gte: start, $lte: end } },
+            { deliveredAt: { $gte: start, $lte: end } },
+            { completedAt: { $gte: start, $lte: end } },
+            { updatedAt: { $gte: start, $lte: end } },
+            { createdAt: { $gte: start, $lte: end } }
+        ];
     } else if (sf === 'cancelled') {
         match.orderStatus = { $regex: '^cancelled', $options: 'i' };
-        match.createdAt = { $gte: start, $lte: end };
+        match.$or = [
+            { cancelledAt: { $gte: start, $lte: end } },
+            { updatedAt: { $gte: start, $lte: end } },
+            { createdAt: { $gte: start, $lte: end } }
+        ];
     } else if (sf === 'pending') {
         match.createdAt = { $gte: start, $lte: end };
         // Pending = not delivered and not cancelled
@@ -666,13 +708,19 @@ export const getDeliveryPartnerTripHistory = async (deliveryPartnerId, query = {
             { orderStatus: { $not: { $regex: '^cancelled', $options: 'i' } } },
         ];
     } else {
-        // ALL TRIPS: show anything created in range, and compute earnings only for delivered orders.
-        match.createdAt = { $gte: start, $lte: end };
+        // ALL TRIPS: show anything in range
+        match.$or = [
+            { 'deliveryState.deliveredAt': { $gte: start, $lte: end } },
+            { deliveredAt: { $gte: start, $lte: end } },
+            { completedAt: { $gte: start, $lte: end } },
+            { updatedAt: { $gte: start, $lte: end } },
+            { createdAt: { $gte: start, $lte: end } }
+        ];
     }
 
     const orders = await FoodOrder.find(match)
         .populate({ path: 'restaurantId', select: 'restaurantName' })
-        .sort({ 'deliveryState.deliveredAt': -1, createdAt: -1 })
+        .sort({ 'deliveryState.deliveredAt': -1, deliveredAt: -1, completedAt: -1, updatedAt: -1, createdAt: -1 })
         .limit(limit)
         .lean();
 

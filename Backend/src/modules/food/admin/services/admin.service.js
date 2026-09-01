@@ -483,12 +483,20 @@ export async function getDashboardStats(query = {}) {
                     },
                     revenueTotal: { 
                         $sum: { 
-                            $cond: [DELIVERED_ORDER_STATUS_EXPR, { $ifNull: ['$pricing.total', 0] }, 0] 
+                            $cond: [
+                                DELIVERED_ORDER_STATUS_EXPR,
+                                { $ifNull: ['$pricing.total', { $ifNull: ['$totalAmount', 0] }] },
+                                0
+                            ] 
                         } 
                     },
                     commissionTotal: { 
                         $sum: { 
-                            $cond: [DELIVERED_ORDER_STATUS_EXPR, { $ifNull: ['$pricing.restaurantCommission', 0] }, 0] 
+                            $cond: [
+                                DELIVERED_ORDER_STATUS_EXPR,
+                                { $ifNull: ['$pricing.restaurantCommission', { $ifNull: ['$restaurantCommission', 0] }] },
+                                0
+                            ] 
                         } 
                     },
                     platformFeeTotal: { 
@@ -503,12 +511,20 @@ export async function getDashboardStats(query = {}) {
                     },
                     gstTotal: { 
                         $sum: { 
-                            $cond: [DELIVERED_ORDER_STATUS_EXPR, { $ifNull: ['$pricing.tax', 0] }, 0] 
+                            $cond: [
+                                DELIVERED_ORDER_STATUS_EXPR,
+                                { $ifNull: ['$pricing.tax', { $ifNull: ['$pricing.gst', { $ifNull: ['$tax', { $ifNull: ['$gst', 0] }] }] }] },
+                                0
+                            ] 
                         } 
                     },
                     adminNetProfit: { 
                         $sum: { 
-                            $cond: [DELIVERED_ORDER_STATUS_EXPR, { $ifNull: ['$platformProfit', 0] }, 0] 
+                            $cond: [
+                                DELIVERED_ORDER_STATUS_EXPR,
+                                { $ifNull: ['$platformProfit', { $ifNull: ['$pricing.platformFee', 0] }] },
+                                0
+                            ] 
                         } 
                     }
                 }
@@ -533,14 +549,18 @@ export async function getDashboardStats(query = {}) {
                     orders: { $sum: 1 },
                     revenue: { 
                         $sum: { 
-                            $cond: [{ $eq: ['$orderStatus', 'delivered'] }, { $ifNull: ['$pricing.total', 0] }, 0] 
+                            $cond: [
+                                DELIVERED_ORDER_STATUS_EXPR,
+                                { $ifNull: ['$pricing.total', { $ifNull: ['$totalAmount', 0] }] },
+                                0
+                            ] 
                         } 
                     },
                     commission: {
                         $sum: {
                             $cond: [
-                                { $eq: ['$orderStatus', 'delivered'] },
-                                { $ifNull: ['$platformProfit', { $ifNull: ['$pricing.platformFee', 0] }] },
+                                DELIVERED_ORDER_STATUS_EXPR,
+                                { $ifNull: ['$platformProfit', { $ifNull: ['$pricing.restaurantCommission', { $ifNull: ['$pricing.platformFee', { $ifNull: ['$restaurantCommission', 0] }] }] }] },
                                 0
                             ]
                         }

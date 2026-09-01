@@ -1305,6 +1305,11 @@ export const listApprovedRestaurants = async (query = {}) => {
     if (query.trusted === 'true') {
         filter.totalRatings = { ...(filter.totalRatings || {}), $gte: 100 };
     }
+    if (query.pureVeg === 'true' || query.isVeg === 'true' || query.vegOnly === 'true' || query.foodType === 'Veg') {
+        filter.pureVegRestaurant = true;
+    } else if (query.nonVeg === 'true' || query.foodType === 'Non-Veg') {
+        filter.pureVegRestaurant = { $ne: true };
+    }
     if (query.search && String(query.search).trim()) {
         const raw = String(query.search).trim().slice(0, 80);
         const term = escapeRegex(raw);

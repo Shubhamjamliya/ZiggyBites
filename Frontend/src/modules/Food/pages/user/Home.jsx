@@ -1458,20 +1458,31 @@ export default function Home() {
     vegMode,
   ]);
 
-  const matchesVegMode = useCallback(
+  const matchesDietaryFilter = useCallback(
     (restaurant) => {
-      if (!vegMode) return true;
-      return restaurant?.pureVegRestaurant === true;
+      const isPureVeg = Boolean(
+        restaurant?.pureVegRestaurant === true ||
+        restaurant?.isPureVeg === true ||
+        restaurant?.vegOnly === true ||
+        restaurant?.restaurantType === "veg" ||
+        restaurant?.foodType === "Veg"
+      );
+
+      if (vegMode || activeFilters.has("pure-veg") || activeFilters.has("veg")) {
+        return isPureVeg;
+      }
+      if (activeFilters.has("non-veg")) {
+        return !isPureVeg;
+      }
+      return true;
     },
-    [vegMode],
+    [vegMode, activeFilters],
   );
 
   // Filter restaurants and foods based on active filters
   const filteredRestaurants = useMemo(() => {
-    // Rely on API data which is already filtered and sorted by the backend.
-    // We only apply client-side Veg Mode filtering here.
-    return (restaurantsData || []).filter(matchesVegMode);
-  }, [restaurantsData, matchesVegMode]);
+    return (restaurantsData || []).filter(matchesDietaryFilter);
+  }, [restaurantsData, matchesDietaryFilter]);
 
   const restaurantLazyLoadResetKey = useMemo(() => {
     const activeFilterKey = Array.from(activeFilters).sort().join("|");
@@ -2513,6 +2524,7 @@ export default function Home() {
                 <div className="w-24 sm:w-28 bg-gray-50 dark:bg-[#0a0a0a] border-r dark:border-gray-800 flex flex-col">
                   {[
                     { id: "sort", label: "Sort By", icon: ArrowDownUp },
+                    { id: "dietary", label: "Dietary", icon: Leaf },
                     { id: "time", label: "Time", icon: Timer },
                     { id: "rating", label: "Rating", icon: Star },
                     { id: "distance", label: "Distance", icon: MapPin },
@@ -2586,6 +2598,63 @@ export default function Home() {
                           </span>
                         </button>
                       ))}
+                    </div>
+                  </div>
+
+                  {/* Dietary Preference Tab */}
+                  <div
+                    ref={(el) => (filterSectionRefs.current["dietary"] = el)}
+                    data-section-id="dietary"
+                    className="space-y-4 mb-8">
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+                      Dietary Preference
+                    </h3>
+                    <div className="grid grid-cols-2 gap-3">
+                      <button
+                        onClick={() => {
+                          const nextFilters = new Set(activeFilters);
+                          if (nextFilters.has("pure-veg") || nextFilters.has("veg")) {
+                            nextFilters.delete("pure-veg");
+                            nextFilters.delete("veg");
+                          } else {
+                            nextFilters.delete("non-veg");
+                            nextFilters.add("pure-veg");
+                          }
+                          setActiveFilters(nextFilters);
+                        }}
+                        className={`flex flex-col items-center gap-2 p-4 rounded-xl border transition-colors ${
+                          activeFilters.has("pure-veg") || activeFilters.has("veg")
+                            ? "border-green-600 bg-green-50 dark:bg-green-950/20 text-green-700 dark:text-green-400 font-bold"
+                            : "border-gray-200 dark:border-gray-800 hover:border-green-600"
+                        }`}>
+                        <div className="w-6 h-6 border-2 border-green-600 rounded-sm flex items-center justify-center p-[2px]">
+                          <div className="w-full h-full rounded-full bg-green-600" />
+                        </div>
+                        <span className="text-sm font-medium">Pure Veg</span>
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          const nextFilters = new Set(activeFilters);
+                          if (nextFilters.has("non-veg")) {
+                            nextFilters.delete("non-veg");
+                          } else {
+                            nextFilters.delete("pure-veg");
+                            nextFilters.delete("veg");
+                            nextFilters.add("non-veg");
+                          }
+                          setActiveFilters(nextFilters);
+                        }}
+                        className={`flex flex-col items-center gap-2 p-4 rounded-xl border transition-colors ${
+                          activeFilters.has("non-veg")
+                            ? "border-red-600 bg-red-50 dark:bg-red-950/20 text-red-700 dark:text-red-400 font-bold"
+                            : "border-gray-200 dark:border-gray-800 hover:border-red-600"
+                        }`}>
+                        <div className="w-6 h-6 border-2 border-red-600 rounded-sm flex items-center justify-center p-[2px]">
+                          <div className="w-full h-full rounded-full bg-red-600" />
+                        </div>
+                        <span className="text-sm font-medium">Non-Veg</span>
+                      </button>
                     </div>
                   </div>
 

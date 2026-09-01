@@ -30,6 +30,72 @@ export default function FilterBar({
                       </span>
                     </button>
 
+                    {/* Pure Veg Quick Filter */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const nextFilters = new Set(activeFilters);
+                        if (nextFilters.has("pure-veg") || nextFilters.has("veg")) {
+                          nextFilters.delete("pure-veg");
+                          nextFilters.delete("veg");
+                        } else {
+                          nextFilters.delete("non-veg");
+                          nextFilters.add("pure-veg");
+                        }
+                        setActiveFilters(nextFilters);
+                        void applyFiltersAndRefetch(
+                          nextFilters,
+                          sortBy,
+                          selectedCuisine,
+                        );
+                      }}
+                      className={`h-9 px-3.5 rounded-full flex items-center gap-1.5 whitespace-nowrap flex-shrink-0 transition-all font-bold shadow-sm active:scale-95 ${
+                        activeFilters.has("pure-veg") || activeFilters.has("veg")
+                          ? "bg-green-600 text-white border border-green-600 shadow-green-600/20"
+                          : "bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300"
+                      }`}
+                    >
+                      <div className={`w-3.5 h-3.5 border-2 ${activeFilters.has("pure-veg") || activeFilters.has("veg") ? "border-white" : "border-green-600"} rounded-sm flex items-center justify-center p-[1.5px]`}>
+                        <div className={`w-full h-full rounded-full ${activeFilters.has("pure-veg") || activeFilters.has("veg") ? "bg-white" : "bg-green-600"}`} />
+                      </div>
+                      <span className="text-xs font-bold tracking-tight">
+                        Pure Veg
+                      </span>
+                    </button>
+
+                    {/* Non-Veg Quick Filter */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const nextFilters = new Set(activeFilters);
+                        if (nextFilters.has("non-veg")) {
+                          nextFilters.delete("non-veg");
+                        } else {
+                          nextFilters.delete("pure-veg");
+                          nextFilters.delete("veg");
+                          nextFilters.add("non-veg");
+                        }
+                        setActiveFilters(nextFilters);
+                        void applyFiltersAndRefetch(
+                          nextFilters,
+                          sortBy,
+                          selectedCuisine,
+                        );
+                      }}
+                      className={`h-9 px-3.5 rounded-full flex items-center gap-1.5 whitespace-nowrap flex-shrink-0 transition-all font-bold shadow-sm active:scale-95 ${
+                        activeFilters.has("non-veg")
+                          ? "bg-red-600 text-white border border-red-600 shadow-red-600/20"
+                          : "bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300"
+                      }`}
+                    >
+                      <div className={`w-3.5 h-3.5 border-2 ${activeFilters.has("non-veg") ? "border-white" : "border-red-600"} rounded-sm flex items-center justify-center p-[1.5px]`}>
+                        <div className={`w-full h-full rounded-full ${activeFilters.has("non-veg") ? "bg-white" : "bg-red-600"}`} />
+                      </div>
+                      <span className="text-xs font-bold tracking-tight">
+                        Non-Veg
+                      </span>
+                    </button>
+
                     {foodPreferenceFilters.map((filter) => {
                       const Icon = filter.icon;
                       const isActive =

@@ -416,6 +416,12 @@ export const useHome = ({ effectiveLocation, effectiveZoneId, hasUsableUserCity 
       if (normalizedFilters.activeFilters?.has("top-rated")) params.topRated = "true";
       else if (normalizedFilters.activeFilters?.has("trusted")) params.trusted = "true";
 
+      if (normalizedFilters.activeFilters?.has("pure-veg") || normalizedFilters.activeFilters?.has("veg") || normalizedFilters.vegMode) {
+        params.pureVeg = "true";
+      } else if (normalizedFilters.activeFilters?.has("non-veg")) {
+        params.nonVeg = "true";
+      }
+
       if (effectiveZoneId) params.zoneId = effectiveZoneId;
       if (!effectiveZoneId && hasUsableUserCity) params.city = String(effectiveLocation.city).trim();
 

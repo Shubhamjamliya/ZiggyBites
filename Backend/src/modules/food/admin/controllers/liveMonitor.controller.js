@@ -4,8 +4,12 @@ import { FoodOrder } from '../../orders/models/order.model.js';
 
 export async function getLiveMonitorStatus(req, res, next) {
     try {
-        // Use a 24-hour rolling window instead of midnight to avoid timezone issues
-        const today = new Date(Date.now() - 24 * 60 * 60 * 1000);
+        // Start of current day (00:00:00.000) in Indian Standard Time (IST, UTC+5:30)
+        const now = new Date();
+        const istOffsetMs = 5.5 * 60 * 60 * 1000;
+        const istNow = new Date(now.getTime() + istOffsetMs);
+        const istMidnight = new Date(Date.UTC(istNow.getUTCFullYear(), istNow.getUTCMonth(), istNow.getUTCDate()));
+        const startOfToday = new Date(istMidnight.getTime() - istOffsetMs);
 
         // Fetch All Approved Restaurants
         const restaurants = await FoodRestaurant.find({ status: 'approved' })
@@ -28,7 +32,7 @@ export async function getLiveMonitorStatus(req, res, next) {
 
         // Get orders for restaurants today
         const rOrders = await FoodOrder.aggregate([
-            { $match: { createdAt: { $gte: today } } },
+            { $match: { createdAt: { $gte: startOfToday } } },
             { $group: {
                 _id: '$restaurantId',
                 totalOrders: { $sum: 1 },
@@ -84,9 +88,10 @@ export async function getLiveMonitorStatus(req, res, next) {
 
         // Get ALL orders today for these partners
         const allDpOrdersToday = await FoodOrder.find({
-            createdAt: { $gte: today },
+            createdAt: { $gte: startOfToday },
             'dispatch.deliveryPartnerId': { $in: dpIds }
         })
+        .sort({ createdAt: -1 })
         .select('_id orderId order_id orderStatus customerName createdAt pricing dispatch')
         .populate('restaurantId', 'restaurantName')
         .populate('userId', 'fullName name')

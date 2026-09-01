@@ -290,7 +290,16 @@ function RestaurantDetails({ restaurant }) {
   );
 }
 
-
+const formatTime = (timeVal) => {
+  if (!timeVal) return '--:--';
+  const d = new Date(timeVal);
+  if (isNaN(d.getTime())) return '--:--';
+  return d.toLocaleTimeString('en-IN', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+  });
+};
 
 function DeliveryPartnerDetails({ partner, onRefresh }) {
   const mapRef = useRef(null);
@@ -462,7 +471,7 @@ function DeliveryPartnerDetails({ partner, onRefresh }) {
           <div className="flex-1 min-w-0">
             <p className="text-[10px] font-black text-green-600 uppercase tracking-widest mb-1">Shift Verified</p>
             <p className="text-sm font-bold text-gray-800 mb-0.5">
-              Started at {new Date(partner.shiftStartTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              Started at {formatTime(partner.shiftStartTime)}
             </p>
             {partner.shiftStartAddress && (
               <p className="text-xs text-gray-500 line-clamp-2">
@@ -501,7 +510,7 @@ function DeliveryPartnerDetails({ partner, onRefresh }) {
                   <div className="flex justify-between items-start mb-2">
                     <div>
                       <span className="text-sm font-bold text-gray-800">{order.orderId}</span>
-                      <p className="text-xs text-gray-500">{new Date(order.time).toLocaleTimeString()}</p>
+                      <p className="text-xs text-gray-500">{formatTime(order.time)}</p>
                     </div>
                     <span className={`px-2 py-1 text-xs font-medium rounded-full ${
                       order.status === 'delivered' ? 'bg-green-50 text-green-600' :
@@ -568,7 +577,7 @@ function DeliveryPartnerDetails({ partner, onRefresh }) {
               
               {partner.lastLocationAt && (
                 <div className="absolute bottom-4 left-4 bg-white px-3 py-1.5 rounded-md shadow-md text-xs font-medium text-gray-600 z-10 border border-gray-200">
-                  Updated: {new Date(partner.lastLocationAt).toLocaleTimeString()}
+                  Updated: {formatTime(partner.lastLocationAt)}
                 </div>
               )}
               

@@ -244,15 +244,17 @@ const HorizontalMenuScroller = ({ restaurant, quantities, isClosed, handleItemCl
                     CLOSED
                   </Button>
                 ) : quantity > 0 ? (
-                  <Link to="/user/cart" onClick={(e) => e.stopPropagation()}>
-                    <Button
-                      variant={"outline"}
-                      size="sm"
-                      className="rounded-xl h-8 sm:h-9 px-4 sm:px-5 text-[12px] sm:text-[14px] font-bold uppercase tracking-wide transition-all duration-300 active:scale-95 flex items-center gap-1 border-primary text-primary hover:bg-primary/5"
-                    >
-                      VIEW CART
-                    </Button>
-                  </Link>
+                  <Button
+                    variant={"outline"}
+                    size="sm"
+                    className="rounded-xl h-8 sm:h-9 px-4 sm:px-5 text-[12px] sm:text-[14px] font-bold uppercase tracking-wide transition-all duration-300 active:scale-95 flex items-center gap-1 border-primary text-primary hover:bg-primary/5"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleItemClick(item, restaurant)
+                    }}
+                  >
+                    ADDED ({quantity})
+                  </Button>
                 ) : (
                   <Button
                     variant={"outline"}
@@ -1991,8 +1993,7 @@ export default function Under250() {
         )}
       </AnimatePresence>
 
-      {/* Add to Cart Animation */}
-      <ScrollAwareAddToCartAnimation />
+
     </div>
   )
 }

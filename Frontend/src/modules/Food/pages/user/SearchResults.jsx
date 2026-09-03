@@ -1134,7 +1134,6 @@ export default function SearchResults() {
           </div>
         </section>
       </div>
-      <StickyCartCard />
     </div>
   )
 }

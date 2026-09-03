@@ -3191,7 +3191,6 @@ export default function Home() {
         setSelectedRestaurantSlug={setSelectedRestaurantSlug}
       />
       
-      <StickyCartCard />
       {/* Live order strip: only on homepage (not in UserLayout) */}
       <OrderTrackingCard hasBottomNav />
     </div>

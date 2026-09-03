@@ -85,22 +85,24 @@ export default function SubscriptionCheckout() {
 
   useEffect(() => {
     let mounted = true;
-    adminAPI
-      .getPublicFeeSettings()
-      .then((res) => {
-        if (!mounted) return;
-        const fs = res?.data?.data?.feeSettings;
-        if (fs) {
-          setFeeSettings({
-            packagingFee: Number(fs.packagingFee ?? 0),
-            platformFee: Number(fs.platformFee ?? 5),
-            gstRate: Number(fs.gstRate ?? 5),
-            gstOnPlatformFee: Number(fs.gstOnPlatformFee ?? 0),
-            gstOnPackagingFee: Number(fs.gstOnPackagingFee ?? 0),
-          });
-        }
-      })
-      .catch(() => {});
+    if (typeof adminAPI?.getPublicFeeSettings === "function") {
+      adminAPI
+        .getPublicFeeSettings()
+        .then((res) => {
+          if (!mounted) return;
+          const fs = res?.data?.data?.feeSettings;
+          if (fs) {
+            setFeeSettings({
+              packagingFee: Number(fs.packagingFee ?? 0),
+              platformFee: Number(fs.platformFee ?? 5),
+              gstRate: Number(fs.gstRate ?? 5),
+              gstOnPlatformFee: Number(fs.gstOnPlatformFee ?? 0),
+              gstOnPackagingFee: Number(fs.gstOnPackagingFee ?? 0),
+            });
+          }
+        })
+        .catch(() => {});
+    }
     return () => {
       mounted = false;
     };

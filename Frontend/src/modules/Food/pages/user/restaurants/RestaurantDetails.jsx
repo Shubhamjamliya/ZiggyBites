@@ -44,7 +44,6 @@ import { Checkbox } from "@food/components/ui/checkbox"
 import AnimatedPage from "@food/components/user/AnimatedPage"
 import { useCart } from "@food/context/CartContext"
 import { useProfile } from "@food/context/ProfileContext"
-import AddToCartAnimation from "@food/components/user/AddToCartAnimation"
 import { getCompanyNameAsync } from "@food/utils/businessSettings"
 import { isModuleAuthenticated } from "@food/utils/auth"
 import { getRestaurantAvailabilityStatus } from "@food/utils/restaurantAvailability"
@@ -4105,16 +4104,7 @@ function RestaurantDetailsContent() {
           document.body
         )}
 
-      {/* Add to Cart Animation Component - Rendered via Portal to prevent transform interference */}
-      {typeof window !== "undefined" &&
-        createPortal(
-          <AddToCartAnimation
-            bottomOffset={80}
-            linkTo="/food/user/cart"
-            hideOnPages={true}
-          />,
-          document.body
-        )}
+
     </AnimatedPage>
   )
 }

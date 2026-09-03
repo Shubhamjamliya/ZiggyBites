@@ -13,7 +13,6 @@ import { useZone } from "@food/hooks/useZone"
 import { useCart } from "@food/context/CartContext"
 import PageNavbar from "@food/components/user/PageNavbar"
 import offerImage from "@food/assets/offerimage.png"
-import AddToCartAnimation from "@food/components/user/AddToCartAnimation"
 import OptimizedImage from "@food/components/OptimizedImage"
 import api from "@food/api"
 import { restaurantAPI, adminAPI } from "@food/api"
@@ -61,39 +60,7 @@ const readUnder250Filters = () => {
   }
 }
 
-const ScrollAwareAddToCartAnimation = () => {
-  const [viewCartButtonBottom, setViewCartButtonBottom] = useState("bottom-[92px]")
-  const lastScrollY = useRef(0)
 
-  useEffect(() => {
-    let scrollTimeout = null;
-    const handleScroll = () => {
-      if (scrollTimeout) return;
-      scrollTimeout = setTimeout(() => {
-        const currentScrollY = window.scrollY
-        const scrollDifference = Math.abs(currentScrollY - lastScrollY.current)
-
-        if (scrollDifference >= 5) {
-          if (currentScrollY > lastScrollY.current) {
-            setViewCartButtonBottom("bottom-[72px]")
-          } else if (currentScrollY < lastScrollY.current) {
-            setViewCartButtonBottom("bottom-[92px]")
-          }
-          lastScrollY.current = currentScrollY
-        }
-        scrollTimeout = null;
-      }, 50);
-    }
-
-    window.addEventListener("scroll", handleScroll, { passive: true })
-    return () => {
-      window.removeEventListener("scroll", handleScroll)
-      if (scrollTimeout) clearTimeout(scrollTimeout)
-    }
-  }, [])
-
-  return <AddToCartAnimation dynamicBottom={viewCartButtonBottom} />
-}
 
 const HorizontalMenuScroller = ({ restaurant, quantities, isClosed, handleItemClick, RUPEE_SYMBOL }) => {
   const [visibleCount, setVisibleCount] = useState(8);

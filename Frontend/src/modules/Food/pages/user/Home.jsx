@@ -20,7 +20,6 @@ import {
   Tag,
   Flame,
   ShoppingBag,
-  ShoppingCart,
   Mic,
   SlidersHorizontal,
   CheckCircle2,
@@ -47,7 +46,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import Footer from "@food/components/user/Footer";
 import AddToCartButton from "@food/components/user/AddToCartButton";
-import StickyCartCard from "@food/components/user/StickyCartCard";
 import OrderTrackingCard from "@food/components/user/OrderTrackingCard";
 import {
   CategoryChipRowSkeleton,

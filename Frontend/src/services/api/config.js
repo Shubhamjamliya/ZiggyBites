@@ -53,7 +53,7 @@ export const API_ENDPOINTS = {
     // User creates reports via USER context; kept for legacy imports.
     SAFETY_EMERGENCY_CREATE: "/food/user/safety-emergency-reports",
     REVIEWS: "",
-    CATEGORIES: "", CATEGORIES_PUBLIC: "", CATEGORY_BY_ID: "", FEE_SETTINGS: "", FEE_SETTINGS_PUBLIC: "",
+    CATEGORIES: "", CATEGORIES_PUBLIC: "", CATEGORY_BY_ID: "", FEE_SETTINGS: "/food/admin/fee-settings", FEE_SETTINGS_PUBLIC: "/food/admin/fee-settings/public",
     ZONES: "", ZONE_BY_ID: "", RESTAURANT_COMMISSION: "", RESTAURANT_COMMISSION_BY_ID: "",
     FOOD_APPROVALS: "", FOOD_APPROVAL_APPROVE: "", FOOD_APPROVAL_REJECT: "",
     DELIVERY_PARTNER_REVIEWS: "", DELIVERY_EMERGENCY_HELP: "", DELIVERY_SUPPORT_TICKETS: "", DELIVERY_SUPPORT_TICKET_BY_ID: "",

@@ -614,7 +614,7 @@ export default function Profile() {
             </motion.div>
           </Link>
 
-          <Link to="/user/cart" state={profileNavigationState} className="block">
+          <Link to="/food/user/notifications" state={profileNavigationState} className="block">
             <motion.div
               whileHover={{ x: 4, scale: 1.01 }}
               transition={{ duration: 0.2, type: "spring", stiffness: 300 }}>
@@ -625,10 +625,10 @@ export default function Profile() {
                       className="bg-gray-100 dark:bg-gray-800 rounded-full p-2"
                       whileHover={{ rotate: 15, scale: 1.1 }}
                       transition={{ duration: 0.3 }}>
-                      <ShoppingCart className="h-5 w-5 text-gray-700 dark:text-gray-300" />
+                      <Bell className="h-5 w-5 text-gray-700 dark:text-gray-300" />
                     </motion.div>
                     <span className="text-base font-medium text-gray-900 dark:text-white">
-                      Your cart
+                      Notifications
                     </span>
                   </div>
                   <motion.div

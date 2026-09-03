@@ -1,7 +1,7 @@
 import React from "react";
 import { Link } from "react-router-dom";
-import { MapPin, ChevronDown, Search, Mic, ShoppingCart } from "lucide-react";
-import { useCart } from "@food/context/CartContext";
+import { MapPin, ChevronDown, Search, Mic, Bell } from "lucide-react";
+import useNotificationInbox from "@food/hooks/useNotificationInbox";
 
 export default function MobileHeader({ 
   effectiveLocation, 
@@ -9,10 +9,8 @@ export default function MobileHeader({
   handleSearchFocus, 
   vegMode, 
   handleVegModeChange,
-  cartCount: propCartCount,
 }) {
-  const { getCartCount } = useCart();
-  const count = propCartCount !== undefined ? propCartCount : getCartCount();
+  const { unreadCount } = useNotificationInbox("user");
 
   return (
     <header className="sticky top-0 z-50 bg-[#fff9f2]/95 dark:bg-[#121212]/95 backdrop-blur-md px-5 pt-3 pb-2 border-b border-transparent dark:border-gray-800/80 transition-colors duration-200">
@@ -40,14 +38,14 @@ export default function MobileHeader({
 
         <div className="ml-auto flex w-[34%] items-center justify-end gap-3 text-gray-900 dark:text-white">
           <Link
-            to="/food/user/cart"
+            to="/food/user/notifications"
             className="relative p-1.5 rounded-full hover:bg-gray-200/60 dark:hover:bg-gray-800 transition-colors flex items-center justify-center cursor-pointer active:scale-95 text-gray-900 dark:text-white"
-            aria-label="View Cart"
+            aria-label="Notifications"
           >
-            <ShoppingCart className="h-5 w-5" />
-            {count > 0 && (
+            <Bell className="h-5 w-5" />
+            {unreadCount > 0 && (
               <span className="absolute -top-1 -right-1 flex h-4 min-w-[16px] px-1 items-center justify-center rounded-full bg-[#e92823] text-[9px] font-black text-white shadow-sm">
-                {count > 99 ? "99+" : count}
+                {unreadCount > 99 ? "99+" : unreadCount}
               </span>
             )}
           </Link>

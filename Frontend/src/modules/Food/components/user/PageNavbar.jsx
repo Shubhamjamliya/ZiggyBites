@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom"
 import { useState, useEffect, useRef, useMemo } from "react"
-import { ChevronDown, ShoppingCart, Wallet } from "lucide-react"
+import { ChevronDown, Bell, Wallet } from "lucide-react"
+import useNotificationInbox from "@food/hooks/useNotificationInbox"
 import { Button } from "@food/components/ui/button"
 import { useLocation } from "@food/hooks/useLocation"
 import { useCart } from "@food/context/CartContext"
@@ -17,6 +18,7 @@ export default function PageNavbar({
   showLogo = true,
   onNavClick
 }) {
+  const { unreadCount } = useNotificationInbox("user")
   const { location, loading, requestLocation } = useLocation()
   const { getCartCount } = useCart()
   const { openLocationSelector } = useLocationSelector()
@@ -1097,19 +1099,19 @@ export default function PageNavbar({
             </Button>
           </Link>
  
-          <Link to="/user/cart">
+          <Link to="/food/user/notifications">
             <Button
               variant="ghost"
               size="icon"
               className="relative h-8 w-8 sm:h-9 sm:w-9 rounded-full p-0 hover:opacity-80 transition-opacity"
-              title="Cart"
+              title="Notifications"
             >
               <div className={`h-full w-full rounded-full bg-transparent flex items-center justify-center shadow-md border border-gray-100/50 dark:border-white/10`}>
-                <ShoppingCart className={`h-4.5 w-4.5 sm:h-5.5 sm:w-5.5 ${textColor === "white" ? "text-white" : "text-primary dark:text-[#a14b84]"}`} strokeWidth={3} />
+                <Bell className={`h-4.5 w-4.5 sm:h-5.5 sm:w-5.5 ${textColor === "white" ? "text-white" : "text-primary dark:text-[#a14b84]"}`} strokeWidth={2} />
               </div>
-              {cartCount > 0 && (
+              {unreadCount > 0 && (
                 <span className="absolute -top-1 -right-1 w-4.5 h-4.5 bg-primary rounded-full flex items-center justify-center ring-2 ring-white">
-                  <span className="text-[10px] font-black text-white">{cartCount > 99 ? "99+" : cartCount}</span>
+                  <span className="text-[10px] font-black text-white">{unreadCount > 99 ? "99+" : unreadCount}</span>
                 </span>
               )}
             </Button>

@@ -195,19 +195,6 @@ export default function HomeHeader({
               <span className={`text-[8px] font-black uppercase tracking-tight ${vegMode ? 'text-white' : 'text-white/60'}`}>Veg</span>
             </div>
  
-            {/* Cart Button */}
-            <Link
-              to="/food/user/cart"
-              className="h-8 w-8 relative flex items-center justify-center rounded-full bg-white/10 border border-white/10 cursor-pointer active:scale-90 hover:bg-white/20 transition-all text-white/90"
-              aria-label="View Cart"
-            >
-              <ShoppingCart className="h-4 w-4 text-white/90" />
-              {cartCount > 0 && (
-                <span className="absolute -top-1 -right-1 flex h-4 min-w-[16px] px-1 items-center justify-center rounded-full bg-orange-400 text-[9px] font-black text-white shadow-sm border border-white/40">
-                  {cartCount > 99 ? "99+" : cartCount}
-                </span>
-              )}
-            </Link>
 
             <Popover>
               <PopoverTrigger asChild>

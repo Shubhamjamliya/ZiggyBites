@@ -196,7 +196,11 @@ export const PocketDetailsV2 = () => {
                        <p className="text-base font-black text-gray-950 leading-none mb-1">{formatCurrency(earning + bonus)}</p>
                        <div className="flex items-center justify-end gap-1.5">
                           {bonus > 0 && <span className="text-[9px] font-bold text-green-500 uppercase">+{formatCurrency(bonus)} BP</span>}
-                          <div className={`px-2 py-0.5 rounded-md ${order.paymentMethod?.toLowerCase() === 'cod' ? 'bg-amber-50 text-amber-600 border border-amber-100' : 'bg-green-50 text-green-600 border border-green-100'} text-[8px] font-black uppercase`}>
+                          <div className={`px-2 py-0.5 rounded-md ${
+                              order.paymentMethod?.toLowerCase() === 'cod' || order.paymentMethod?.toLowerCase() === 'cash' ? 'bg-amber-50 text-amber-600 border border-amber-100' :
+                              order.paymentMethod?.toLowerCase() === 'subscription' ? 'bg-indigo-50 text-indigo-600 border border-indigo-100' :
+                              'bg-green-50 text-green-600 border border-green-100'
+                           } text-[8px] font-black uppercase`}>
                              {order.paymentMethod || 'Online'}
                           </div>
                        </div>

@@ -585,9 +585,42 @@ const computeRange = (period, date) => {
 };
 
 const toTripDto = (order) => {
+    const orderStatus = String(order?.orderStatus || order?.status || '').toLowerCase();
+    const isDelivered = orderStatus === 'delivered' || String(order?.deliveryState?.currentPhase || '').toLowerCase() === 'delivered';
+    const isCancelled = orderStatus.startsWith('cancelled') || String(order?.deliveryState?.status || '').toLowerCase().includes('cancel');
+    const status = isDelivered ? 'Completed' : isCancelled ? 'Cancelled' : 'Pending';
+
     const createdAt = order?.createdAt || null;
-    const deliveredAt = order?.deliveryState?.deliveredAt || order?.deliveredAt || order?.completedAt || null;
-    const dateForUi = deliveredAt || createdAt || order?.updatedAt || null;
+
+    // Delivery milestone lookup with statusHistory fallback
+    const deliveredHistory = (order?.statusHistory || []).slice().reverse().find((h) => h?.to === 'delivered');
+    const deliveredAt =
+        order?.deliveryState?.deliveredAt ||
+        order?.deliveredAt ||
+        order?.completedAt ||
+        deliveredHistory?.at ||
+        (isDelivered ? (order?.deliveryState?.reachedDropAt || order?.updatedAt) : null) ||
+        null;
+
+    // Cancellation milestone lookup
+    const cancelledHistory = (order?.statusHistory || []).slice().reverse().find((h) => String(h?.to || '').startsWith('cancelled'));
+    const cancelledAt =
+        order?.cancelledAt ||
+        cancelledHistory?.at ||
+        (isCancelled ? order?.updatedAt : null) ||
+        null;
+
+    // The authoritative date for this trip milestone:
+    const dateForUi =
+        (isDelivered && deliveredAt) ||
+        (isCancelled && cancelledAt) ||
+        deliveredAt ||
+        order?.deliveryState?.pickedUpAt ||
+        order?.deliveryState?.reachedPickupAt ||
+        order?.dispatch?.acceptedAt ||
+        createdAt ||
+        order?.updatedAt ||
+        null;
 
     let time = '';
     if (dateForUi) {
@@ -603,36 +636,70 @@ const toTripDto = (order) => {
         }
     }
 
-    const orderStatus = String(order?.orderStatus || order?.status || '').toLowerCase();
-    const isDelivered = orderStatus === 'delivered' || String(order?.deliveryState?.currentPhase || '').toLowerCase() === 'delivered';
-    const isCancelled = orderStatus.startsWith('cancelled') || String(order?.deliveryState?.status || '').toLowerCase().includes('cancel');
-
-    const status = isDelivered ? 'Completed' : isCancelled ? 'Cancelled' : 'Pending';
-
     const restaurantName =
         order?.restaurantId?.restaurantName ||
         order?.restaurantName ||
         order?.restaurant?.restaurantName ||
         '';
 
-    const rawPaymentMethod = String(order?.payment?.method || order?.paymentMethod || order?.payment?.paymentMethod || '').toLowerCase();
-    const hasRazorpayId = !!(order?.payment?.razorpay_payment_id || order?.payment?.razorpayPaymentId || order?.payment?.razorpay?.paymentId);
-    const isQrPayment = rawPaymentMethod === 'razorpay_qr' || rawPaymentMethod === 'qr' || ((rawPaymentMethod === 'cash' || rawPaymentMethod === 'cod' || rawPaymentMethod === 'cash on delivery') && hasRazorpayId);
+    const isSubscription =
+        Boolean(order?.subscriptionUsage) ||
+        Boolean(order?.subscriptionId) ||
+        String(order?.payment?.method || '').toLowerCase() === 'subscription' ||
+        String(order?.paymentMethod || '').toLowerCase() === 'subscription' ||
+        String(order?.note || '').toLowerCase().includes('subscription') ||
+        String(order?.restaurantNote || '').toLowerCase().includes('subscription') ||
+        (order?.statusHistory || []).some((h) => String(h?.note || '').toLowerCase().includes('subscription'));
+
+    const deliveredNote = String(
+        (order?.statusHistory || []).slice().reverse().find((h) => h?.to === 'delivered')?.note || ''
+    ).toLowerCase();
+
+    const rawPaymentMethod = String(
+        order?.payment?.method ||
+        order?.paymentMethod ||
+        order?.transactionId?.paymentMethod ||
+        order?.transactionId?.payment?.method ||
+        ''
+    ).toLowerCase();
+
+    const hasRazorpayId = !!(
+        order?.payment?.razorpay_payment_id ||
+        order?.payment?.razorpayPaymentId ||
+        order?.payment?.razorpay?.paymentId ||
+        order?.payment?.qr?.paymentLinkId
+    );
+
+    const isQrPayment =
+        rawPaymentMethod === 'razorpay_qr' ||
+        rawPaymentMethod === 'qr' ||
+        deliveredNote.includes('using razorpay_qr') ||
+        deliveredNote.includes('using qr') ||
+        ((rawPaymentMethod === 'cash' || rawPaymentMethod === 'cod') && hasRazorpayId);
 
     let paymentMethod = 'online';
     let paymentType = 'Online';
-    if (isQrPayment) {
+
+    if (isSubscription) {
+        paymentMethod = 'subscription';
+        paymentType = 'Subscription';
+    } else if (isQrPayment) {
         paymentMethod = 'razorpay_qr';
         paymentType = 'COD (QR)';
-    } else if (rawPaymentMethod === 'cash' || rawPaymentMethod === 'cod' || rawPaymentMethod === 'cash on delivery') {
+    } else if (
+        rawPaymentMethod === 'cash' ||
+        rawPaymentMethod === 'cod' ||
+        rawPaymentMethod === 'cash on delivery' ||
+        deliveredNote.includes('using cash')
+    ) {
         paymentMethod = 'cash';
         paymentType = 'Cash on Delivery';
-    } else if (rawPaymentMethod === 'wallet') {
+    } else if (rawPaymentMethod === 'wallet' || deliveredNote.includes('using wallet')) {
         paymentMethod = 'wallet';
         paymentType = 'Wallet';
     } else if (rawPaymentMethod) {
         paymentMethod = rawPaymentMethod;
-        paymentType = 'Online';
+        paymentType = rawPaymentMethod === 'razorpay' ? 'Online' : rawPaymentMethod.toUpperCase();
     }
 
     const pricingTotal = Number(order?.pricing?.total) || Number(order?.totalAmount) || 0;
@@ -653,6 +720,8 @@ const toTripDto = (order) => {
         orderItems: order?.orderItems || order?.items || [],
         paymentMethod,
         paymentType,
+        isSubscription: Boolean(isSubscription),
+        subscriptionUsage: order?.subscriptionUsage || null,
         totalAmount: pricingTotal,
         orderTotal: pricingTotal,
         codAmount,
@@ -720,6 +789,7 @@ export const getDeliveryPartnerTripHistory = async (deliveryPartnerId, query = {
 
     const orders = await FoodOrder.find(match)
         .populate({ path: 'restaurantId', select: 'restaurantName' })
+        .populate({ path: 'transactionId', select: 'paymentMethod payment status' })
         .sort({ 'deliveryState.deliveredAt': -1, deliveredAt: -1, completedAt: -1, updatedAt: -1, createdAt: -1 })
         .limit(limit)
         .lean();
@@ -754,6 +824,7 @@ export const getDeliveryPocketDetails = async (deliveryPartnerId, query = {}) =>
         ]
     })
         .populate({ path: 'restaurantId', select: 'restaurantName' })
+        .populate({ path: 'transactionId', select: 'paymentMethod payment status' })
         .sort({ 'deliveryState.deliveredAt': -1, deliveredAt: -1, completedAt: -1, updatedAt: -1, createdAt: -1 })
         .limit(limit)
         .lean();

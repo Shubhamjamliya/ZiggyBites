@@ -98,7 +98,8 @@ export const HistoryV2 = () => {
         if (trip.status === 'Completed') {
            acc.earnings += Number(trip.deliveryEarning || trip.amount || trip.earningAmount || 0);
            const rawMethod = String(trip.paymentMethod || trip.paymentType || '').toLowerCase();
-           const isCOD = (rawMethod === 'cash' || rawMethod === 'cod') && rawMethod !== 'razorpay_qr';
+           const isSubscription = rawMethod === 'subscription' || trip.paymentType === 'Subscription' || rawMethod.includes('subscri') || Boolean(trip.subscriptionUsage || trip.isSubscription);
+           const isCOD = !isSubscription && (rawMethod === 'cash' || rawMethod === 'cod' || rawMethod === 'cash on delivery') && !rawMethod.includes('qr');
            if (isCOD) acc.cod += Number(trip.codCollectedAmount || trip.codAmount || trip.orderTotal || 0);
         }
         return acc;
@@ -228,25 +229,28 @@ export const HistoryV2 = () => {
                    const payout = Number(trip.deliveryEarning || trip.amount || trip.earningAmount || 0);
 
                    const rawMethod = String(trip.paymentMethod || trip.paymentType || '').toLowerCase();
-                   const isQR = rawMethod === 'razorpay_qr' || rawMethod === 'qr' || rawMethod.includes('qr') || trip.paymentType === 'COD (QR)';
-                   const isCOD = !isQR && (rawMethod === 'cash' || rawMethod === 'cod' || rawMethod === 'cash on delivery' || trip.paymentType === 'Cash on Delivery');
-                   const isWallet = rawMethod === 'wallet' || trip.paymentType === 'Wallet';
+                   const isSubscription = rawMethod === 'subscription' || trip.paymentType === 'Subscription' || rawMethod.includes('subscri') || Boolean(trip.subscriptionUsage || trip.isSubscription);
+                   const isQR = !isSubscription && (rawMethod === 'razorpay_qr' || rawMethod === 'qr' || rawMethod.includes('qr') || trip.paymentType === 'COD (QR)');
+                   const isCOD = !isSubscription && !isQR && (rawMethod === 'cash' || rawMethod === 'cod' || rawMethod === 'cash on delivery' || trip.paymentType === 'Cash on Delivery');
+                   const isWallet = !isSubscription && (rawMethod === 'wallet' || trip.paymentType === 'Wallet');
 
                    const collection = Number(trip.codCollectedAmount || (isCOD ? (trip.codAmount || trip.orderTotal) : 0) || 0);
 
-                   const tripTime = (() => {
-                     const dateVal = trip.deliveredAt || trip.completedAt || trip.createdAt || trip.date;
-                     if (!dateVal) return trip.time || '--:--';
-                     try {
-                       return new Date(dateVal).toLocaleTimeString('en-IN', {
-                         hour: '2-digit',
-                         minute: '2-digit',
-                         hour12: true
-                       });
-                     } catch {
-                       return trip.time || '--:--';
-                     }
-                   })();
+                    const tripTime = (() => {
+                      if (trip.time) return trip.time;
+                      const dateVal = trip.deliveredAt || trip.completedAt || trip.date || trip.createdAt;
+                      if (!dateVal) return '--:--';
+                      try {
+                        return new Date(dateVal).toLocaleTimeString('en-IN', {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                          hour12: true,
+                          timeZone: 'Asia/Kolkata'
+                        });
+                      } catch {
+                        return '--:--';
+                      }
+                    })();
 
                    return (
                       <div key={trip.orderId || idx} className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm active:scale-[0.99] transition-all">
@@ -262,15 +266,16 @@ export const HistoryV2 = () => {
                          </div>
                          
                          <div className="flex gap-2 mb-4 mt-3">
-                             <span className={`text-[10px] font-bold px-3 py-1 rounded-full ${
-                               isQR ? 'bg-blue-50 text-blue-600' :
-                               isCOD ? 'bg-orange-50 text-orange-600' :
-                               isWallet ? 'bg-purple-50 text-purple-600' :
-                               'bg-green-50 text-[#10B981]'
-                             }`}>
-                                {isQR ? 'COD (QR)' : isCOD ? 'COD' : isWallet ? 'Wallet' : 'Online'}
-                             </span>
-                         </div>
+                              <span className={`text-[10px] font-bold px-3 py-1 rounded-full ${
+                                isSubscription ? 'bg-indigo-50 text-indigo-600 border border-indigo-100' :
+                                isQR ? 'bg-blue-50 text-blue-600' :
+                                isCOD ? 'bg-orange-50 text-orange-600' :
+                                isWallet ? 'bg-purple-50 text-purple-600' :
+                                'bg-green-50 text-[#10B981]'
+                              }`}>
+                                 {isSubscription ? 'Subscription' : isQR ? 'COD (QR)' : isCOD ? 'COD' : isWallet ? 'Wallet' : 'Online'}
+                              </span>
+                          </div>
 
                          <div className="grid grid-cols-3 gap-4 pt-4 border-t border-gray-50">
                              <div>

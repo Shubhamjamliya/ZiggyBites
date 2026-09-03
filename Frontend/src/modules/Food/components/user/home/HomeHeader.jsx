@@ -33,7 +33,8 @@ export default function HomeHeader({
   placeholderIndex,
   placeholders,
   vegMode = false,
-  handleVegModeChange
+  handleVegModeChange,
+  handleVoiceSearchClick
 }) {
   const { getCartCount } = useCart();
   const cartCount = getCartCount();
@@ -273,10 +274,14 @@ export default function HomeHeader({
           <div className="flex items-center gap-2 pl-2">
             <div className="h-4 w-[1px] bg-gray-200" />
             <Mic 
-              className="h-4.5 w-4.5 text-[#7e3866]" 
+              className="h-4.5 w-4.5 text-[#7e3866] cursor-pointer hover:scale-110 transition-transform" 
               onClick={(e) => {
                 e.stopPropagation();
-                handleVoiceSearchClick?.();
+                if (handleVoiceSearchClick) {
+                  handleVoiceSearchClick();
+                } else if (handleSearchFocus) {
+                  handleSearchFocus();
+                }
               }}
             />
           </div>

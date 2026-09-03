@@ -10,6 +10,8 @@ import { useLocation } from "@food/hooks/useLocation"
 import { useZone } from "@food/hooks/useZone"
 import { restaurantAPI, adminAPI } from "@food/api"
 import { useDelayedLoading } from "@food/hooks/useDelayedLoading"
+import { useVoiceSearch } from "@food/hooks/useVoiceSearch"
+import VoiceSearchModal from "@food/components/user/VoiceSearchModal"
 
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
@@ -34,6 +36,10 @@ export default function SearchResults() {
   const { location } = useLocation()
   const { zoneId, isOutOfService, zoneStatus } = useZone(location)
   const [searchQuery, setSearchQuery] = useState(query)
+  const { isListening, transcript, startListening, stopListening } = useVoiceSearch((text) => {
+    setSearchQuery(text)
+    setSearchParams({ q: text })
+  })
   const [selectedCategory, setSelectedCategory] = useState('all')
   const [activeFilters, setActiveFilters] = useState(new Set())
   const [favorites, setFavorites] = useState(new Set())
@@ -807,8 +813,15 @@ export default function SearchResults() {
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-10 pr-10 h-11 rounded-lg border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-[#1a1a1a] focus:bg-white dark:focus:bg-[#2a2a2a] focus:border-gray-500 dark:focus:border-gray-600 text-sm dark:text-white placeholder:text-gray-600 dark:placeholder:text-gray-400"
               />
-              <button type="button" className="absolute right-3 top-1/2 -translate-y-1/2">
-                <Mic className="h-4 w-4 text-gray-500 dark:text-gray-400" />
+              <button
+                type="button"
+                onClick={startListening}
+                className={`absolute right-3 top-1/2 -translate-y-1/2 p-1.5 rounded-full transition-all active:scale-90 ${
+                  isListening ? 'text-red-500 animate-pulse' : 'text-gray-500 dark:text-gray-400 hover:text-primary'
+                }`}
+                aria-label="Voice search"
+              >
+                <Mic className="h-4 w-4" />
               </button>
             </form>
           </div>
@@ -1133,6 +1146,18 @@ export default function SearchResults() {
           </div>
         </section>
       </div>
+
+      {/* Voice Search Modal */}
+      <VoiceSearchModal
+        isOpen={isListening}
+        transcript={transcript}
+        onClose={stopListening}
+        onSubmit={(text) => {
+          setSearchQuery(text)
+          setSearchParams({ q: text })
+          stopListening()
+        }}
+      />
     </div>
   )
 }

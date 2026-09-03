@@ -8,6 +8,7 @@ export default function StickyHeader({
   isStickyHeaderVisible,
   showStickySearch,
   handleSearchFocus,
+  handleVoiceSearchClick,
   displayCategories,
   setIsFilterOpen,
   foodPreferenceFilters,
@@ -42,7 +43,21 @@ export default function StickyHeader({
                                 <span className="absolute inset-0 text-base text-gray-400 font-medium">Search "biryani"</span>
                               </div>
                               <div className="h-5 w-[1px] bg-gray-200 dark:bg-white/10 mx-2" />
-                              <Mic className="h-5 w-5 text-[#7e3866] dark:text-[#a14b84]" />
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (handleVoiceSearchClick) {
+                                    handleVoiceSearchClick();
+                                  } else if (handleSearchFocus) {
+                                    handleSearchFocus();
+                                  }
+                                }}
+                                className="p-1 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                                aria-label="Voice search"
+                              >
+                                <Mic className="h-5 w-5 text-[#7e3866] dark:text-[#a14b84]" />
+                              </button>
                             </div>
                           </motion.div>
                         )}

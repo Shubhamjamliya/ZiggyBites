@@ -15,6 +15,7 @@ import { motion, AnimatePresence } from "framer-motion"
 import { createPortal } from "react-dom"
 import OptimizedImage from "@food/components/OptimizedImage"
 import { useVoiceSearch } from "@food/hooks/useVoiceSearch"
+import VoiceSearchModal from "@food/components/user/VoiceSearchModal"
 import PremiumLoader from "./PremiumLoader"
 import { calculateDistance } from "@food/utils/common"
 
@@ -58,9 +59,9 @@ export default function ProfessionalSearch() {
   
   const [results, setResults] = useState({ restaurants: [], dishes: [] })
   const [loading, setLoading] = useState(false)
-  const { isListening, startListening, stopListening } = useVoiceSearch((transcript) => {
-    setQuery(transcript)
-    addToHistory(transcript)
+  const { isListening, transcript, startListening, stopListening } = useVoiceSearch((recognizedText) => {
+    setQuery(recognizedText)
+    addToHistory(recognizedText)
   })
   const [categories, setCategories] = useState([])
   const [selectedCategoryId, setSelectedCategoryId] = useState(searchParams.get("cat") || null)
@@ -72,6 +73,12 @@ export default function ProfessionalSearch() {
     const savedHistory = localStorage.getItem(SEARCH_HISTORY_KEY)
     if (savedHistory) setHistory(JSON.parse(savedHistory))
     fetchCategories()
+    if (searchParams.get("voice") === "true") {
+      startListening()
+      const newParams = new URLSearchParams(searchParams)
+      newParams.delete("voice")
+      setSearchParams(newParams, { replace: true })
+    }
   }, [zoneId])
 
   const fetchCategories = async () => {
@@ -537,6 +544,18 @@ export default function ProfessionalSearch() {
         </AnimatePresence>,
         document.body
       )}
+
+      {/* Voice Search Modal */}
+      <VoiceSearchModal
+        isOpen={isListening}
+        transcript={transcript}
+        onClose={stopListening}
+        onSubmit={(text) => {
+          setQuery(text)
+          addToHistory(text)
+          stopListening()
+        }}
+      />
     </div>
   )
 }

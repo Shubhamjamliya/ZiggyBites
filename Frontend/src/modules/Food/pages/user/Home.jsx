@@ -2090,6 +2090,10 @@ export default function Home() {
     navigate("/food/user/search");
   }, [navigate]);
 
+  const handleVoiceSearchClick = useCallback(() => {
+    navigate("/food/user/search?voice=true");
+  }, [navigate]);
+
   const handleSearchClose = useCallback(() => {
     closeSearch();
     setHeroSearch("");
@@ -2325,6 +2329,7 @@ export default function Home() {
   effectiveLocation={effectiveLocation} 
   handleLocationClick={handleLocationClick} 
   handleSearchFocus={handleSearchFocus} 
+  handleVoiceSearchClick={handleVoiceSearchClick}
   vegMode={vegMode} 
   handleVegModeChange={handleVegModeChange} 
 />
@@ -2377,6 +2382,7 @@ export default function Home() {
                 location={effectiveLocation}
                 handleLocationClick={handleLocationClick}
                 handleSearchFocus={handleSearchFocus}
+                handleVoiceSearchClick={handleVoiceSearchClick}
                 placeholderIndex={placeholderIndex}
                 placeholders={placeholders}
                 vegMode={vegMode}
@@ -2412,6 +2418,7 @@ export default function Home() {
       isStickyHeaderVisible={isStickyHeaderVisible}
       showStickySearch={showStickySearch}
       handleSearchFocus={handleSearchFocus}
+      handleVoiceSearchClick={handleVoiceSearchClick}
       displayCategories={displayCategories}
       setIsFilterOpen={setIsFilterOpen}
       foodPreferenceFilters={foodPreferenceFilters}

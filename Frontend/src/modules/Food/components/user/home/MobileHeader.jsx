@@ -9,6 +9,7 @@ export default function MobileHeader({
   handleSearchFocus, 
   vegMode, 
   handleVegModeChange,
+  handleVoiceSearchClick,
 }) {
   const { unreadCount } = useNotificationInbox("user");
 
@@ -62,7 +63,22 @@ export default function MobileHeader({
           <span className="text-xs font-semibold text-gray-400 dark:text-gray-400 truncate">
             Search "veg thali"
           </span>
-          <Mic className="h-4 w-4 text-gray-500 dark:text-gray-400 ml-auto" />
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (handleVoiceSearchClick) {
+                handleVoiceSearchClick();
+              } else if (handleSearchFocus) {
+                handleSearchFocus();
+              }
+            }}
+            className="ml-auto p-1 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+            aria-label="Voice search"
+          >
+            <Mic className="h-4 w-4 text-gray-500 dark:text-gray-400" />
+          </div>
         </button>
         <button
           type="button"

@@ -5,6 +5,7 @@ import { Button } from "@food/components/ui/button"
 import { Input } from "@food/components/ui/input"
 import { restaurantAPI } from "@food/api"
 import { useVoiceSearch } from "@food/hooks/useVoiceSearch"
+import VoiceSearchModal from "./VoiceSearchModal"
 
 const SEARCH_HISTORY_KEY = "user_recent_searches_v1"
 
@@ -16,8 +17,9 @@ export default function SearchOverlay({ isOpen, onClose, searchValue, onSearchCh
   const [recentSuggestions, setRecentSuggestions] = useState([])
   const [loadingFoods, setLoadingFoods] = useState(false)
 
-  const { isListening, startListening, stopListening } = useVoiceSearch((transcript) => {
-    onSearchChange(transcript)
+  const { isListening, transcript, startListening, stopListening } = useVoiceSearch((text) => {
+    onSearchChange(text)
+    handleSearch(null, text)
   })
 
   useEffect(() => {
@@ -341,6 +343,18 @@ export default function SearchOverlay({ isOpen, onClose, searchValue, onSearchCh
             }
           }
         `}</style>
+
+      {/* Voice Search Modal */}
+      <VoiceSearchModal
+        isOpen={isListening}
+        transcript={transcript}
+        onClose={stopListening}
+        onSubmit={(text) => {
+          onSearchChange(text)
+          handleSearch(null, text)
+          stopListening()
+        }}
+      />
     </div>
   )
 }

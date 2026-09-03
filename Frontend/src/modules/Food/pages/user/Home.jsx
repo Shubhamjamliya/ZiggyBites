@@ -46,6 +46,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import Footer from "@food/components/user/Footer";
 import AddToCartButton from "@food/components/user/AddToCartButton";
+import { hasFoodVariants } from "@food/utils/foodVariants";
 import OrderTrackingCard from "@food/components/user/OrderTrackingCard";
 import {
   CategoryChipRowSkeleton,
@@ -1087,7 +1088,7 @@ export default function Home() {
       event.preventDefault();
       event.stopPropagation();
 
-      if (appCustomization.normalOrderFlowEnabled === false) {
+      if (appCustomization.normalOrderFlowEnabled === false || hasFoodVariants(item)) {
         openMealSelectionForHomeItem(item);
         return;
       }

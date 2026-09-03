@@ -165,6 +165,14 @@ function RestaurantDetailsContent() {
     return quantities[lineItemId] || 0
   }
 
+  const getTotalDishQuantity = (item) => {
+    const variants = getFoodVariants(item)
+    if (variants.length > 0) {
+      return variants.reduce((sum, v) => sum + (quantities[getLineItemIdForDish(item, v)] || 0), 0)
+    }
+    return getDishQuantity(item)
+  }
+
   // Initialize default filters
   const [filters, setFilters] = useState({
     sortBy: null,
@@ -1654,6 +1662,10 @@ function RestaurantDetailsContent() {
   // Handle item card click
   const handleItemClick = (item) => {
     setSelectedItem(item)
+    const variants = getFoodVariants(item)
+    const inCartVariant = variants.find((v) => (quantities[getLineItemIdForDish(item, v)] || 0) > 0)
+    const defaultVariant = inCartVariant || getDefaultFoodVariant(item)
+    setSelectedVariantId(defaultVariant?.id || "")
     setShowItemDetail(true)
   }
 
@@ -2104,7 +2116,7 @@ function RestaurantDetailsContent() {
 
   // Render a single dish card with layout and performance optimizations
   const renderDishCard = (item, isRecommendedSection) => {
-    const quantity = getDishQuantity(item)
+    const quantity = getTotalDishQuantity(item)
     const isVeg = item.foodType === "Veg"
     const isHighlighted = highlightedDishId === item.id
 
@@ -2244,58 +2256,92 @@ function RestaurantDetailsContent() {
           </div>
           {/* Button overlay - rendered outside of overflow-hidden image container to prevent clipping */}
           {quantity > 0 ? (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1 }}
-              className={`absolute -bottom-3 sm:-bottom-4 left-1/2 -translate-x-1/2 rounded-full h-8 sm:h-9 md:h-10 px-3 sm:px-4 flex items-center justify-between gap-3 min-w-[90px] md:min-w-[100px] z-10 transition-all duration-300 ${
-                shouldShowGrayscale 
-                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed opacity-50 shadow-none border border-gray-300' 
-                  : 'shadow-[0_4px_14px_0_rgba(0,183,97,0.39)] bg-[#00B761] hover:bg-[#00A055] text-white'
-              }`}
-            >
-              <button
-                onClick={(e) => {
-                  e.stopPropagation()
-                  if (!shouldShowGrayscale) {
-                    updateItemQuantity(item, Math.max(0, quantity - 1), e)
-                  }
-                }}
-                disabled={shouldShowGrayscale}
-                className={shouldShowGrayscale ? 'text-gray-500 cursor-not-allowed' : 'text-white hover:text-white/80 active:scale-90 transition-transform'}
-              >
-                <Minus size={16} className="stroke-[3px]" />
-              </button>
-              <span className="text-[13px] sm:text-[15px] font-black">{quantity}</span>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation()
-                  if (!shouldShowGrayscale) {
-                    updateItemQuantity(item, quantity + 1, e)
-                  }
-                }}
-                disabled={shouldShowGrayscale}
-                className={shouldShowGrayscale ? 'text-gray-500 cursor-not-allowed' : 'text-white hover:text-white/80 active:scale-90 transition-transform'}
-              >
-                <Plus size={16} className="stroke-[3px]" />
-              </button>
-            </motion.div>
-          ) : (
-            <motion.button
-              whileTap={shouldShowGrayscale ? {} : { scale: 0.95 }}
-              onClick={(e) => {
-                e.stopPropagation()
-                if (!shouldShowGrayscale) {
-                  updateItemQuantity(item, 1, e)
-                }
-              }}
-              disabled={shouldShowGrayscale}
-              className={`absolute -bottom-3 sm:-bottom-4 left-1/2 -translate-x-1/2 rounded-full h-8 sm:h-9 md:h-10 px-5 sm:px-7 text-[12px] sm:text-[14px] md:text-[16px] font-black uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-1 sm:gap-1.5 whitespace-nowrap min-w-[90px] md:min-w-[100px] z-10 ${shouldShowGrayscale
-                ? 'bg-gray-200 dark:bg-gray-800 text-gray-500 cursor-not-allowed opacity-50 shadow-none border border-gray-300'
-                : 'bg-[#E23744] hover:bg-[#D12B37] text-white shadow-[0_6px_16px_0_rgba(226,55,68,0.35)] hover:shadow-[0_8px_20px_rgba(226,55,68,0.45)] border border-[#E23744]/20'
+            <div className="absolute -bottom-3 sm:-bottom-4 left-1/2 -translate-x-1/2 flex flex-col items-center z-10">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className={`rounded-full h-8 sm:h-9 md:h-10 px-3 sm:px-4 flex items-center justify-between gap-3 min-w-[90px] md:min-w-[100px] transition-all duration-300 ${
+                  shouldShowGrayscale 
+                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed opacity-50 shadow-none border border-gray-300' 
+                    : 'shadow-[0_4px_14px_0_rgba(0,183,97,0.39)] bg-[#00B761] hover:bg-[#00A055] text-white'
                 }`}
-            >
-              ADD <span className="text-[16px] sm:text-[18px] md:text-[20px] font-medium leading-none mt-[-2px]">+</span>
-            </motion.button>
+              >
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    if (!shouldShowGrayscale) {
+                      if (hasFoodVariants(item)) {
+                        const variants = getFoodVariants(item)
+                        const addedVariants = variants.filter(v => (quantities[getLineItemIdForDish(item, v)] || 0) > 0)
+                        if (addedVariants.length === 1) {
+                          const v = addedVariants[0]
+                          const currentQty = quantities[getLineItemIdForDish(item, v)] || 0
+                          updateItemQuantity(item, Math.max(0, currentQty - 1), e, v)
+                        } else {
+                          handleItemClick(item)
+                        }
+                      } else {
+                        updateItemQuantity(item, Math.max(0, quantity - 1), e)
+                      }
+                    }
+                  }}
+                  disabled={shouldShowGrayscale}
+                  className={shouldShowGrayscale ? 'text-gray-500 cursor-not-allowed' : 'text-white hover:text-white/80 active:scale-90 transition-transform'}
+                >
+                  <Minus size={16} className="stroke-[3px]" />
+                </button>
+                <span className="text-[13px] sm:text-[15px] font-black">{quantity}</span>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    if (!shouldShowGrayscale) {
+                      if (hasFoodVariants(item)) {
+                        handleItemClick(item)
+                      } else {
+                        updateItemQuantity(item, quantity + 1, e)
+                      }
+                    }
+                  }}
+                  disabled={shouldShowGrayscale}
+                  className={shouldShowGrayscale ? 'text-gray-500 cursor-not-allowed' : 'text-white hover:text-white/80 active:scale-90 transition-transform'}
+                >
+                  <Plus size={16} className="stroke-[3px]" />
+                </button>
+              </motion.div>
+              {hasFoodVariants(item) && (
+                <span className="text-[9px] sm:text-[10px] font-semibold text-gray-500 dark:text-gray-400 mt-1 uppercase tracking-wider whitespace-nowrap pointer-events-none">
+                  Customisable
+                </span>
+              )}
+            </div>
+          ) : (
+            <div className="absolute -bottom-3 sm:-bottom-4 left-1/2 -translate-x-1/2 flex flex-col items-center z-10">
+              <motion.button
+                whileTap={shouldShowGrayscale ? {} : { scale: 0.95 }}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  if (!shouldShowGrayscale) {
+                    if (hasFoodVariants(item)) {
+                      handleItemClick(item)
+                    } else {
+                      updateItemQuantity(item, 1, e)
+                    }
+                  }
+                }}
+                disabled={shouldShowGrayscale}
+                className={`rounded-full h-8 sm:h-9 md:h-10 px-5 sm:px-7 text-[12px] sm:text-[14px] md:text-[16px] font-black uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-1 sm:gap-1.5 whitespace-nowrap min-w-[90px] md:min-w-[100px] ${shouldShowGrayscale
+                  ? 'bg-gray-200 dark:bg-gray-800 text-gray-500 cursor-not-allowed opacity-50 shadow-none border border-gray-300'
+                  : 'bg-[#E23744] hover:bg-[#D12B37] text-white shadow-[0_6px_16px_0_rgba(226,55,68,0.35)] hover:shadow-[0_8px_20px_rgba(226,55,68,0.45)] border border-[#E23744]/20'
+                  }`}
+              >
+                ADD <span className="text-[16px] sm:text-[18px] md:text-[20px] font-medium leading-none mt-[-2px]">+</span>
+              </motion.button>
+              {hasFoodVariants(item) && (
+                <span className="text-[9px] sm:text-[10px] font-semibold text-gray-500 dark:text-gray-400 mt-1 uppercase tracking-wider whitespace-nowrap pointer-events-none">
+                  Customisable
+                </span>
+              )}
+            </div>
           )}
         </div>
       </>

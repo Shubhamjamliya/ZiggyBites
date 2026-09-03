@@ -4,13 +4,15 @@ import { useCart } from "@food/context/CartContext"
 import { isModuleAuthenticated } from "@food/utils/auth"
 import { useNavigate, useLocation } from "react-router-dom"
 import { toast } from "sonner"
+import { hasFoodVariants } from "@food/utils/foodVariants"
 
-export default function AddToCartButton({ item, className = "" }) {
+export default function AddToCartButton({ item, className = "", onShowVariants }) {
   const { addToCart, isInCart, getCartItem, updateQuantity } = useCart()
   const inCart = isInCart(item.id)
   const cartItem = getCartItem(item.id)
   const navigate = useNavigate()
   const location = useLocation()
+  const isCustomisable = hasFoodVariants(item)
 
   const handleAddToCart = (e) => {
     e.preventDefault()
@@ -22,12 +24,28 @@ export default function AddToCartButton({ item, className = "" }) {
       return
     }
 
+    if (isCustomisable) {
+      if (onShowVariants) {
+        onShowVariants(item)
+        return
+      }
+      const restaurantSlug = item?.restaurantSlug || item?.restaurantId || item?.restaurant
+      if (restaurantSlug) {
+        navigate(`/food/restaurants/${restaurantSlug}`)
+        return
+      }
+    }
+
     addToCart(item)
   }
 
   const handleIncrease = (e) => {
     e.preventDefault()
     e.stopPropagation()
+    if (isCustomisable && onShowVariants) {
+      onShowVariants(item)
+      return
+    }
     updateQuantity(item.id, (cartItem?.quantity || 0) + 1)
   }
 
@@ -39,7 +57,7 @@ export default function AddToCartButton({ item, className = "" }) {
 
   if (inCart) {
     return (
-      <div className={`flex items-center gap-2 ${className}`} onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}>
+      <div className={`flex flex-col items-center gap-0.5 ${className}`} onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}>
         <div className="flex items-center gap-1 bg-primary text-white rounded-md shadow-sm">
           <Button
             variant="ghost"
@@ -61,17 +79,29 @@ export default function AddToCartButton({ item, className = "" }) {
             <Plus className="h-4 w-4" />
           </Button>
         </div>
+        {isCustomisable && (
+          <span className="text-[9px] font-semibold text-gray-500 uppercase tracking-wider">
+            Customisable
+          </span>
+        )}
       </div>
     )
   }
 
   return (
-    <Button
-      size="sm"
-      onClick={handleAddToCart}
-      className="bg-primary hover:bg-secondary text-white font-bold shadow-md transition-all active:scale-95"
-    >
-      Add to Cart
-    </Button>
+    <div className={`flex flex-col items-center gap-0.5 ${className}`}>
+      <Button
+        size="sm"
+        onClick={handleAddToCart}
+        className="bg-primary hover:bg-secondary text-white font-bold shadow-md transition-all active:scale-95"
+      >
+        Add to Cart
+      </Button>
+      {isCustomisable && (
+        <span className="text-[9px] font-semibold text-gray-500 uppercase tracking-wider">
+          Customisable
+        </span>
+      )}
+    </div>
   )
 }

@@ -4,7 +4,7 @@ export const normalizeFoodVariants = (value) =>
   toArray(value)
     .map((entry = {}, index) => {
       const id = String(entry?.id || entry?._id || `variant-${index}`)
-      const name = String(entry?.name || "").trim()
+      const name = String(entry?.name || entry?.variantName || entry?.title || entry?.label || "").trim()
       const price = Number(entry?.price)
       if (!name || !Number.isFinite(price) || price <= 0) return null
 

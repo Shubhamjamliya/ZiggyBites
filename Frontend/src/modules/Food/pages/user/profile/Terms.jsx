@@ -1,4 +1,4 @@
-import { Link, useNavigate } from "react-router-dom"
+import { Link, useNavigate, useLocation } from "react-router-dom"
 import { useState, useEffect } from "react"
 import { ArrowLeft, FileText, Loader2 } from "lucide-react"
 import { motion } from "framer-motion"
@@ -10,6 +10,7 @@ import { API_ENDPOINTS } from "@food/api/config"
 
 export default function Terms() {
   const navigate = useNavigate()
+  const location = useLocation()
   const goBack = useAppBackNavigation()
   const [loading, setLoading] = useState(true)
   const [termsData, setTermsData] = useState({
@@ -36,10 +37,12 @@ export default function Terms() {
   }
 
   const handleBack = () => {
-    if (window.history.length > 2) {
-      navigate(-1)
+    if (location.state?.backTo || location.state?.from) {
+      navigate(location.state.backTo || location.state.from)
+    } else if (window.history.length > 2) {
+      goBack()
     } else {
-      navigate('/food/user')
+      navigate('/food/user/profile')
     }
   }
 

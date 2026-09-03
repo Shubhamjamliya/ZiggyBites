@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react"
-import { Link, useNavigate } from "react-router-dom"
+import { Link, useNavigate, useLocation } from "react-router-dom"
 import { ArrowLeft, Search, MoreVertical, ChevronRight, Star, AlertCircle, Loader2, Clock, X, Share2, MessageCircle, Send, Copy, Mail, MessagesSquare, Link2, Phone } from "lucide-react"
 import { orderAPI } from "@food/api"
 import { useOrders } from "@food/context/OrdersContext"
@@ -12,8 +12,14 @@ const debugError = (...args) => {}
 
 export default function Orders() {
   const navigate = useNavigate()
+  const location = useLocation()
   const { orders, loading, patchOrder, refreshOrders } = useOrders()
   const [searchQuery, setSearchQuery] = useState("")
+
+  const handleBackClick = () => {
+    const backTarget = location.state?.backTo || location.state?.from || "/food/user/profile"
+    navigate(backTarget)
+  }
 
   useEffect(() => {
     refreshOrders?.().catch(() => {})
@@ -442,9 +448,9 @@ Order again from this restaurant in the ${companyName} app.`
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-[#0a0a0a] pb-24">
         <div className="bg-white dark:bg-[#121212] p-4 flex items-center shadow-sm sticky top-0 z-10 border-b dark:border-gray-800">
-          <Link to="/user">
+          <button type="button" onClick={handleBackClick} className="p-0 border-0 bg-transparent flex items-center justify-center">
             <ArrowLeft className="w-6 h-6 text-gray-700 dark:text-gray-300 cursor-pointer" />
-          </Link>
+          </button>
           <h1 className="ml-4 text-xl font-semibold text-gray-800 dark:text-gray-100">Your Orders</h1>
         </div>
         <div className="flex items-center justify-center py-20">
@@ -458,9 +464,9 @@ Order again from this restaurant in the ${companyName} app.`
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-[#0a0a0a] pb-24">
         <div className="bg-white dark:bg-[#121212] p-4 flex items-center shadow-sm sticky top-0 z-10 border-b dark:border-gray-800">
-          <Link to="/user">
+          <button type="button" onClick={handleBackClick} className="p-0 border-0 bg-transparent flex items-center justify-center">
             <ArrowLeft className="w-6 h-6 text-gray-700 dark:text-gray-300 cursor-pointer" />
-          </Link>
+          </button>
           <h1 className="ml-4 text-xl font-semibold text-gray-800 dark:text-gray-100">Your Orders</h1>
         </div>
         <div className="px-4 py-8 text-center text-gray-600 dark:text-gray-400">
@@ -477,9 +483,9 @@ Order again from this restaurant in the ${companyName} app.`
     <div className="min-h-screen bg-gray-50 dark:bg-[#0a0a0a] pb-24 font-sans">
       {/* Header */}
       <div className="bg-white dark:bg-[#121212] p-4 flex items-center shadow-sm sticky top-0 z-10 border-b dark:border-gray-800">
-        <Link to="/user">
+        <button type="button" onClick={handleBackClick} className="p-0 border-0 bg-transparent flex items-center justify-center">
           <ArrowLeft className="w-6 h-6 text-gray-700 dark:text-gray-300 cursor-pointer" />
-        </Link>
+        </button>
         <h1 className="ml-4 text-xl font-semibold text-gray-800 dark:text-gray-100">Your Orders</h1>
       </div>
 

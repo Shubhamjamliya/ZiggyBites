@@ -226,6 +226,7 @@ export default function About() {
               <div className="space-y-3">
                 <Link
                   to="/user/profile/terms"
+                  state={{ from: "/food/user/profile", backTo: "/food/user/profile" }}
                   className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors group"
                 >
                   <div className="bg-gray-100 dark:bg-gray-800 rounded-lg p-2 group-hover:bg-gray-200 dark:group-hover:bg-gray-700 transition-colors">
@@ -244,6 +245,7 @@ export default function About() {
 
                 <Link
                   to="/user/profile/privacy"
+                  state={{ from: "/food/user/profile", backTo: "/food/user/profile" }}
                   className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors group"
                 >
                   <div className="bg-gray-100 dark:bg-gray-800 rounded-lg p-2 group-hover:bg-gray-200 dark:group-hover:bg-gray-700 transition-colors">
@@ -262,6 +264,7 @@ export default function About() {
 
                 <Link
                   to="/user/profile/refund"
+                  state={{ from: "/food/user/profile", backTo: "/food/user/profile" }}
                   className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors group"
                 >
                   <div className="bg-gray-100 dark:bg-gray-800 rounded-lg p-2 group-hover:bg-gray-200 dark:group-hover:bg-gray-700 transition-colors">
@@ -280,6 +283,7 @@ export default function About() {
 
                 <Link
                   to="/user/profile/shipping"
+                  state={{ from: "/food/user/profile", backTo: "/food/user/profile" }}
                   className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors group"
                 >
                   <div className="bg-gray-100 dark:bg-gray-800 rounded-lg p-2 group-hover:bg-gray-200 dark:group-hover:bg-gray-700 transition-colors">
@@ -298,6 +302,7 @@ export default function About() {
 
                 <Link
                   to="/user/profile/cancellation"
+                  state={{ from: "/food/user/profile", backTo: "/food/user/profile" }}
                   className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors group"
                 >
                   <div className="bg-gray-100 dark:bg-gray-800 rounded-lg p-2 group-hover:bg-gray-200 dark:group-hover:bg-gray-700 transition-colors">

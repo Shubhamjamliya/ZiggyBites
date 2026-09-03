@@ -32,7 +32,7 @@ const resolveBackPath = ({ pathname, search, state }) => {
   }
 
   if (
-    /^\/user\/profile\/(edit|favorites|support|coupons|about|report-safety-emergency|accessibility|logout|refer-earn|payments)$/.test(
+    /^\/user\/profile\/(edit|favorites|support|coupons|about|report-safety-emergency|accessibility|logout|refer-earn|payments|dining-bookings)$/.test(
       normalizedPath,
     )
   ) {
@@ -48,7 +48,11 @@ const resolveBackPath = ({ pathname, search, state }) => {
   }
 
   if (normalizedPath === "/user/wallet") {
-    return "/food/user/profile"
+    return explicitBackPath || "/food/user/profile"
+  }
+
+  if (normalizedPath === "/user/orders") {
+    return explicitBackPath || "/food/user/profile"
   }
 
   if (normalizedPath === "/user/notifications") {

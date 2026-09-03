@@ -42,10 +42,12 @@ export default function Cancellation() {
         state: location.state?.originalState,
         replace: true 
       })
+    } else if (location.state?.backTo || location.state?.from) {
+      navigate(location.state.backTo || location.state.from)
     } else if (window.history.length > 2) {
       goBack()
     } else {
-      navigate('/food/user')
+      navigate('/food/user/profile')
     }
   }
 

@@ -64,6 +64,8 @@ const profilePageCache = {
   walletBalance: null
 };
 
+const profileNavigationState = { from: "/food/user/profile", backTo: "/food/user/profile" };
+
 export default function Profile() {
   const { userProfile, vegMode, setVegMode, getDefaultAddress, addresses } =
     useProfile();
@@ -553,7 +555,7 @@ export default function Profile() {
 
         {/* Account Options */}
         <div className="space-y-2 mb-3 mt-3">
-          <Link to="/user/wallet" className="block">
+          <Link to="/user/wallet" state={profileNavigationState} className="block">
             <motion.div
               whileHover={{ x: 4, scale: 1.01 }}
               transition={{ duration: 0.2, type: "spring", stiffness: 300 }}>
@@ -585,7 +587,7 @@ export default function Profile() {
             </motion.div>
           </Link>
 
-          <Link to="/user/profile/coupons" className="block">
+          <Link to="/user/profile/coupons" state={profileNavigationState} className="block">
             <motion.div
               whileHover={{ x: 4, scale: 1.01 }}
               transition={{ duration: 0.2, type: "spring", stiffness: 300 }}>
@@ -612,7 +614,7 @@ export default function Profile() {
             </motion.div>
           </Link>
 
-          <Link to="/user/cart" className="block">
+          <Link to="/user/cart" state={profileNavigationState} className="block">
             <motion.div
               whileHover={{ x: 4, scale: 1.01 }}
               transition={{ duration: 0.2, type: "spring", stiffness: 300 }}>
@@ -639,7 +641,7 @@ export default function Profile() {
             </motion.div>
           </Link>
 
-          <Link to="/user/profile/refer-earn" className="block">
+          <Link to="/user/profile/refer-earn" state={profileNavigationState} className="block">
             <motion.div
               whileHover={{ x: 4, scale: 1.01 }}
               transition={{ duration: 0.2, type: "spring", stiffness: 300 }}>
@@ -723,7 +725,7 @@ export default function Profile() {
             </Card>
           </motion.div>
 
-          <Link to="/user/profile/edit" className="block">
+          <Link to="/user/profile/edit" state={profileNavigationState} className="block">
             <motion.div
               whileHover={{ x: 4, scale: 1.01 }}
               transition={{ duration: 0.2, type: "spring", stiffness: 300 }}>
@@ -867,7 +869,7 @@ export default function Profile() {
               Collections
             </h3>
           </div>
-          <Link to="/user/profile/favorites">
+          <Link to="/user/profile/favorites" state={profileNavigationState}>
             <motion.div
               whileHover={{ x: 4, scale: 1.01 }}
               transition={{ duration: 0.2, type: "spring", stiffness: 300 }}>
@@ -903,7 +905,7 @@ export default function Profile() {
               Dining Bookings
             </h3>
           </div>
-          <Link to="/user/profile/dining-bookings">
+          <Link to="/user/profile/dining-bookings" state={profileNavigationState}>
             <motion.div
               whileHover={{ x: 4, scale: 1.01 }}
               transition={{ duration: 0.2, type: "spring", stiffness: 300 }}>
@@ -944,7 +946,7 @@ export default function Profile() {
             </h3>
           </div>
           <div className="space-y-2">
-            <Link to="/user/orders" className="block">
+            <Link to="/user/orders" state={profileNavigationState} className="block">
               <motion.div
                 whileHover={{ x: 4, scale: 1.01 }}
                 transition={{ duration: 0.2, type: "spring", stiffness: 300 }}>
@@ -982,7 +984,7 @@ export default function Profile() {
             </h3>
           </div>
           <div className="space-y-2">
-            <Link to="/user/profile/support" className="block">
+            <Link to="/user/profile/support" state={profileNavigationState} className="block">
               <motion.div
                 whileHover={{ x: 4, scale: 1.01 }}
                 transition={{ duration: 0.2, type: "spring", stiffness: 300 }}>
@@ -1009,7 +1011,7 @@ export default function Profile() {
               </motion.div>
             </Link>
 
-            <Link to="/user/profile/about" className="block">
+            <Link to="/user/profile/about" state={profileNavigationState} className="block">
               <motion.div
                 whileHover={{ x: 4, scale: 1.01 }}
                 transition={{ duration: 0.2, type: "spring", stiffness: 300 }}>
@@ -1036,7 +1038,7 @@ export default function Profile() {
               </motion.div>
             </Link>
 
-            <Link to="/user/profile/report-safety-emergency" className="block">
+            <Link to="/user/profile/report-safety-emergency" state={profileNavigationState} className="block">
               <motion.div
                 whileHover={{ x: 4, scale: 1.01 }}
                 transition={{ duration: 0.2, type: "spring", stiffness: 300 }}>

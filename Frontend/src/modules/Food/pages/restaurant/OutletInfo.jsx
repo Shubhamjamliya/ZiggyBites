@@ -516,6 +516,50 @@ export default function OutletInfo() {
               </div>
             </div>
           </div>
+
+          {/* Card 5: Outlet Address & Location */}
+          <div className="bg-white rounded-3xl p-5 shadow-[0_2px_8px_rgba(0,0,0,0.03)] border border-gray-100/50">
+            <div className="flex flex-col mb-4.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <p className="text-base font-bold text-gray-900">Outlet address & location</p>
+                </div>
+                <button
+                  onClick={() => navigate("/food/restaurant/edit-address")}
+                  className="text-[#2563EB] text-sm font-bold hover:underline"
+                >
+                  Edit
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <p className="text-[13px] text-gray-500 font-medium mb-0.5">Address</p>
+                <p className="text-[15px] font-bold text-gray-900 leading-snug">
+                  {restaurantData?.location?.formattedAddress || restaurantData?.address || "N/A"}
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <p className="text-[13px] text-gray-500 font-medium mb-0.5">City</p>
+                  <p className="text-[14px] font-semibold text-gray-900">{restaurantData?.location?.city || restaurantData?.city || "N/A"}</p>
+                </div>
+                <div>
+                  <p className="text-[13px] text-gray-500 font-medium mb-0.5">Pincode</p>
+                  <p className="text-[14px] font-semibold text-gray-900">{restaurantData?.location?.pincode || restaurantData?.pincode || "N/A"}</p>
+                </div>
+              </div>
+              <div>
+                <p className="text-[13px] text-gray-500 font-medium mb-0.5">Coordinates</p>
+                <p className="text-[13px] font-mono font-medium text-gray-600">
+                  {restaurantData?.location?.latitude && restaurantData?.location?.longitude
+                    ? `${restaurantData.location.latitude}, ${restaurantData.location.longitude}`
+                    : "Not set"}
+                </p>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 

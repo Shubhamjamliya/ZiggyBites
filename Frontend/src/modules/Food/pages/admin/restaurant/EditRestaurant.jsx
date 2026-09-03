@@ -5,7 +5,7 @@ import { Input } from "@food/components/ui/input"
 import { Button } from "@food/components/ui/button"
 import { Label } from "@food/components/ui/label"
 import { getGoogleMapsApiKey } from "@food/utils/googleMapsApiKey"
-import { ArrowLeft, Loader2 } from "lucide-react"
+import { ArrowLeft, Loader2, MapPin, Navigation } from "lucide-react"
 
 const debugError = (..._args) => {}
 
@@ -360,6 +360,28 @@ export default function EditRestaurant() {
     }
   }
 
+  const handleDetectLocation = () => {
+    if (!navigator.geolocation) {
+      alert("Geolocation is not supported by your browser")
+      return
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const lat = Number(pos.coords.latitude.toFixed(6))
+        const lng = Number(pos.coords.longitude.toFixed(6))
+        setLocationForm((prev) => ({
+          ...prev,
+          latitude: lat,
+          longitude: lng,
+        }))
+      },
+      (err) => {
+        alert("Failed to get current location: " + (err.message || "Permission denied"))
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    )
+  }
+
   const handleSaveLocation = async () => {
     if (!restaurantId) return
 
@@ -370,8 +392,12 @@ export default function EditRestaurant() {
       alert("Please select a zone")
       return
     }
-    if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || !locationForm.formattedAddress) {
-      alert("Please select a location from dropdown")
+    if (!locationForm.formattedAddress && !locationForm.addressLine1) {
+      alert("Please enter restaurant address")
+      return
+    }
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || isNearZero(latitude) || isNearZero(longitude)) {
+      alert("Please enter valid latitude and longitude coordinates (or pick from dropdown / GPS)")
       return
     }
 
@@ -575,7 +601,17 @@ export default function EditRestaurant() {
                 </div>
 
                 <div className="md:col-span-2">
-                  <Label>Search location</Label>
+                  <div className="flex items-center justify-between mb-1">
+                    <Label>Search location</Label>
+                    <button
+                      type="button"
+                      onClick={handleDetectLocation}
+                      className="text-xs font-semibold text-blue-600 hover:text-blue-700 inline-flex items-center gap-1"
+                    >
+                      <Navigation className="w-3.5 h-3.5" />
+                      Use Current GPS Location
+                    </button>
+                  </div>
                   <Input
                     ref={locationSearchInputRef}
                     placeholder="Start typing your restaurant address..."
@@ -583,38 +619,112 @@ export default function EditRestaurant() {
                     style={{ color: "#000", WebkitTextFillColor: "#000" }}
                   />
                   <p className="text-[11px] text-slate-500 mt-1">
-                    Select a suggestion from the dropdown to fill address + coordinates.
+                    Search using Google Places or edit/fill the address and coordinates directly below.
                   </p>
                 </div>
 
                 <div className="md:col-span-2">
                   <Label>Formatted Address</Label>
-                  <Input value={locationForm.formattedAddress} readOnly className="mt-1 bg-slate-50" />
+                  <Input
+                    value={locationForm.formattedAddress}
+                    onChange={(e) => setLocationForm((p) => ({ ...p, formattedAddress: e.target.value, addressLine1: p.addressLine1 || e.target.value }))}
+                    className="mt-1 bg-white"
+                    placeholder="Full formatted address"
+                  />
                 </div>
                 <div>
-                  <Label>Area</Label>
-                  <Input value={locationForm.area} readOnly className="mt-1 bg-slate-50" />
+                  <Label>Address Line 1</Label>
+                  <Input
+                    value={locationForm.addressLine1}
+                    onChange={(e) => setLocationForm((p) => ({ ...p, addressLine1: e.target.value }))}
+                    className="mt-1 bg-white"
+                    placeholder="Shop, building, street"
+                  />
+                </div>
+                <div>
+                  <Label>Area / Locality</Label>
+                  <Input
+                    value={locationForm.area}
+                    onChange={(e) => setLocationForm((p) => ({ ...p, area: e.target.value }))}
+                    className="mt-1 bg-white"
+                    placeholder="Area or locality"
+                  />
                 </div>
                 <div>
                   <Label>City</Label>
-                  <Input value={locationForm.city} readOnly className="mt-1 bg-slate-50" />
+                  <Input
+                    value={locationForm.city}
+                    onChange={(e) => setLocationForm((p) => ({ ...p, city: e.target.value }))}
+                    className="mt-1 bg-white"
+                    placeholder="City"
+                  />
                 </div>
                 <div>
                   <Label>State</Label>
-                  <Input value={locationForm.state} readOnly className="mt-1 bg-slate-50" />
+                  <Input
+                    value={locationForm.state}
+                    onChange={(e) => setLocationForm((p) => ({ ...p, state: e.target.value }))}
+                    className="mt-1 bg-white"
+                    placeholder="State"
+                  />
                 </div>
                 <div>
-                  <Label>Pincode</Label>
-                  <Input value={locationForm.pincode} readOnly className="mt-1 bg-slate-50" />
+                  <Label>Pincode / Postal Code</Label>
+                  <Input
+                    value={locationForm.pincode}
+                    onChange={(e) => setLocationForm((p) => ({ ...p, pincode: e.target.value }))}
+                    className="mt-1 bg-white"
+                    placeholder="Pincode"
+                  />
                 </div>
-                <div className="md:col-span-2">
+                <div>
                   <Label>Landmark</Label>
                   <Input
                     value={locationForm.landmark}
                     onChange={(e) => setLocationForm((p) => ({ ...p, landmark: e.target.value }))}
-                    className="mt-1"
+                    className="mt-1 bg-white"
+                    placeholder="Nearby landmark"
                   />
                 </div>
+                <div>
+                  <Label>Latitude</Label>
+                  <Input
+                    type="number"
+                    step="any"
+                    value={locationForm.latitude}
+                    onChange={(e) => setLocationForm((p) => ({ ...p, latitude: e.target.value }))}
+                    className="mt-1 bg-white"
+                    placeholder="e.g. 22.719600"
+                  />
+                </div>
+                <div>
+                  <Label>Longitude</Label>
+                  <Input
+                    type="number"
+                    step="any"
+                    value={locationForm.longitude}
+                    onChange={(e) => setLocationForm((p) => ({ ...p, longitude: e.target.value }))}
+                    className="mt-1 bg-white"
+                    placeholder="e.g. 75.857700"
+                  />
+                </div>
+
+                {Number.isFinite(Number(locationForm.latitude)) && Number.isFinite(Number(locationForm.longitude)) && !isNearZero(locationForm.latitude) && !isNearZero(locationForm.longitude) && (
+                  <div className="md:col-span-2 mt-2">
+                    <Label className="mb-1.5 block">Location Map Preview</Label>
+                    <div className="w-full h-52 rounded-xl overflow-hidden border border-slate-200 shadow-sm relative">
+                      <iframe
+                        src={`https://www.google.com/maps?q=${locationForm.latitude},${locationForm.longitude}&hl=en&z=15&output=embed`}
+                        width="100%"
+                        height="100%"
+                        style={{ border: 0 }}
+                        allowFullScreen
+                        loading="lazy"
+                        referrerPolicy="no-referrer-when-downgrade"
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
             </section>
           </div>

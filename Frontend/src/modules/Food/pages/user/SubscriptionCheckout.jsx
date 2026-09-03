@@ -76,7 +76,14 @@ export default function SubscriptionCheckout() {
   const [completedSubscription, setCompletedSubscription] = useState(null);
   const [appCustomization, setAppCustomization] = useState(DEFAULT_APP_CUSTOMIZATION);
 
-  const { dish, selectedMeals = [], subscriptionPlan, selectedDeliveryAddress } = location.state || {};
+  const { dish, selectedDishes = [], selectedMeals = [], subscriptionPlan, selectedDeliveryAddress } = location.state || {};
+
+  const effectiveDishes = useMemo(() => {
+    if (Array.isArray(selectedDishes) && selectedDishes.length > 0) {
+      return selectedDishes;
+    }
+    return dish ? [dish] : [];
+  }, [selectedDishes, dish]);
 
   useEffect(() => {
     let mounted = true;
@@ -127,7 +134,15 @@ export default function SubscriptionCheckout() {
     };
   }, []);
 
-  const basePrice = Math.max(0, Number.parseFloat(dish?.price || 0) || 0);
+  const basePrice = useMemo(() => {
+    if (effectiveDishes.length > 0) {
+      return effectiveDishes.reduce(
+        (sum, item) => sum + (Number(item.price || 0) * (Number(item.quantity) || 1)),
+        0
+      );
+    }
+    return Math.max(0, Number.parseFloat(dish?.price || 0) || 0);
+  }, [effectiveDishes, dish]);
   const mealCount = selectedMeals.length || 1;
   const days = subscriptionPlan?.durationDays || 30;
   const totalFoodCost = roundMoney(basePrice * mealCount * days);
@@ -284,10 +299,18 @@ export default function SubscriptionCheckout() {
       const customerName = userProfile?.name || userProfile?.fullName || "User";
       const customerPhone = userProfile?.phone || defaultAddress?.phone || "";
       const payload = {
-        dishId: dish.itemId || dish.id,
-        dishName: dish.name || "Subscription meal",
-        restaurantId: dish.restaurantId,
-        restaurantName: dish.restaurantName || "",
+        dishId: dish?.itemId || dish?.id || effectiveDishes[0]?.itemId || effectiveDishes[0]?.id || "dish-0",
+        dishName: effectiveDishes.length > 1
+          ? effectiveDishes.map((d) => `${d.name}${d.quantity > 1 ? ` ×${d.quantity}` : ""}`).join(", ")
+          : (dish?.name || effectiveDishes[0]?.name || "Subscription meal"),
+        dishes: effectiveDishes.map((d) => ({
+          dishId: d.itemId || d.id,
+          dishName: d.name,
+          price: d.price,
+          quantity: d.quantity || 1,
+        })),
+        restaurantId: dish?.restaurantId || effectiveDishes[0]?.restaurantId || "",
+        restaurantName: dish?.restaurantName || effectiveDishes[0]?.restaurantName || "",
         meals: selectedMeals
           .map((meal) => String(meal?.title || meal?.name || "").trim())
           .filter(Boolean),
@@ -562,8 +585,10 @@ export default function SubscriptionCheckout() {
                 )}
               </div>
               <div className="min-w-0 flex-1">
-                <h3 className="font-bold text-sm text-gray-900 dark:text-white truncate">
-                  {dish?.name || "Subscription meal"}
+                <h3 className="font-bold text-sm text-gray-900 dark:text-white line-clamp-2">
+                  {effectiveDishes.length > 1
+                    ? effectiveDishes.map((d) => `${d.name}${d.quantity > 1 ? ` ×${d.quantity}` : ""}`).join(", ")
+                    : (dish?.name || "Subscription meal")}
                 </h3>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                   {days} Days Plan ({totalDeliveries} total deliveries)

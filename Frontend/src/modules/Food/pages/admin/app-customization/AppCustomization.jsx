@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { CalendarClock, CheckCircle2, FileText, Loader2, Palette, Save, Settings2, ShoppingCart, Utensils, UtensilsCrossed } from "lucide-react"
+import { CalendarClock, CheckCircle2, FileText, Loader2, Palette, Save, Settings2, ShoppingCart, Utensils, UtensilsCrossed, ListOrdered } from "lucide-react"
 import { Button } from "@food/components/ui/button"
 import { adminAPI } from "@food/api"
 import { toast } from "sonner"
@@ -28,6 +28,10 @@ const DEFAULT_SETTINGS = {
     dishChangeLeadHours: 24,
     addressChangeLeadHours: 3,
   },
+  mealSelection: {
+    maxDishesPerMeal: 3,
+    allowQuantityPerDish: false,
+  },
 }
 
 function mergeSettings(data) {
@@ -50,6 +54,10 @@ function mergeSettings(data) {
     timeManagement: {
       ...DEFAULT_SETTINGS.timeManagement,
       ...(data.timeManagement || {}),
+    },
+    mealSelection: {
+      ...DEFAULT_SETTINGS.mealSelection,
+      ...(data.mealSelection || {}),
     },
   }
 }
@@ -135,6 +143,13 @@ export default function AppCustomization() {
     }))
   }
 
+  const updateMealSelection = (field, value) => {
+    setSettings((prev) => ({
+      ...prev,
+      mealSelection: { ...prev.mealSelection, [field]: value },
+    }))
+  }
+
   const updateThemeColor = (value) => {
     setSettings((prev) => {
       const next = {
@@ -169,6 +184,10 @@ export default function AppCustomization() {
         subscriptionOrders: {
           startFrom: settings.subscriptionOrders.startFrom,
           devModePlaceNow: Boolean(settings.subscriptionOrders.devModePlaceNow),
+        },
+        mealSelection: {
+          maxDishesPerMeal: Math.max(1, Math.min(20, Number(settings.mealSelection.maxDishesPerMeal) || 3)),
+          allowQuantityPerDish: Boolean(settings.mealSelection.allowQuantityPerDish),
         },
       })
       const saved = response?.data?.data?.settings
@@ -217,6 +236,7 @@ export default function AppCustomization() {
             <div className="flex flex-wrap gap-2 rounded-lg bg-slate-100 p-1">
               {[
                 { id: "flows", label: "Flows", icon: Settings2 },
+                { id: "meal", label: "Meal", icon: ListOrdered },
                 { id: "theme", label: "Theme", icon: Palette },
               ].map((panel) => {
                 const Icon = panel.icon
@@ -328,6 +348,66 @@ export default function AppCustomization() {
                   </p>
                 </div>
               </>
+            ) : activePanel === "meal" ? (
+              <div className="space-y-6">
+                <div className="rounded-lg border border-slate-200 p-5">
+                  <div className="mb-4 flex items-start gap-3">
+                    <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-700">
+                      <ListOrdered className="h-4 w-4" />
+                    </span>
+                    <div>
+                      <h2 className="text-sm font-semibold text-slate-900">Max dishes per meal</h2>
+                      <p className="mt-1 text-sm text-slate-500">
+                        Maximum number of different dishes a user can select when building a subscription meal. Range: 1–20. Default: 3.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => updateMealSelection("maxDishesPerMeal", Math.max(1, (settings.mealSelection.maxDishesPerMeal || 3) - 1))}
+                      className="flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 text-slate-700 hover:border-slate-300 font-bold text-lg"
+                    >
+                      −
+                    </button>
+                    <input
+                      type="number"
+                      min={1}
+                      max={20}
+                      value={settings.mealSelection.maxDishesPerMeal ?? 3}
+                      onChange={(e) => updateMealSelection("maxDishesPerMeal", Math.max(1, Math.min(20, Number(e.target.value) || 1)))}
+                      className="h-10 w-20 rounded-lg border border-slate-200 px-3 text-center text-sm font-bold text-slate-900 outline-none focus:border-[#7e3866] focus:ring-4 focus:ring-[#7e3866]/10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => updateMealSelection("maxDishesPerMeal", Math.min(20, (settings.mealSelection.maxDishesPerMeal || 3) + 1))}
+                      className="flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 text-slate-700 hover:border-slate-300 font-bold text-lg"
+                    >
+                      +
+                    </button>
+                    <span className="text-sm text-slate-500">dishes per meal</span>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between gap-4 rounded-lg border border-slate-200 p-5">
+                  <span className="flex items-start gap-3">
+                    <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-700">
+                      <Utensils className="h-4 w-4" />
+                    </span>
+                    <span>
+                      <span className="block text-sm font-semibold text-slate-900">Allow quantity per dish</span>
+                      <span className="mt-1 block text-sm text-slate-500">
+                        When on, users can order multiple units of the same dish (e.g. 2× Sweets). Default: off (1 unit per dish).
+                      </span>
+                    </span>
+                  </span>
+                  <ToggleSwitch
+                    checked={Boolean(settings.mealSelection.allowQuantityPerDish)}
+                    onChange={(value) => updateMealSelection("allowQuantityPerDish", value)}
+                    ariaLabel="Allow quantity per dish"
+                  />
+                </div>
+              </div>
             ) : (
               <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
                 <div className="rounded-lg border border-slate-200 p-4">

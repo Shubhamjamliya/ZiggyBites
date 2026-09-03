@@ -60,8 +60,23 @@ export default function SubscriptionPlans() {
     return meals.filter(Boolean);
   }, [location.state]);
 
+  const selectedDishes = useMemo(() => {
+    if (Array.isArray(location.state?.selectedDishes) && location.state.selectedDishes.length > 0) {
+      return location.state.selectedDishes;
+    }
+    return dish ? [dish] : [];
+  }, [location.state, dish]);
+
   const selectedMealCount = selectedMeals.length || 1;
-  const selectedDishPrice = Number(dish.price || 0) || 0;
+  const selectedDishPrice = useMemo(() => {
+    if (Array.isArray(location.state?.selectedDishes) && location.state.selectedDishes.length > 0) {
+      return location.state.selectedDishes.reduce(
+        (sum, item) => sum + (Number(item.price || 0) * (Number(item.quantity) || 1)),
+        0
+      );
+    }
+    return Number(dish.price || 0) || 0;
+  }, [location.state, dish]);
 
   useEffect(() => {
     let cancelled = false;
@@ -223,7 +238,7 @@ export default function SubscriptionPlans() {
                   onClick={() => {
                     if (selectedDishPrice > 0) {
                       navigate("/food/user/checkout", {
-                        state: { dish, selectedMeals, subscriptionPlan: plan },
+                        state: { dish, selectedDishes, selectedMeals, subscriptionPlan: plan },
                       });
                     } else {
                       navigate({

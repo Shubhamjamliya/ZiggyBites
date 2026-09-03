@@ -26,6 +26,10 @@ export const DEFAULT_APP_CUSTOMIZATION_SETTINGS = {
     addressChangeLeadHours: 3,
     devModeAllowAnytimeChanges: false,
   },
+  mealSelection: {
+    maxDishesPerMeal: 3,
+    allowQuantityPerDish: false,
+  },
 };
 
 function normalizeScheduledOrderSettings(settings = {}) {
@@ -75,6 +79,18 @@ function normalizeAppCustomizationSettings(settings = {}) {
           : DEFAULT_APP_CUSTOMIZATION_SETTINGS.timeManagement.addressChangeLeadHours,
       devModeAllowAnytimeChanges: Boolean(settings.timeManagement?.devModeAllowAnytimeChanges),
     },
+    mealSelection: {
+      maxDishesPerMeal: Math.max(
+        1,
+        Math.min(
+          20,
+          Number.isFinite(Number(settings.mealSelection?.maxDishesPerMeal))
+            ? Math.round(Number(settings.mealSelection.maxDishesPerMeal))
+            : DEFAULT_APP_CUSTOMIZATION_SETTINGS.mealSelection.maxDishesPerMeal,
+        ),
+      ),
+      allowQuantityPerDish: Boolean(settings.mealSelection?.allowQuantityPerDish),
+    },
   };
 }
 
@@ -115,6 +131,10 @@ export async function updateAppCustomizationSettings(payload = {}, adminId) {
       ...current.timeManagement,
       ...(payload.timeManagement || {}),
     },
+    mealSelection: {
+      ...current.mealSelection,
+      ...(payload.mealSelection || {}),
+    },
   });
 
   if (
@@ -138,6 +158,7 @@ export async function updateAppCustomizationSettings(payload = {}, adminId) {
         scheduledOrders: next.scheduledOrders,
         theme: next.theme,
         timeManagement: next.timeManagement,
+        mealSelection: next.mealSelection,
         updatedBy: { role: "ADMIN", adminId, at: new Date() },
       },
     },

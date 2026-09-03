@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import {
   ArrowLeft,
@@ -8,9 +8,13 @@ import {
   Soup,
   UserCircle2,
   Utensils,
+  CheckCircle2,
+  Plus,
+  Minus,
 } from "lucide-react";
 import api, { restaurantAPI } from "@food/api";
-import { loadAppCustomization } from "@food/utils/appCustomization";
+import { loadAppCustomization, DEFAULT_APP_CUSTOMIZATION } from "@food/utils/appCustomization";
+
 const getImageUrl = (value) => {
   const candidate =
     typeof value === "string"
@@ -80,11 +84,17 @@ export default function ChooseMeal() {
   const [searchParams] = useSearchParams();
   const [selectedSlots, setSelectedSlots] = useState(["lunch"]);
   const [mealSlots, setMealSlots] = useState(fallbackMealSlots);
-  const [resolvedDishImage, setResolvedDishImage] = useState("");
   const [availableDishes, setAvailableDishes] = useState([]);
   const [loadingDishes, setLoadingDishes] = useState(false);
-  const [userSelectedDish, setUserSelectedDish] = useState(null);
+  const [loadingSlots, setLoadingSlots] = useState(true);
 
+  // Multi-selection state: Map<itemId, { dish, quantity }>
+  const [selectedDishMap, setSelectedDishMap] = useState({});
+
+  // Config loaded from admin
+  const [mealConfig, setMealConfig] = useState(DEFAULT_APP_CUSTOMIZATION.mealSelection);
+
+  // ── Load app customization ──────────────────────────────────────────────────
   useEffect(() => {
     let mounted = true;
     loadAppCustomization()
@@ -93,16 +103,43 @@ export default function ChooseMeal() {
         const enabled = settings.subscriptionFlowEnabled !== false;
         if (!enabled) {
           navigate("/food/user", { replace: true });
+          return;
         }
+        setMealConfig({
+          maxDishesPerMeal: settings.mealSelection?.maxDishesPerMeal ?? 3,
+          allowQuantityPerDish: settings.mealSelection?.allowQuantityPerDish ?? false,
+        });
       })
       .catch(() => {});
-    return () => {
-      mounted = false;
-    };
+    return () => { mounted = false; };
   }, [navigate]);
-  const [loadingSlots, setLoadingSlots] = useState(true);
 
-  // Fetch available subscription dishes
+  // ── Seed initial dish selection from navigation state / search params ───────
+  useEffect(() => {
+    const stateDish = location.state?.dish;
+    if (stateDish && (stateDish.price || stateDish.id || stateDish.itemId)) {
+      const id = String(stateDish.itemId || stateDish.id || searchParams.get("dishId") || "seed-0");
+      setSelectedDishMap({
+        [id]: {
+          dish: {
+            id,
+            itemId: id,
+            name: stateDish.name || searchParams.get("dish") || "Selected meal",
+            restaurantName: stateDish.restaurantName || searchParams.get("restaurant") || "",
+            restaurantId: stateDish.restaurantId || searchParams.get("restaurantId") || "",
+            categoryName: stateDish.categoryName || searchParams.get("category") || "",
+            price: stateDish.price || searchParams.get("price") || "0",
+            image: stateDish.image || "",
+            foodType: stateDish.foodType || "",
+          },
+          quantity: 1,
+        },
+      });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── Fetch available dishes ──────────────────────────────────────────────────
   useEffect(() => {
     let cancelled = false;
     const fetchDishes = async () => {
@@ -120,113 +157,12 @@ export default function ChooseMeal() {
       }
     };
     fetchDishes();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, []);
 
-  const dish = useMemo(() => {
-    if (userSelectedDish) {
-      return userSelectedDish;
-    }
-    const stateDish = location.state?.dish;
-    if (stateDish && (stateDish.price || stateDish.id || stateDish.itemId)) {
-      return {
-        id: stateDish.id || stateDish.itemId || searchParams.get("dishId") || "",
-        itemId: stateDish.itemId || stateDish.id || searchParams.get("dishId") || "",
-        name: stateDish.name || searchParams.get("dish") || "Selected meal",
-        restaurantName:
-          stateDish.restaurantName || searchParams.get("restaurant") || "",
-        restaurantId:
-          stateDish.restaurantId || searchParams.get("restaurantId") || "",
-        categoryName: stateDish.categoryName || searchParams.get("category") || "",
-        price: stateDish.price || searchParams.get("price") || "",
-        image: stateDish.image || "",
-        foodType: stateDish.foodType || "",
-      };
-    }
-    if (availableDishes.length > 0) {
-      const first = availableDishes[0];
-      return {
-        id: first._id || first.id || "dish-default",
-        itemId: first._id || first.id || "dish-default",
-        name: first.name || "Homestyle Meal",
-        restaurantName: first.restaurantName || first.restaurant?.name || "Kitchen",
-        restaurantId: first.restaurantId || first.restaurant?._id || "",
-        categoryName: first.categoryName || "",
-        price: String(first.price || 99),
-        image: first.image || "",
-        foodType: first.foodType || "Veg",
-      };
-    }
-    return {
-      id: searchParams.get("dishId") || "default-dish",
-      itemId: searchParams.get("dishId") || "default-dish",
-      name: searchParams.get("dish") || "Daily Homestyle Thali",
-      restaurantName: searchParams.get("restaurant") || "Ziggy Kitchen",
-      restaurantId: searchParams.get("restaurantId") || "default-rest-id",
-      categoryName: searchParams.get("category") || "Thali",
-      price: searchParams.get("price") || "99",
-      image: "",
-      foodType: "Veg",
-    };
-  }, [location.state, searchParams, userSelectedDish, availableDishes]);
-
-  useEffect(() => {
-    setResolvedDishImage(getImageUrl(dish.image));
-  }, [dish.image]);
-
-  useEffect(() => {
-    if (resolvedDishImage || !dish.restaurantId || !dish.itemId) return;
-
-    let cancelled = false;
-    restaurantAPI
-      .getMenuByRestaurantId(dish.restaurantId, { noCache: true })
-      .then((response) => {
-        if (cancelled) return;
-        const items = getMenuSections(response).flatMap((section) => [
-          ...(Array.isArray(section?.items) ? section.items : []),
-          ...(Array.isArray(section?.subsections)
-            ? section.subsections.flatMap((subsection) =>
-                Array.isArray(subsection?.items) ? subsection.items : [],
-              )
-            : []),
-        ]);
-        const selectedDish = items.find(
-          (item) =>
-            String(item?._id || item?.id || item?.itemId || "") ===
-            String(dish.itemId),
-        );
-        setResolvedDishImage(
-          getImageUrl(
-            selectedDish?.image ||
-              selectedDish?.imageUrl ||
-              selectedDish?.photoUrl ||
-              selectedDish?.images?.[0],
-          ),
-        );
-      })
-      .catch(() => {});
-
-    return () => {
-      cancelled = true;
-    };
-  }, [dish.itemId, dish.restaurantId, resolvedDishImage]);
-
-  const canContinue = selectedSlots.length > 0;
-  const toggleSlot = (slotId) => {
-    setSelectedSlots((current) =>
-      current.includes(slotId)
-        ? current.length > 1
-          ? current.filter((id) => id !== slotId)
-          : current
-        : [...current, slotId],
-    );
-  };
-
+  // ── Fetch meal slots ────────────────────────────────────────────────────────
   useEffect(() => {
     let cancelled = false;
-
     const loadMealSlots = async () => {
       setLoadingSlots(true);
       try {
@@ -240,33 +176,99 @@ export default function ChooseMeal() {
             timeLabel: slot.timeLabel,
             description: slot.description || "",
             imageUrl: getImageUrl(
-              slot.imageUrl ||
-                slot.image ||
-                slot.photoUrl ||
-                slot.thumbnail ||
-                slot.images?.[0],
+              slot.imageUrl || slot.image || slot.photoUrl || slot.thumbnail || slot.images?.[0],
             ),
             icon: iconMap[slot.icon] || Utensils,
             accentColor: slot.accentColor || "#ef2b24",
             backgroundColor: slot.backgroundColor || "#fff7ed",
           }));
-
-        if (!cancelled && mapped.length > 0) {
-          setMealSlots(mapped);
-        }
+        if (!cancelled && mapped.length > 0) setMealSlots(mapped);
       } catch {
         if (!cancelled) setMealSlots(fallbackMealSlots);
       } finally {
         if (!cancelled) setLoadingSlots(false);
       }
     };
-
     loadMealSlots();
-
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, []);
+
+  // ── Dish selection helpers ──────────────────────────────────────────────────
+  const selectedCount = Object.keys(selectedDishMap).length;
+  const maxReached = selectedCount >= mealConfig.maxDishesPerMeal;
+
+  const toggleDish = useCallback((item) => {
+    const id = String(item._id || item.id);
+    setSelectedDishMap((prev) => {
+      if (prev[id]) {
+        // Deselect — but keep at least 1 if something was pre-seeded
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      }
+      if (Object.keys(prev).length >= mealConfig.maxDishesPerMeal) {
+        // Max reached — do nothing (user sees the visual lock)
+        return prev;
+      }
+      return {
+        ...prev,
+        [id]: {
+          dish: {
+            id,
+            itemId: id,
+            name: item.name,
+            restaurantName: item.restaurantName || item.restaurant?.name || "Kitchen",
+            restaurantId: item.restaurantId || item.restaurant?._id || "",
+            categoryName: item.categoryName || "",
+            price: String(item.price || 0),
+            image: item.image || "",
+            foodType: item.foodType || "Veg",
+          },
+          quantity: 1,
+        },
+      };
+    });
+  }, [mealConfig.maxDishesPerMeal]);
+
+  const setDishQuantity = useCallback((id, qty) => {
+    if (qty < 1) {
+      setSelectedDishMap((prev) => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+      return;
+    }
+    setSelectedDishMap((prev) =>
+      prev[id] ? { ...prev, [id]: { ...prev[id], quantity: qty } } : prev
+    );
+  }, []);
+
+  // ── Computed totals ─────────────────────────────────────────────────────────
+  const { totalPrice, totalItems } = useMemo(() => {
+    let price = 0;
+    let items = 0;
+    for (const { dish, quantity } of Object.values(selectedDishMap)) {
+      const qty = mealConfig.allowQuantityPerDish ? quantity : 1;
+      price += Number(dish.price || 0) * qty;
+      items += qty;
+    }
+    return { totalPrice: price, totalItems: items };
+  }, [selectedDishMap, mealConfig.allowQuantityPerDish]);
+
+  // ── Slot toggle ─────────────────────────────────────────────────────────────
+  const toggleSlot = (slotId) => {
+    setSelectedSlots((current) =>
+      current.includes(slotId)
+        ? current.length > 1
+          ? current.filter((id) => id !== slotId)
+          : current
+        : [...current, slotId],
+    );
+  };
+
+  // ── Continue ────────────────────────────────────────────────────────────────
+  const canContinue = selectedCount > 0 && selectedSlots.length > 0;
 
   const continueToPlans = () => {
     if (!canContinue) return;
@@ -275,23 +277,24 @@ export default function ChooseMeal() {
       .filter((slot) => selectedSlots.includes(slot.id))
       .map(({ icon, ...rest }) => rest);
 
-    if (passedPlan && dish?.price) {
-      // User came with a pre-selected plan -> Go forward to checkout!
-      navigate("/food/user/checkout", {
-        state: {
-          dish,
-          selectedMeals: mealsToPass,
-          subscriptionPlan: passedPlan,
-        },
-      });
+    const selectedDishesArray = Object.values(selectedDishMap).map(({ dish, quantity }) => ({
+      ...dish,
+      quantity: mealConfig.allowQuantityPerDish ? quantity : 1,
+    }));
+
+    // For backwards compatibility: keep single `dish` field pointing to first selection
+    const primaryDish = selectedDishesArray[0] || null;
+
+    const navState = {
+      dish: primaryDish,
+      selectedDishes: selectedDishesArray,
+      selectedMeals: mealsToPass,
+    };
+
+    if (passedPlan && primaryDish?.price) {
+      navigate("/food/user/checkout", { state: { ...navState, subscriptionPlan: passedPlan } });
     } else {
-      // Go to Subscription Plans with the selected dish and meals
-      navigate("/food/user/subscription-plans", {
-        state: {
-          dish,
-          selectedMeals: mealsToPass,
-        },
-      });
+      navigate("/food/user/subscription-plans", { state: navState });
     }
   };
 
@@ -304,7 +307,8 @@ export default function ChooseMeal() {
 
   return (
     <div className="min-h-screen bg-white dark:bg-[#0a0a0a] text-[#171724] dark:text-white font-['Poppins',sans-serif] transition-colors duration-200">
-      <div className="mx-auto flex min-h-screen w-full max-w-md flex-col px-4 pb-28 pt-3">
+      <div className="mx-auto flex min-h-screen w-full max-w-md flex-col px-4 pb-36 pt-3">
+        {/* Header */}
         <header className="flex items-center justify-between">
           <button
             type="button"
@@ -328,49 +332,73 @@ export default function ChooseMeal() {
         </header>
 
         <p className="mt-4 pl-10 pr-6 text-[12px] font-semibold leading-5 text-[#6d6a7d] dark:text-gray-400">
-          Pick your preferred meal dish and delivery slots to get started.
+          Pick your preferred meal dishes and delivery slots to get started.
         </p>
 
-        {/* Selected Meal / Dish Selector */}
+        {/* Dish Selector */}
         <section className="mt-5">
           <div className="flex items-center justify-between mb-2">
             <h2 className="text-sm font-bold text-gray-900 dark:text-white">
-              Selected Meal Dish
+              Select Meal Dishes
             </h2>
-            <span className="text-[11px] font-bold text-[#e32c31] dark:text-[#ff5257]">
-              ₹{Number(dish.price || 99).toFixed(0)}/meal
-            </span>
+            <div className="flex items-center gap-2">
+              {totalPrice > 0 && (
+                <span className="text-[11px] font-bold text-[#e32c31] dark:text-[#ff5257]">
+                  ₹{totalPrice.toFixed(0)}/meal
+                </span>
+              )}
+              <span
+                className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                  maxReached
+                    ? "bg-[#e32c31]/10 text-[#e32c31] dark:bg-[#ff5257]/10 dark:text-[#ff5257]"
+                    : "bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400"
+                }`}
+              >
+                {selectedCount}/{mealConfig.maxDishesPerMeal}
+              </span>
+            </div>
           </div>
 
-          {availableDishes.length > 0 ? (
+          {maxReached && (
+            <p className="mb-2 text-[10px] font-semibold text-[#e32c31] dark:text-[#ff5257]">
+              Max {mealConfig.maxDishesPerMeal} dishes reached. Deselect a dish to swap.
+            </p>
+          )}
+
+          {loadingDishes ? (
+            <div className="flex gap-2.5 overflow-x-auto pb-2 scrollbar-none">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="shrink-0 w-36 h-[130px] rounded-2xl bg-gray-100 dark:bg-gray-800 animate-pulse" />
+              ))}
+            </div>
+          ) : availableDishes.length > 0 ? (
             <div className="flex gap-2.5 overflow-x-auto pb-2 scrollbar-none">
               {availableDishes.map((item) => {
-                const isSelected = String(dish.itemId || dish.id) === String(item._id || item.id);
+                const id = String(item._id || item.id);
+                const entry = selectedDishMap[id];
+                const isSelected = Boolean(entry);
+                const isDisabled = !isSelected && maxReached;
+                const qty = entry?.quantity ?? 1;
+
                 return (
                   <div
-                    key={item._id || item.id}
-                    onClick={() => {
-                      setUserSelectedDish({
-                        id: item._id || item.id,
-                        itemId: item._id || item.id,
-                        name: item.name,
-                        restaurantName: item.restaurantName || item.restaurant?.name || "Kitchen",
-                        restaurantId: item.restaurantId || item.restaurant?._id || "",
-                        categoryName: item.categoryName || "",
-                        price: String(item.price || 99),
-                        image: item.image || "",
-                        foodType: item.foodType || "Veg",
-                      });
-                      if (item.image) {
-                        setResolvedDishImage(getImageUrl(item.image));
-                      }
-                    }}
-                    className={`shrink-0 w-36 rounded-2xl p-2.5 border cursor-pointer transition active:scale-95 ${
+                    key={id}
+                    onClick={() => !isDisabled && toggleDish(item)}
+                    className={`relative shrink-0 w-36 rounded-2xl p-2.5 border cursor-pointer transition select-none ${
+                      isDisabled ? "opacity-40 cursor-not-allowed" : "active:scale-95"
+                    } ${
                       isSelected
                         ? "border-[#e32c31] dark:border-[#ff5257] bg-red-50/50 dark:bg-red-950/30 shadow-sm"
                         : "border-gray-100 dark:border-gray-800 bg-white dark:bg-[#1a1a1a] hover:border-gray-200 dark:hover:border-gray-700"
                     }`}
                   >
+                    {/* Selection checkmark */}
+                    {isSelected && (
+                      <span className="absolute top-2 right-2 z-10">
+                        <CheckCircle2 className="h-4 w-4 text-[#e32c31] dark:text-[#ff5257]" fill="currentColor" />
+                      </span>
+                    )}
+
                     <div className="relative h-20 w-full rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-800 mb-2">
                       {item.image ? (
                         <img
@@ -383,33 +411,69 @@ export default function ChooseMeal() {
                           🍱
                         </div>
                       )}
-                      <span className="absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-black/60 text-white">
-                        ₹{item.price || 99}
+                      <span className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-black/60 text-white">
+                        ₹{item.price || 0}
                       </span>
                     </div>
+
                     <p className="text-xs font-bold text-gray-900 dark:text-white truncate">
                       {item.name}
                     </p>
                     <p className="text-[10px] text-gray-500 dark:text-gray-400 truncate">
                       {item.restaurantName || "Kitchen"}
                     </p>
+
+                    {/* Quantity stepper — shown only when allowQuantityPerDish is on */}
+                    {isSelected && mealConfig.allowQuantityPerDish && (
+                      <div
+                        className="mt-2 flex items-center justify-between rounded-lg bg-[#e32c31]/10 dark:bg-[#ff5257]/10 px-1 py-0.5"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => setDishQuantity(id, qty - 1)}
+                          className="flex h-5 w-5 items-center justify-center rounded-full bg-white dark:bg-gray-800 shadow text-[#e32c31] dark:text-[#ff5257]"
+                        >
+                          <Minus className="h-3 w-3" strokeWidth={3} />
+                        </button>
+                        <span className="text-[11px] font-black text-gray-900 dark:text-white">{qty}</span>
+                        <button
+                          type="button"
+                          onClick={() => setDishQuantity(id, qty + 1)}
+                          className="flex h-5 w-5 items-center justify-center rounded-full bg-white dark:bg-gray-800 shadow text-[#e32c31] dark:text-[#ff5257]"
+                        >
+                          <Plus className="h-3 w-3" strokeWidth={3} />
+                        </button>
+                      </div>
+                    )}
                   </div>
                 );
               })}
             </div>
           ) : (
-            <div className="p-3 rounded-xl bg-orange-50/80 dark:bg-orange-950/30 border border-orange-100 dark:border-orange-900/40 flex items-center justify-between">
-              <div>
-                <p className="text-xs font-bold text-gray-900 dark:text-white">{dish.name}</p>
-                <p className="text-[11px] text-gray-500 dark:text-gray-400">{dish.restaurantName || "Homestyle Kitchen"}</p>
-              </div>
-              <span className="text-xs font-bold text-[#e32c31] dark:text-[#ff5257]">
-                ₹{dish.price}/meal
-              </span>
+            <div className="p-3 rounded-xl bg-orange-50/80 dark:bg-orange-950/30 border border-orange-100 dark:border-orange-900/40">
+              <p className="text-xs font-bold text-gray-900 dark:text-white">No dishes available</p>
+              <p className="text-[11px] text-gray-500 dark:text-gray-400">Dishes will appear here once restaurants add them.</p>
+            </div>
+          )}
+
+          {/* Selected dishes summary chips */}
+          {selectedCount > 0 && (
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {Object.values(selectedDishMap).map(({ dish, quantity }) => (
+                <span
+                  key={dish.id}
+                  className="inline-flex items-center gap-1 rounded-full bg-[#e32c31]/10 dark:bg-[#ff5257]/10 px-2 py-0.5 text-[10px] font-bold text-[#e32c31] dark:text-[#ff5257]"
+                >
+                  {dish.name}
+                  {mealConfig.allowQuantityPerDish && quantity > 1 && ` ×${quantity}`}
+                </span>
+              ))}
             </div>
           )}
         </section>
 
+        {/* Meal Time Selector */}
         <section className="mt-6">
           <div className="flex items-end justify-between">
             <h2 className="text-lg font-black tracking-tight text-gray-900 dark:text-white">
@@ -436,9 +500,7 @@ export default function ChooseMeal() {
                       ? "border-[#e32c31] dark:border-[#ff5257] ring-2 ring-[#e32c31]/10 dark:ring-[#ff5257]/20"
                       : "border-transparent dark:border-gray-800"
                   } ${darkSlotClass}`}
-                  style={{
-                    backgroundColor: slot.backgroundColor,
-                  }}
+                  style={{ backgroundColor: slot.backgroundColor }}
                 >
                   <span className="absolute right-3 top-3 h-4 w-4 rounded-full border-2 border-[#a4a0a5] dark:border-gray-600 bg-white dark:bg-[#1a1a1a]">
                     {active && (
@@ -450,10 +512,7 @@ export default function ChooseMeal() {
                       <Icon className="h-5 w-5" style={{ color: slot.accentColor }} strokeWidth={2.3} />
                     </span>
                     <p className="mt-2 text-[14px] font-black leading-tight text-gray-900 dark:text-white">{slot.title}</p>
-                    <p
-                      className="mt-1 text-[9px] font-black uppercase tracking-wide"
-                      style={{ color: slot.accentColor }}
-                    >
+                    <p className="mt-1 text-[9px] font-black uppercase tracking-wide" style={{ color: slot.accentColor }}>
                       {slot.timeLabel}
                     </p>
                   </div>
@@ -479,6 +538,7 @@ export default function ChooseMeal() {
           )}
         </section>
 
+        {/* Promo banner */}
         <section className="mt-4 flex min-h-[88px] overflow-hidden rounded-[14px] bg-[#fff0ec] dark:bg-[#201511] border border-transparent dark:border-[#3d241c] transition-colors">
           <div className="min-w-0 flex-1 px-4 py-3">
             <p className="text-lg font-black leading-5 text-[#171724] dark:text-white">Good food.</p>
@@ -488,34 +548,42 @@ export default function ChooseMeal() {
             </p>
           </div>
           <div className="relative w-[42%] shrink-0">
-            {resolvedDishImage ? (
-              <img
-                src={resolvedDishImage}
-                alt={dish.name}
-                className="absolute bottom-0 right-2 h-24 w-28 rounded-full object-cover"
-              />
-            ) : (
-              <div className="absolute bottom-2 right-3 flex h-20 w-20 items-center justify-center rounded-full bg-white dark:bg-[#1a1a1a] text-3xl font-black text-[#e32c31] dark:text-[#ff5257]">
-                {String(dish.name || "M").slice(0, 1).toUpperCase()}
-              </div>
-            )}
+            <div className="absolute bottom-2 right-3 flex h-20 w-20 items-center justify-center rounded-full bg-white dark:bg-[#1a1a1a] text-3xl font-black text-[#e32c31] dark:text-[#ff5257]">
+              🍱
+            </div>
             <div className="absolute right-3 top-3 flex h-12 w-12 rotate-12 items-center justify-center rounded-full bg-[#e32c31] text-center text-[8px] font-black uppercase leading-[9px] text-white shadow-md">
               Fresh<br />Daily
             </div>
           </div>
         </section>
-
-        {canContinue && (
-          <button
-            type="button"
-            onClick={continueToPlans}
-            className="fixed bottom-[74px] left-4 right-4 z-30 mx-auto h-12 max-w-md rounded-xl bg-[#e32c31] hover:bg-[#c92429] text-sm font-black text-white shadow-lg shadow-red-200 dark:shadow-none active:scale-[0.98] flex items-center justify-center gap-1.5 transition-colors"
-          >
-            {location.state?.subscriptionPlan ? "Proceed to Checkout" : "Continue to Plans"}
-          </button>
-        )}
-
       </div>
+
+      {/* Sticky bottom CTA */}
+      {canContinue && (
+        <div className="fixed bottom-0 left-0 right-0 z-30 bg-white dark:bg-[#0a0a0a] border-t border-gray-100 dark:border-gray-800 px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
+          <div className="mx-auto max-w-md">
+            {totalItems > 0 && (
+              <div className="mb-2 flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
+                <span>
+                  {selectedCount} dish{selectedCount !== 1 ? "es" : ""}
+                  {mealConfig.allowQuantityPerDish && totalItems !== selectedCount
+                    ? ` · ${totalItems} items`
+                    : ""}
+                </span>
+                <span className="font-bold text-gray-900 dark:text-white">Total: ₹{totalPrice.toFixed(0)}/meal</span>
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={continueToPlans}
+              className="w-full h-12 rounded-xl bg-[#e32c31] hover:bg-[#c92429] text-sm font-black text-white shadow-lg shadow-red-200 dark:shadow-none active:scale-[0.98] flex items-center justify-center gap-1.5 transition-colors"
+            >
+              {location.state?.subscriptionPlan ? "Proceed to Checkout" : "Continue to Plans"}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+

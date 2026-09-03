@@ -18,6 +18,10 @@ export const DEFAULT_APP_CUSTOMIZATION = {
     allowTomorrow: true,
     minLeadTimeMinutes: 60,
   },
+  mealSelection: {
+    maxDishesPerMeal: 3,
+    allowQuantityPerDish: false,
+  },
 }
 
 export function normalizeThemeColor(value, fallback = DEFAULT_APP_CUSTOMIZATION.theme.primaryColor) {
@@ -56,6 +60,10 @@ export async function loadAppCustomization() {
     scheduledOrders: {
       ...DEFAULT_APP_CUSTOMIZATION.scheduledOrders,
       ...(settings.scheduledOrders || {}),
+    },
+    mealSelection: {
+      ...DEFAULT_APP_CUSTOMIZATION.mealSelection,
+      ...(settings.mealSelection || {}),
     },
   }
   applyAppTheme(normalized)

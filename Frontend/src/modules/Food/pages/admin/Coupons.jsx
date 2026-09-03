@@ -103,7 +103,9 @@ export default function Coupons() {
     const start = f.startDate ? new Date(`${f.startDate}T00:00:00`) : null
     const end = f.endDate ? new Date(`${f.endDate}T00:00:00`) : null
     const now = new Date()
-    if (end && end < new Date(now.getFullYear(), now.getMonth(), now.getDate())) {
+    // A coupon is only invalid if its end date's calendar day is strictly before today
+    const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    if (end && end < todayMidnight) {
       e.endDate = "End date cannot be in the past"
     }
     if (start && end && start > end) {
@@ -612,7 +614,16 @@ export default function Coupons() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         {(() => {
-                          const expired = offer.endDate ? (new Date(offer.endDate).getTime() < new Date(new Date().toDateString()).getTime()) : false
+                          const expired = offer.endDate ? (() => {
+                            // Compare by calendar day (strip time). The endDate day is still valid today.
+                            const endStr = typeof offer.endDate === 'string' && offer.endDate.includes('T')
+                              ? offer.endDate.split('T')[0]   // ISO datetime → date part
+                              : offer.endDate;                 // already YYYY-MM-DD
+                            const endDayStart = new Date(`${endStr}T00:00:00`);
+                            const todayStart = new Date();
+                            todayStart.setHours(0, 0, 0, 0);
+                            return endDayStart.getTime() < todayStart.getTime();
+                          })() : false
                           const status = expired ? 'expired' : (offer.status || 'inactive')
                           const cls =
                             status === 'active'

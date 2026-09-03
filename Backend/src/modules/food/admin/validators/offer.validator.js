@@ -47,7 +47,9 @@ export const validateCreateOfferDto = (body) => {
         }
     }
 
-    const endDate = result.data.endDate ? new Date(`${result.data.endDate}T00:00:00.000Z`) : undefined;
+    // Parse endDate as end-of-day UTC so a coupon set to expire "today" is valid
+    // all day (until 23:59:59 UTC) and not rejected at creation time in non-UTC timezones.
+    const endDate = result.data.endDate ? new Date(`${result.data.endDate}T23:59:59.999Z`) : undefined;
     if (endDate && Number.isNaN(endDate.getTime())) {
         throw new ValidationError('Invalid endDate');
     }
@@ -58,8 +60,14 @@ export const validateCreateOfferDto = (body) => {
     if (endDate && startDate && endDate.getTime() <= startDate.getTime()) {
         throw new ValidationError('endDate must be after startDate');
     }
-    if (endDate && endDate.getTime() <= Date.now()) {
-        throw new ValidationError('endDate must be a future date');
+    // Only reject if the endDate's day is strictly before today (i.e., past midnight UTC of the end date)
+    if (endDate) {
+        const todayStartUTC = new Date();
+        todayStartUTC.setUTCHours(0, 0, 0, 0);
+        const endDateStartUTC = new Date(`${result.data.endDate}T00:00:00.000Z`);
+        if (endDateStartUTC.getTime() < todayStartUTC.getTime()) {
+            throw new ValidationError('endDate cannot be in the past');
+        }
     }
     // Business rule: percentage coupon must have maxDiscount; flat ignores it
     let maxDiscount = result.data.maxDiscount;

@@ -31,6 +31,12 @@ const normalizeFoodType = (v) => {
     return 'Non-Veg';
 };
 
+const normalizeFoodTag = (v) => {
+    const t = String(v || '').trim().toLowerCase();
+    if (t === 'healthy' || t === 'health' || t === 'true' || t === 'yes' || t === '1') return 'Healthy';
+    return 'Normal';
+};
+
 const CLOUDINARY_HOST_RE = /res\.cloudinary\.com/i;
 const MAX_BULK_ITEMS = 500;
 const BULK_CONCURRENCY = 5;
@@ -282,6 +288,7 @@ export async function createRestaurantFood(restaurantId, body = {}) {
         variants,
         image,
         foodType,
+        tag: normalizeFoodTag(body.tag),
         isAvailable,
         preparationTime,
         approvalStatus: 'pending',
@@ -338,6 +345,7 @@ export async function updateRestaurantFood(restaurantId, foodId, body = {}) {
 
     const targetFoodType = body.foodType !== undefined ? normalizeFoodType(body.foodType) : normalizeFoodType(existing.foodType);
     if (body.foodType !== undefined) update.foodType = targetFoodType;
+    if (body.tag !== undefined) update.tag = normalizeFoodTag(body.tag);
 
     if (
         body.categoryId !== undefined ||
@@ -434,6 +442,7 @@ export async function bulkCreateFood(restaurantId, items = []) {
                 variants: finalVariants,
                 image: imageUrl,
                 foodType,
+                tag: normalizeFoodTag(item.tag),
                 isAvailable: item.isAvailable !== false,
                 preparationTime: toStr(item.preparationTime),
                 approvalStatus: 'pending',

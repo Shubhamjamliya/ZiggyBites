@@ -859,10 +859,10 @@ export default function Inventory() {
     try {
       setIsUploadingBulk(true);
       const XLSX = await loadXlsx();
-      const headers = ["Name", "Description", "Price", "Category Name", "Food Type (Veg/Non-Veg)", "Preparation Time", "Is Available (TRUE/FALSE)", "Image URL", "Variants (Name:Price, Name:Price)"];
+      const headers = ["Name", "Description", "Price", "Category Name", "Food Type (Veg/Non-Veg)", "Tag (Healthy/Normal)", "Preparation Time", "Is Available (TRUE/FALSE)", "Image URL", "Variants (Name:Price, Name:Price)"];
       const rows = [
-        ["Chicken Dum Biryani", "Authentic slow-cooked chicken biryani with aromatic spices", 350, "Biryani", "Non-Veg", "30 mins", "TRUE", "https://res.cloudinary.com/demo/image/upload/sample.jpg", "Half:180, Full:350"],
-        ["Paneer Tikka", "Grilled cottage cheese cubes marinated in yogurt and spices", 280, "Starters", "Veg", "20 mins", "TRUE", "https://res.cloudinary.com/demo/image/upload/sample.jpg", ""]
+        ["Chicken Dum Biryani", "Authentic slow-cooked chicken biryani with aromatic spices", 350, "Biryani", "Non-Veg", "Normal", "30 mins", "TRUE", "https://res.cloudinary.com/demo/image/upload/sample.jpg", "Half:180, Full:350"],
+        ["Paneer Tikka", "Grilled cottage cheese cubes marinated in yogurt and spices", 280, "Starters", "Veg", "Healthy", "20 mins", "TRUE", "https://res.cloudinary.com/demo/image/upload/sample.jpg", ""]
       ];
 
 
@@ -945,6 +945,7 @@ export default function Inventory() {
               else if (header.includes("price")) item.price = Number(val) || 0;
               else if (header.includes("category")) item.categoryName = val;
               else if (header.includes("type")) item.foodType = val;
+              else if (header.includes("tag")) item.tag = String(val || "").trim().toLowerCase() === "healthy" ? "Healthy" : "Normal";
               else if (header.includes("prep")) item.preparationTime = val;
               else if (header.includes("available")) item.isAvailable = String(val).toLowerCase() === "true";
               else if (header.includes("image")) item.image = val;

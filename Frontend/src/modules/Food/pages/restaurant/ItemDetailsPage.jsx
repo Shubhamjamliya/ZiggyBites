@@ -16,7 +16,8 @@ import {
   ThumbsUp,
   ChevronLeft,
   ChevronRight,
-  Loader2
+  Loader2,
+  Leaf
 } from "lucide-react"
 import { Switch } from "@food/components/ui/switch"
 // Removed getAllFoods and saveFood - now using menu API
@@ -93,6 +94,7 @@ export default function ItemDetailsPage() {
   const [itemSizeUnit, setItemSizeUnit] = useState("piece")
   const [itemDescription, setItemDescription] = useState("")
   const [foodType, setFoodType] = useState("Non-Veg")
+  const [tag, setTag] = useState("Normal")
   const [basePrice, setBasePrice] = useState("")
   const [variants, setVariants] = useState([])
   const [preparationTime, setPreparationTime] = useState("")
@@ -148,6 +150,7 @@ export default function ItemDetailsPage() {
     setItemSizeUnit(item.itemSizeUnit || "piece")
     setItemDescription(item.description || "")
     setFoodType(item.foodType === "Veg" ? "Veg" : "Non-Veg")
+    setTag(item.tag === "Healthy" ? "Healthy" : "Normal")
     const itemVariants = getFoodVariants(item)
     setVariants(itemVariants.map(createVariantDraft))
     setBasePrice(itemVariants.length === 0 ? item.price?.toString() || "" : "")
@@ -704,6 +707,7 @@ export default function ItemDetailsPage() {
           variants: variantPayload,
           image: allImageUrls.length > 0 ? allImageUrls[0] : "",
           foodType: foodType,
+          tag: tag === "Healthy" ? "Healthy" : "Normal",
           isAvailable: isInStock,
           preparationTime: preparationTime || "",
           categoryId: categoryId || undefined,
@@ -726,6 +730,7 @@ export default function ItemDetailsPage() {
           variants: variantPayload,
           image: allImageUrls.length > 0 ? allImageUrls[0] : "",
           foodType: foodType,
+          tag: tag === "Healthy" ? "Healthy" : "Normal",
           isAvailable: isInStock,
           preparationTime: preparationTime || "",
           categoryId: categoryId || undefined,
@@ -1045,6 +1050,7 @@ export default function ItemDetailsPage() {
             {/* Dietary Options */}
             <div className="flex gap-2 mt-3">
               <button
+                type="button"
                 onClick={() => setFoodType("Veg")}
                 className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${foodType === "Veg"
                   ? "border-green-600 border-2 text-green-600"
@@ -1056,6 +1062,7 @@ export default function ItemDetailsPage() {
               </button>
               {restaurantProfile?.pureVegRestaurant !== true && (
                 <button
+                  type="button"
                   onClick={() => setFoodType("Non-Veg")}
                   className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${foodType === "Non-Veg"
                     ? "border-red-600 border-2 text-red-600"
@@ -1066,6 +1073,41 @@ export default function ItemDetailsPage() {
                   <span>Non-Veg</span>
                 </button>
               )}
+            </div>
+
+            {/* Listing / Healthy Tag Options */}
+            <div className="mt-4">
+              <label className="block text-sm font-medium text-gray-900 mb-1.5">
+                Food Listing Tag
+              </label>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setTag("Normal")}
+                  className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${tag === "Normal"
+                    ? "border-slate-800 border-2 text-slate-800 bg-slate-50 font-semibold"
+                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                    }`}
+                >
+                  {tag === "Normal" && <Check className="w-4 h-4" />}
+                  <span>Normal</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTag("Healthy")}
+                  className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${tag === "Healthy"
+                    ? "border-emerald-600 border-2 text-emerald-600 bg-emerald-50 font-semibold"
+                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                    }`}
+                >
+                  {tag === "Healthy" && <Check className="w-4 h-4" />}
+                  <Leaf className="w-4 h-4 text-emerald-600" />
+                  <span>Healthy Food</span>
+                </button>
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                Items marked as "Healthy Food" appear in the Healthy category and dietary discovery feeds.
+              </p>
             </div>
           </div>
 

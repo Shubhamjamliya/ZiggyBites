@@ -23,6 +23,7 @@ import {
   MessageSquare,
   FileText,
   Send,
+  RefreshCw,
 } from "lucide-react";
 import { toast } from "sonner";
 import BottomNavOrders from "@food/components/restaurant/BottomNavOrders";
@@ -1854,7 +1855,16 @@ export default function OrdersMain() {
   }, []);
 
   const [ordersRefreshToken, setOrdersRefreshToken] = useState(0);
+  const [isManualRefreshing, setIsManualRefreshing] = useState(false);
   const requestOrdersRefresh = () => setOrdersRefreshToken((t) => t + 1);
+
+  const handleManualRefresh = async () => {
+    if (isManualRefreshing) return;
+    setIsManualRefreshing(true);
+    requestOrdersRefresh();
+    // Give visual feedback for 1.2s then stop spinning
+    setTimeout(() => setIsManualRefreshing(false), 1200);
+  };
 
   // Check for confirmed orders that haven't been shown in popup yet, or scheduled orders whose time has come
   useEffect(() => {
@@ -2779,6 +2789,20 @@ export default function OrdersMain() {
       {/* Restaurant Navbar - Sticky at top */}
       <div className="sticky top-0 z-50 bg-white">
         <RestaurantNavbar showNotifications={true} />
+        {/* Refresh bar below navbar */}
+        <div className="flex items-center justify-end px-4 py-1.5 border-b border-gray-100 bg-white">
+          <button
+            id="kitchen-refresh-btn"
+            onClick={handleManualRefresh}
+            disabled={isManualRefreshing}
+            className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 active:scale-95 transition-all"
+          >
+            <RefreshCw
+              className={`w-3.5 h-3.5 ${isManualRefreshing ? 'animate-spin text-[#B80B3D]' : 'text-gray-500'}`}
+            />
+            {isManualRefreshing ? 'Refreshing...' : 'Refresh'}
+          </button>
+        </div>
       </div>
 
       {/* Profile Update Pending Banner */}

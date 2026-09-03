@@ -20,7 +20,10 @@ import {
   CircleSlash,
   Loader2,
   Clock,
-  Calendar
+  Calendar,
+  Copy,
+  Send,
+  Mail
 } from "lucide-react"
 import AnimatedPage from "@food/components/user/AnimatedPage"
 import { Card, CardContent } from "@food/components/ui/card"
@@ -541,6 +544,7 @@ export default function OrderTracking() {
   const [resolvedLookupId, setResolvedLookupId] = useState("")
   const [timerNow, setTimerNow] = useState(Date.now())
   const [cancelSecondsRemaining, setCancelSecondsRemaining] = useState(0)
+  const [showShareSheet, setShowShareSheet] = useState(false)
 
   useEffect(() => {
     if (!order?.createdAt) return;
@@ -1336,24 +1340,32 @@ export default function OrderTracking() {
     }
   };
 
-  const handleShare = async () => {
+  const handleShare = () => {
+    setShowShareSheet(true);
+  };
+
+  const copyShareLink = async () => {
     try {
-      if (navigator.share) {
-        await navigator.share({
-          title: `Track my order from ${order?.restaurant || companyName}`,
-          text: `Hey! Track my order from ${order?.restaurant || companyName} with ID #${order?.orderId || order?.id}.`,
-          url: window.location.href,
-        });
-      } else {
-        await navigator.clipboard.writeText(window.location.href);
-        toast.success("Tracking link copied to clipboard!");
-      }
-    } catch (error) {
-      if (error.name !== 'AbortError') {
-        debugError('Error sharing:', error);
-        toast.error("Failed to share link");
-      }
+      await navigator.clipboard.writeText(window.location.href);
+      toast.success("Tracking link copied!");
+      setShowShareSheet(false);
+    } catch {
+      toast.error("Failed to copy link");
     }
+  };
+
+  const openShareTarget = (target) => {
+    const url = encodeURIComponent(window.location.href);
+    const text = encodeURIComponent(
+      `Track my order from ${order?.restaurant || companyName} (ID #${order?.orderId || order?.id}): ${window.location.href}`
+    );
+    const links = {
+      whatsapp: `https://wa.me/?text=${text}`,
+      telegram: `https://t.me/share/url?url=${url}&text=${encodeURIComponent(`Track my order from ${order?.restaurant || companyName}`)}`,
+      email: `mailto:?subject=${encodeURIComponent(`Track my order`)}&body=${text}`,
+    };
+    if (links[target]) window.open(links[target], '_blank');
+    setShowShareSheet(false);
   };
 
   const handleRefresh = async () => {
@@ -1598,6 +1610,7 @@ export default function OrderTracking() {
           </Link>
           <h2 className="font-semibold text-lg">{order.restaurant}</h2>
           <motion.button
+            id="order-tracking-share-btn"
             className="w-10 h-10 flex items-center justify-center cursor-pointer"
             whileTap={{ scale: 0.9 }}
             onClick={handleShare}
@@ -2524,6 +2537,87 @@ export default function OrderTracking() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Share Sheet Bottom Modal */}
+      <AnimatePresence>
+        {showShareSheet && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm"
+              onClick={() => setShowShareSheet(false)}
+            />
+            <motion.div
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: "spring", stiffness: 400, damping: 35 }}
+              className="fixed bottom-0 left-0 right-0 z-50 bg-white dark:bg-[#141414] rounded-t-[28px] px-5 pt-4 pb-8 shadow-2xl"
+            >
+              {/* Drag Handle */}
+              <div className="w-10 h-1 bg-gray-200 dark:bg-gray-700 rounded-full mx-auto mb-5" />
+
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-base font-black text-gray-900 dark:text-white">Share Tracking Link</h3>
+                <button
+                  onClick={() => setShowShareSheet(false)}
+                  className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Tracking URL preview */}
+              <div className="flex items-center gap-2 bg-gray-50 dark:bg-gray-800/60 border border-gray-100 dark:border-gray-800 rounded-xl px-3 py-2 mb-4">
+                <span className="text-xs text-gray-500 dark:text-gray-400 truncate flex-1 font-mono">
+                  {window.location.href}
+                </span>
+              </div>
+
+              <div className="space-y-2">
+                <button
+                  className="w-full flex items-center gap-3 px-3 py-3 rounded-xl border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 text-left transition-colors"
+                  onClick={() => openShareTarget("whatsapp")}
+                >
+                  <div className="w-9 h-9 rounded-xl bg-green-50 dark:bg-green-950/30 flex items-center justify-center">
+                    <MessageSquare className="h-5 w-5 text-green-600 dark:text-green-400" />
+                  </div>
+                  <span className="text-sm font-semibold text-gray-900 dark:text-white">WhatsApp</span>
+                </button>
+                <button
+                  className="w-full flex items-center gap-3 px-3 py-3 rounded-xl border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 text-left transition-colors"
+                  onClick={() => openShareTarget("telegram")}
+                >
+                  <div className="w-9 h-9 rounded-xl bg-blue-50 dark:bg-blue-950/30 flex items-center justify-center">
+                    <Send className="h-5 w-5 text-blue-500 dark:text-blue-400" />
+                  </div>
+                  <span className="text-sm font-semibold text-gray-900 dark:text-white">Telegram</span>
+                </button>
+                <button
+                  className="w-full flex items-center gap-3 px-3 py-3 rounded-xl border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 text-left transition-colors"
+                  onClick={() => openShareTarget("email")}
+                >
+                  <div className="w-9 h-9 rounded-xl bg-red-50 dark:bg-red-950/30 flex items-center justify-center">
+                    <Mail className="h-5 w-5 text-red-500 dark:text-red-400" />
+                  </div>
+                  <span className="text-sm font-semibold text-gray-900 dark:text-white">Email</span>
+                </button>
+                <button
+                  className="w-full flex items-center gap-3 px-3 py-3 rounded-xl border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 text-left transition-colors"
+                  onClick={copyShareLink}
+                >
+                  <div className="w-9 h-9 rounded-xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+                    <Copy className="h-5 w-5 text-gray-600 dark:text-gray-300" />
+                  </div>
+                  <span className="text-sm font-semibold text-gray-900 dark:text-white">Copy link</span>
+                </button>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

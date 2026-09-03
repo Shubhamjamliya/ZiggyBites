@@ -18,10 +18,27 @@ import { useLocation as useUserLocation } from "@food/hooks/useLocation";
 import { useSubscriptions } from "@food/context/SubscriptionsContext";
 import { DEFAULT_APP_CUSTOMIZATION, loadAppCustomization } from "@food/utils/appCustomization";
 import { toast } from "sonner";
+import { Button } from "@food/components/ui/button";
+import { motion } from "framer-motion";
 
 const RUPEE_SYMBOL = "\u20B9";
 const SUBSCRIPTION_GST_RATE = 5;
 const SUBSCRIPTION_DELIVERY_FEE_PER_DAY = 10;
+
+const formatSubscriptionId = (subscriptionOrId) => {
+  if (!subscriptionOrId) return "SUB-000000";
+  if (typeof subscriptionOrId === "object") {
+    if (subscriptionOrId.shortId) return subscriptionOrId.shortId;
+    if (subscriptionOrId.subscriptionCode) return subscriptionOrId.subscriptionCode;
+    const raw = subscriptionOrId.subscriptionId || subscriptionOrId._id || subscriptionOrId.id;
+    return formatSubscriptionId(raw);
+  }
+  const str = String(subscriptionOrId).trim();
+  if (str.startsWith("SUB-") && str.length <= 12) return str;
+  const clean = str.replace(/[^a-zA-Z0-9]/g, "");
+  const last6 = clean.slice(-6).toUpperCase();
+  return `SUB-${last6 || "000000"}`;
+};
 
 const roundMoney = (value) => Math.round((Number(value) || 0) * 100) / 100;
 const formatCurrency = (value) =>
@@ -56,6 +73,7 @@ export default function SubscriptionCheckout() {
   const { refreshSubscriptions } = useSubscriptions();
 
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
+  const [completedSubscription, setCompletedSubscription] = useState(null);
   const [appCustomization, setAppCustomization] = useState(DEFAULT_APP_CUSTOMIZATION);
 
   const { dish, selectedMeals = [], subscriptionPlan, selectedDeliveryAddress } = location.state || {};
@@ -322,14 +340,20 @@ export default function SubscriptionCheckout() {
           );
         }
 
+        const verifiedSub = verifyResponse?.data?.data?.subscription || subscription;
+        setCompletedSubscription(verifiedSub || {
+          subscriptionId: subscription.subscriptionId || subscription._id,
+          totalAmount,
+          status: "active",
+          paymentStatus: "completed",
+        });
+        setIsPlacingOrder(false);
         toast.success("Subscription activated successfully.");
         try {
           await refreshSubscriptions();
         } catch {
           // ignore refresh error
         }
-        navigate("/food/user/profile/subscriptions", { replace: true });
-        setIsPlacingOrder(false);
         return;
       }
 
@@ -393,13 +417,20 @@ export default function SubscriptionCheckout() {
               );
             }
 
+            const verifiedSub = verifyResponse?.data?.data?.subscription || subscription;
+            setCompletedSubscription(verifiedSub || {
+              subscriptionId: subscription.subscriptionId || subscription._id,
+              totalAmount,
+              status: "active",
+              paymentStatus: "completed",
+            });
+            setIsPlacingOrder(false);
             toast.success("Subscription activated successfully.");
             try {
               await refreshSubscriptions();
             } catch {
               // ignore refresh error
             }
-            navigate("/food/user/profile/subscriptions", { replace: true });
           } catch (error) {
             if (error?.response?.status === 401) {
               toast.info("Please login to continue.");
@@ -453,6 +484,147 @@ export default function SubscriptionCheckout() {
       setIsPlacingOrder(false);
     }
   };
+
+  if (completedSubscription) {
+    const subId = formatSubscriptionId(
+      completedSubscription?.subscriptionId ||
+      completedSubscription?._id ||
+      completedSubscription?.id ||
+      completedSubscription?.shortId
+    );
+
+    return (
+      <div className="min-h-screen bg-[#fafafa] dark:bg-[#0a0a0a] text-gray-900 dark:text-white pb-12 font-sans transition-colors">
+        <header className="sticky top-0 z-50 border-b border-gray-100 dark:border-gray-800 bg-white/95 dark:bg-[#121212]/95 backdrop-blur-md px-4 py-4 flex items-center justify-between shadow-sm">
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => navigate("/food/user/profile/subscriptions", { replace: true })}
+              className="text-gray-800 dark:text-gray-200 p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800"
+              aria-label="Back"
+            >
+              <ArrowLeft className="h-6 w-6" />
+            </button>
+            <h1 className="text-lg font-bold tracking-tight">Plan details & payment</h1>
+          </div>
+        </header>
+
+        <main className="max-w-md mx-auto p-4 space-y-4">
+          <motion.div
+            initial={{ scale: 0.85, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ type: "spring", stiffness: 300, damping: 25 }}
+            className="text-center py-6 px-4 bg-white dark:bg-[#141414] rounded-[24px] shadow-sm border border-gray-100 dark:border-gray-800"
+          >
+            <div className="w-20 h-20 mx-auto rounded-full bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 flex items-center justify-center mb-4">
+              <CheckCircle2 className="w-12 h-12 text-emerald-600 dark:text-emerald-400" />
+            </div>
+
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-100/70 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-300 text-xs font-black uppercase tracking-wider mb-2">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              Payment Completed
+            </div>
+
+            <h2 className="text-2xl font-black text-gray-900 dark:text-white mt-1">
+              Subscription Activated!
+            </h2>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 max-w-[280px] mx-auto">
+              Your meal subscription is confirmed and scheduled.
+            </p>
+
+            <div className="mt-3 inline-block bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 px-3.5 py-1 rounded-full text-xs font-mono font-bold text-gray-700 dark:text-gray-300">
+              ID: {subId}
+            </div>
+          </motion.div>
+
+          {/* Subscription Summary Card */}
+          <div className="bg-white dark:bg-[#141414] rounded-[20px] p-5 shadow-sm border border-gray-100 dark:border-gray-800 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-gray-100 dark:border-gray-800">
+              <span className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                Plan Details
+              </span>
+              <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">
+                Completed
+              </span>
+            </div>
+
+            <div className="flex items-center gap-3.5">
+              <div className="w-14 h-14 rounded-2xl bg-orange-50 dark:bg-orange-950/30 border border-orange-100 dark:border-orange-900/30 overflow-hidden flex items-center justify-center shrink-0">
+                {dish?.image ? (
+                  <img
+                    src={dish.image}
+                    alt={dish?.name || "Dish"}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <span className="text-xl font-bold text-[#e3282c]">
+                    {dish?.name?.charAt(0) || "M"}
+                  </span>
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                <h3 className="font-bold text-sm text-gray-900 dark:text-white truncate">
+                  {dish?.name || "Subscription meal"}
+                </h3>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                  {days} Days Plan ({totalDeliveries} total deliveries)
+                </p>
+                {selectedMealLabel && (
+                  <span className="inline-block mt-1 text-[10px] font-bold text-[#e3282c] uppercase">
+                    {selectedMealLabel}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2.5 pt-2">
+              <div className="bg-gray-50 dark:bg-gray-800/50 p-2.5 rounded-xl">
+                <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400 block">
+                  Amount Paid
+                </span>
+                <span className="text-base font-bold text-gray-900 dark:text-white">
+                  ₹{Number(completedSubscription.totalAmount || totalAmount).toLocaleString("en-IN")}
+                </span>
+              </div>
+              <div className="bg-gray-50 dark:bg-gray-800/50 p-2.5 rounded-xl">
+                <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400 block">
+                  Payment Status
+                </span>
+                <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400">
+                  Completed
+                </span>
+              </div>
+            </div>
+
+            <div className="pt-2">
+              <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400 block mb-0.5">
+                Delivery Address
+              </span>
+              <p className="text-xs text-gray-700 dark:text-gray-300 line-clamp-2">
+                {addressLabel || "Standard delivery address"}
+              </p>
+            </div>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="space-y-2.5 pt-2">
+            <Button
+              onClick={() => navigate("/food/user/profile/subscriptions", { replace: true })}
+              className="w-full h-12 rounded-xl bg-[#e3282c] hover:bg-[#c92428] text-white text-sm font-bold shadow-md shadow-red-500/20 active:scale-[0.99] transition-all"
+            >
+              View My Subscriptions
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => navigate("/food/user", { replace: true })}
+              className="w-full h-11 rounded-xl text-xs font-bold border-gray-200 dark:border-gray-800 hover:bg-gray-100 dark:hover:bg-gray-800 active:scale-[0.99] transition-all"
+            >
+              Back to Home
+            </Button>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   if (!dish || !subscriptionPlan) {
     return (

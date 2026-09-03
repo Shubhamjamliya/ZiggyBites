@@ -47,6 +47,7 @@ import { toast } from "sonner";
 import Footer from "@food/components/user/Footer";
 import AddToCartButton from "@food/components/user/AddToCartButton";
 import { hasFoodVariants } from "@food/utils/foodVariants";
+import ItemVariantModal from "@food/components/user/ItemVariantModal";
 import OrderTrackingCard from "@food/components/user/OrderTrackingCard";
 import {
   CategoryChipRowSkeleton,
@@ -1088,7 +1089,12 @@ export default function Home() {
       event.preventDefault();
       event.stopPropagation();
 
-      if (appCustomization.normalOrderFlowEnabled === false || hasFoodVariants(item)) {
+      if (hasFoodVariants(item)) {
+        setVariantModalItem(item);
+        return;
+      }
+
+      if (appCustomization.normalOrderFlowEnabled === false) {
         openMealSelectionForHomeItem(item);
         return;
       }
@@ -1126,6 +1132,7 @@ export default function Home() {
   const [showToast, setShowToast] = useState(false);
   const [showManageCollections, setShowManageCollections] = useState(false);
   const [selectedRestaurantSlug, setSelectedRestaurantSlug] = useState(null);
+  const [variantModalItem, setVariantModalItem] = useState(null);
 
   // Memoize cartCount to prevent recalculation on every render - use cart directly
   const cartCount = useMemo(
@@ -3199,6 +3206,13 @@ export default function Home() {
       
       {/* Live order strip: only on homepage (not in UserLayout) */}
       <OrderTrackingCard hasBottomNav />
+
+      {/* Item Variant Modal */}
+      <ItemVariantModal
+        isOpen={!!variantModalItem}
+        onClose={() => setVariantModalItem(null)}
+        item={variantModalItem}
+      />
     </div>
   );
 }

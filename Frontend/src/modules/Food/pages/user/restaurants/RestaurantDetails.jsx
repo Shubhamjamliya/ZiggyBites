@@ -60,6 +60,7 @@ import {
 import fssaiLogo from "@food/assets/fssai.png"
 import { RestaurantDetailSkeleton } from "@food/components/ui/loading-skeletons"
 import MenuScanAnimation from "@food/components/user/MenuScanAnimation"
+import ItemVariantModal from "@food/components/user/ItemVariantModal"
 
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
@@ -149,6 +150,7 @@ function RestaurantDetailsContent() {
   const [visibleItemCount, setVisibleItemCount] = useState(20)
   const dishCardRefs = useRef({})
   const [showScanAnimation, setShowScanAnimation] = useState(true)
+  const [variantModalItem, setVariantModalItem] = useState(null)
 
   const getLineItemIdForDish = (item, variant = null) =>
     buildCartLineId(item?.id || item?._id || "", variant?.id || variant?._id || "")
@@ -2278,7 +2280,7 @@ function RestaurantDetailsContent() {
                           const currentQty = quantities[getLineItemIdForDish(item, v)] || 0
                           updateItemQuantity(item, Math.max(0, currentQty - 1), e, v)
                         } else {
-                          handleItemClick(item)
+                          setVariantModalItem(item)
                         }
                       } else {
                         updateItemQuantity(item, Math.max(0, quantity - 1), e)
@@ -2296,7 +2298,7 @@ function RestaurantDetailsContent() {
                     e.stopPropagation()
                     if (!shouldShowGrayscale) {
                       if (hasFoodVariants(item)) {
-                        handleItemClick(item)
+                        setVariantModalItem(item)
                       } else {
                         updateItemQuantity(item, quantity + 1, e)
                       }
@@ -2322,7 +2324,7 @@ function RestaurantDetailsContent() {
                   e.stopPropagation()
                   if (!shouldShowGrayscale) {
                     if (hasFoodVariants(item)) {
-                      handleItemClick(item)
+                      setVariantModalItem(item)
                     } else {
                       updateItemQuantity(item, 1, e)
                     }
@@ -3490,6 +3492,22 @@ function RestaurantDetailsContent() {
               </>
             )}
           </AnimatePresence>,
+          document.body
+        )}
+
+      {/* Item Detail Modal */}
+      {typeof window !== "undefined" &&
+        createPortal(
+          <ItemVariantModal
+            isOpen={!!variantModalItem}
+            onClose={() => setVariantModalItem(null)}
+            item={variantModalItem}
+            restaurant={restaurant}
+            onAddToCart={(dish, qty, variant, event) => {
+              const currentQty = quantities[getLineItemIdForDish(dish, variant)] || 0
+              updateItemQuantity(dish, currentQty + qty, event, variant)
+            }}
+          />,
           document.body
         )}
 

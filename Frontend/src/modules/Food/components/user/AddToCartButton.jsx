@@ -1,3 +1,4 @@
+import { useState } from "react"
 import { Plus, Minus } from "lucide-react"
 import { Button } from "@food/components/ui/button"
 import { useCart } from "@food/context/CartContext"
@@ -5,6 +6,7 @@ import { isModuleAuthenticated } from "@food/utils/auth"
 import { useNavigate, useLocation } from "react-router-dom"
 import { toast } from "sonner"
 import { hasFoodVariants } from "@food/utils/foodVariants"
+import ItemVariantModal from "@food/components/user/ItemVariantModal"
 
 export default function AddToCartButton({ item, className = "", onShowVariants }) {
   const { addToCart, isInCart, getCartItem, updateQuantity } = useCart()
@@ -13,6 +15,7 @@ export default function AddToCartButton({ item, className = "", onShowVariants }
   const navigate = useNavigate()
   const location = useLocation()
   const isCustomisable = hasFoodVariants(item)
+  const [showVariantModal, setShowVariantModal] = useState(false)
 
   const handleAddToCart = (e) => {
     e.preventDefault()
@@ -29,11 +32,8 @@ export default function AddToCartButton({ item, className = "", onShowVariants }
         onShowVariants(item)
         return
       }
-      const restaurantSlug = item?.restaurantSlug || item?.restaurantId || item?.restaurant
-      if (restaurantSlug) {
-        navigate(`/food/restaurants/${restaurantSlug}`)
-        return
-      }
+      setShowVariantModal(true)
+      return
     }
 
     addToCart(item)
@@ -42,8 +42,12 @@ export default function AddToCartButton({ item, className = "", onShowVariants }
   const handleIncrease = (e) => {
     e.preventDefault()
     e.stopPropagation()
-    if (isCustomisable && onShowVariants) {
-      onShowVariants(item)
+    if (isCustomisable) {
+      if (onShowVariants) {
+        onShowVariants(item)
+        return
+      }
+      setShowVariantModal(true)
       return
     }
     updateQuantity(item.id, (cartItem?.quantity || 0) + 1)
@@ -89,19 +93,27 @@ export default function AddToCartButton({ item, className = "", onShowVariants }
   }
 
   return (
-    <div className={`flex flex-col items-center gap-0.5 ${className}`}>
-      <Button
-        size="sm"
-        onClick={handleAddToCart}
-        className="bg-primary hover:bg-secondary text-white font-bold shadow-md transition-all active:scale-95"
-      >
-        Add to Cart
-      </Button>
-      {isCustomisable && (
-        <span className="text-[9px] font-semibold text-gray-500 uppercase tracking-wider">
-          Customisable
-        </span>
-      )}
-    </div>
+    <>
+      <div className={`flex flex-col items-center gap-0.5 ${className}`}>
+        <Button
+          size="sm"
+          onClick={handleAddToCart}
+          className="bg-primary hover:bg-secondary text-white font-bold shadow-md transition-all active:scale-95"
+        >
+          Add to Cart
+        </Button>
+        {isCustomisable && (
+          <span className="text-[9px] font-semibold text-gray-500 uppercase tracking-wider">
+            Customisable
+          </span>
+        )}
+      </div>
+
+      <ItemVariantModal
+        isOpen={showVariantModal}
+        onClose={() => setShowVariantModal(false)}
+        item={item}
+      />
+    </>
   )
 }

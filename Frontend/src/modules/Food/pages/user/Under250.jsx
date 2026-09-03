@@ -20,6 +20,8 @@ import { isModuleAuthenticated } from "@food/utils/auth"
 import { flattenMenuItems, getMenuFromResponse } from "@food/utils/menuItems"
 import { calculateDistance, formatDistance } from "@food/utils/common"
 import { getRestaurantAvailabilityStatus } from "@food/utils/restaurantAvailability"
+import ItemVariantModal from "@food/components/user/ItemVariantModal"
+import { getFoodVariants, hasFoodVariants } from "@food/utils/foodVariants"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -62,7 +64,7 @@ const readUnder250Filters = () => {
 
 
 
-const HorizontalMenuScroller = ({ restaurant, quantities, isClosed, handleItemClick, RUPEE_SYMBOL }) => {
+const HorizontalMenuScroller = ({ restaurant, quantities, isClosed, handleItemClick, handleVariantModalOpen, RUPEE_SYMBOL }) => {
   const [visibleCount, setVisibleCount] = useState(8);
   const observerTarget = useRef(null);
 
@@ -229,7 +231,11 @@ const HorizontalMenuScroller = ({ restaurant, quantities, isClosed, handleItemCl
                     className="rounded-xl h-8 sm:h-9 md:h-10 px-6 sm:px-8 text-[14px] sm:text-[15px] font-bold uppercase transition-all duration-300 active:scale-95 flex items-center justify-center bg-white dark:bg-black border-primary text-primary hover:bg-primary/5 shadow-sm"
                     onClick={(e) => {
                       e.stopPropagation()
-                      handleItemClick(item, restaurant)
+                      if (hasFoodVariants(item)) {
+                        handleVariantModalOpen ? handleVariantModalOpen(item, restaurant) : handleItemClick(item, restaurant)
+                      } else {
+                        handleItemClick(item, restaurant)
+                      }
                     }}
                   >
                     ADD
@@ -283,6 +289,7 @@ export default function Under250() {
   const [showItemDetail, setShowItemDetail] = useState(false)
   const [selectedItem, setSelectedItem] = useState(null)
   const [itemDetailQuantity, setItemDetailQuantity] = useState(1)
+  const [variantModalData, setVariantModalData] = useState(null)
   const [showShareOptions, setShowShareOptions] = useState(false)
   const [quantities, setQuantities] = useState({})
   const [bookmarkedItems, setBookmarkedItems] = useState(new Set())
@@ -1552,6 +1559,7 @@ export default function Under250() {
                       quantities={quantities}
                       isClosed={isClosed}
                       handleItemClick={handleItemClick}
+                      handleVariantModalOpen={(item, rest) => setVariantModalData({ item, restaurant: rest })}
                       RUPEE_SYMBOL={RUPEE_SYMBOL}
                     />
                   </div>
@@ -1960,7 +1968,12 @@ export default function Under250() {
         )}
       </AnimatePresence>
 
-
+      <ItemVariantModal
+        isOpen={!!variantModalData}
+        onClose={() => setVariantModalData(null)}
+        item={variantModalData?.item}
+        restaurant={variantModalData?.restaurant}
+      />
     </div>
   )
 }

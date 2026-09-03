@@ -20,7 +20,6 @@ import {
   AlertTriangle,
   Settings as SettingsIcon,
   Power,
-  ShoppingCart,
   MapPin,
   Share2,
   Utensils,

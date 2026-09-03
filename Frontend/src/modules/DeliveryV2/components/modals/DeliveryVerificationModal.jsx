@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   ShieldCheck, DollarSign, CheckCircle2, 
-  QrCode, Loader2, Info, X, RefreshCw, Package
+  QrCode, Loader2, Info, X, RefreshCw, Package, AlertCircle
 } from 'lucide-react';
 import { deliveryAPI } from '@food/api';
 import { useDeliveryStore } from '@/modules/DeliveryV2/store/useDeliveryStore';
@@ -53,6 +53,7 @@ const OtpModal = ({ order, onVerified, onClose }) => {
   const [otp, setOtp] = useState(['', '', '', '']);
   const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
   const [isOtpVerified, setIsOtpVerified] = useState(false);
+  const [otpError, setOtpError] = useState('');
   const inputRefs = [useRef(), useRef(), useRef(), useRef()];
 
   const orderId = order.orderId || order._id || 'ORD';
@@ -60,14 +61,23 @@ const OtpModal = ({ order, onVerified, onClose }) => {
 
   const verifyOtp = async (codeToVerify = null) => {
     const otpString = typeof codeToVerify === 'string' ? codeToVerify : otp.join('');
-    if (otpString.length < 4 || isVerifyingOtp || isOtpVerified || isAlreadyVerified) return;
+    
+    // Client-side format validation: require complete 4 numeric digits
+    if (!otpString || otpString.length !== 4 || !/^\d{4}$/.test(otpString)) {
+      setOtpError('Please enter the complete 4-digit Handover Code');
+      return false;
+    }
+
+    if (isVerifyingOtp || isOtpVerified || isAlreadyVerified) return false;
     setIsVerifyingOtp(true);
+    setOtpError('');
     // Dismiss virtual keyboard on completion
     inputRefs.forEach((r) => r.current?.blur?.());
 
     try {
       const res = await deliveryAPI.verifyDropOtp(orderId, otpString);
       if (res?.data?.success) {
+        setOtpError('');
         // Update local order state in the store so it persists if modal is toggled
         try {
           const { setActiveOrder, activeOrder: currentOrder } = useDeliveryStore.getState();
@@ -90,16 +100,20 @@ const OtpModal = ({ order, onVerified, onClose }) => {
 
         setIsOtpVerified(true);
         setTimeout(() => onVerified(otpString), 500);
+        return true;
       }
+      return false;
     } catch (err) {
-      toast.error(
+      const errorMessage =
         err?.response?.data?.error ||
-          err?.response?.data?.message ||
-          "Invalid OTP entered",
-      );
+        err?.response?.data?.message ||
+        'Invalid Handover Code. Please verify with customer.';
+      
+      setOtpError(errorMessage);
+      toast.error(errorMessage);
       setOtp(['', '', '', '']);
       setTimeout(() => inputRefs[0].current?.focus?.(), 100);
-      throw err;
+      return false;
     } finally {
       setIsVerifyingOtp(false);
     }
@@ -117,6 +131,8 @@ const OtpModal = ({ order, onVerified, onClose }) => {
   }, [order?.deliveryVerification?.dropOtp?.code]);
 
   const handleOtpChange = (index, value) => {
+    if (otpError) setOtpError('');
+
     // Handle 4-digit paste
     if (value && value.length > 1) {
       const digits = value.replace(/\D/g, '').slice(0, 4).split('');
@@ -150,6 +166,7 @@ const OtpModal = ({ order, onVerified, onClose }) => {
   };
 
   const handleKeyDown = (index, e) => {
+    if (otpError) setOtpError('');
     if (e.key === 'Backspace') {
       if (!otp[index] && index > 0) {
         const newOtp = [...otp];
@@ -174,7 +191,9 @@ const OtpModal = ({ order, onVerified, onClose }) => {
         <div className="w-12 h-1.5 bg-gray-200 rounded-full mx-auto mb-4" />
         <div className="flex justify-between items-center mb-3">
            <div className="flex items-center gap-3">
-             <div className={`w-11 h-11 rounded-2xl flex items-center justify-center ${isOtpVerified ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-500'}`}>
+             <div className={`w-11 h-11 rounded-2xl flex items-center justify-center ${
+               otpError ? 'bg-red-100 text-red-600' : isOtpVerified ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-500'
+             }`}>
                <ShieldCheck className="w-6 h-6" />
              </div>
              <div>
@@ -209,23 +228,45 @@ const OtpModal = ({ order, onVerified, onClose }) => {
               value={digit}
               onChange={(e) => handleOtpChange(i, e.target.value)}
               onKeyDown={(e) => handleKeyDown(i, e)}
-              className={`w-12 sm:w-14 h-14 sm:h-16 bg-gray-50 border-2 rounded-2xl text-center text-2xl sm:text-3xl font-bold transition-all shrink-0 focus:outline-none ${
-                isOtpVerified ? 'border-green-500 bg-green-50 text-green-700' : 'border-gray-200 focus:border-green-600 text-gray-800'
+              className={`w-12 sm:w-14 h-14 sm:h-16 border-2 rounded-2xl text-center text-2xl sm:text-3xl font-bold transition-all shrink-0 focus:outline-none ${
+                otpError
+                  ? 'border-red-500 bg-red-50/70 text-red-700 focus:border-red-600 focus:ring-2 focus:ring-red-100'
+                  : isOtpVerified
+                  ? 'border-green-500 bg-green-50 text-green-700'
+                  : 'bg-gray-50 border-gray-200 focus:border-green-600 text-gray-800'
               }`}
             />
           ))}
         </div>
 
-        <p className="text-center text-xs text-gray-500 mb-5">
-          {isOtpVerified ? "✓ Handover code verified" : isVerifyingOtp ? "Verifying code..." : "Enter 4-digit code provided by customer"}
-        </p>
+        <div className="min-h-[28px] mb-4 flex items-center justify-center">
+          {otpError ? (
+            <motion.div 
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl bg-red-50 border border-red-200 text-red-600 text-xs font-semibold"
+            >
+              <AlertCircle className="w-3.5 h-3.5 shrink-0 text-red-500" />
+              <span>{otpError}</span>
+            </motion.div>
+          ) : (
+            <p className="text-center text-xs text-gray-500">
+              {isOtpVerified ? "✓ Handover code verified" : isVerifyingOtp ? "Verifying code..." : "Enter 4-digit code provided by customer"}
+            </p>
+          )}
+        </div>
 
         <ActionSlider 
           key="action-otp"
           label={isVerifyingOtp ? "Verifying..." : isAlreadyVerified ? "Code already verified ✓" : "Slide to Verify OTP"} 
           successLabel="Verified!"
           disabled={otp.some(d => !d) || isVerifyingOtp || isOtpVerified || isAlreadyVerified}
-          onConfirm={() => verifyOtp()}
+          onConfirm={async () => {
+            const ok = await verifyOtp();
+            if (!ok) {
+              throw new Error('Verification failed');
+            }
+          }}
           color="bg-gray-900"
         />
       </motion.div>

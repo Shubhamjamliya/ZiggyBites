@@ -31,10 +31,28 @@ const installStoragePatch = () => {
   localStorageRef.getItem = (key) => {
     if (isAccessTokenKey(key)) {
       const moduleName = getModuleFromStorageKey(key);
-      return accessTokenStore.get(moduleName) || null;
+      let token = accessTokenStore.get(moduleName);
+      if (!token) {
+        token = originalGetItem(key);
+        if (!token && window.sessionStorage) {
+          try {
+            token = window.sessionStorage.getItem(key);
+          } catch {}
+        }
+        if (token) {
+          accessTokenStore.set(moduleName, token);
+        }
+      }
+      return token || null;
     }
     if (isRefreshTokenKey(key)) {
-      return null;
+      let token = originalGetItem(key);
+      if (!token && window.sessionStorage) {
+        try {
+          token = window.sessionStorage.getItem(key);
+        } catch {}
+      }
+      return token || null;
     }
     return originalGetItem(key);
   };
@@ -42,11 +60,41 @@ const installStoragePatch = () => {
   localStorageRef.setItem = (key, value) => {
     if (isAccessTokenKey(key)) {
       const moduleName = getModuleFromStorageKey(key);
-      if (value) accessTokenStore.set(moduleName, String(value));
-      else accessTokenStore.delete(moduleName);
+      if (value) {
+        accessTokenStore.set(moduleName, String(value));
+        originalSetItem(key, String(value));
+        if (window.sessionStorage) {
+          try {
+            window.sessionStorage.setItem(key, String(value));
+          } catch {}
+        }
+      } else {
+        accessTokenStore.delete(moduleName);
+        originalRemoveItem(key);
+        if (window.sessionStorage) {
+          try {
+            window.sessionStorage.removeItem(key);
+          } catch {}
+        }
+      }
       return;
     }
     if (isRefreshTokenKey(key)) {
+      if (value) {
+        originalSetItem(key, String(value));
+        if (window.sessionStorage) {
+          try {
+            window.sessionStorage.setItem(key, String(value));
+          } catch {}
+        }
+      } else {
+        originalRemoveItem(key);
+        if (window.sessionStorage) {
+          try {
+            window.sessionStorage.removeItem(key);
+          } catch {}
+        }
+      }
       return;
     }
     return originalSetItem(key, value);
@@ -54,19 +102,27 @@ const installStoragePatch = () => {
 
   localStorageRef.removeItem = (key) => {
     if (isAccessTokenKey(key)) {
-      accessTokenStore.delete(getModuleFromStorageKey(key));
+      const moduleName = getModuleFromStorageKey(key);
+      accessTokenStore.delete(moduleName);
+      originalRemoveItem(key);
+      if (window.sessionStorage) {
+        try {
+          window.sessionStorage.removeItem(key);
+        } catch {}
+      }
       return;
     }
     if (isRefreshTokenKey(key)) {
+      originalRemoveItem(key);
+      if (window.sessionStorage) {
+        try {
+          window.sessionStorage.removeItem(key);
+        } catch {}
+      }
       return;
     }
     return originalRemoveItem(key);
   };
-
-  try {
-    ['accessToken', 'refreshToken', 'user_accessToken', 'user_refreshToken', 'admin_accessToken', 'admin_refreshToken', 'restaurant_accessToken', 'restaurant_refreshToken', 'delivery_accessToken', 'delivery_refreshToken'].forEach((key) => originalRemoveItem(key));
-  } catch {
-  }
 
   storagePatched = true;
 };
@@ -76,27 +132,69 @@ installStoragePatch();
 export const setAccessToken = (moduleName, token) => {
   installStoragePatch();
   const safeModule = String(moduleName || 'user').trim() || 'user';
+  const key = safeModule === 'user' ? 'accessToken' : `${safeModule}_accessToken`;
   if (!token) {
     accessTokenStore.delete(safeModule);
+    try {
+      if (typeof window !== 'undefined') {
+        if (window.localStorage) window.localStorage.removeItem(key);
+        if (window.sessionStorage) window.sessionStorage.removeItem(key);
+      }
+    } catch {}
     return;
   }
-  accessTokenStore.set(safeModule, String(token));
+  const strToken = String(token);
+  accessTokenStore.set(safeModule, strToken);
+  try {
+    if (typeof window !== 'undefined') {
+      if (window.localStorage) window.localStorage.setItem(key, strToken);
+      if (window.sessionStorage) window.sessionStorage.setItem(key, strToken);
+    }
+  } catch {}
 };
 
 export const getAccessToken = (moduleName) => {
   installStoragePatch();
   const safeModule = String(moduleName || 'user').trim() || 'user';
-  return accessTokenStore.get(safeModule) || null;
+  let token = accessTokenStore.get(safeModule);
+  if (!token && typeof window !== 'undefined') {
+    const key = safeModule === 'user' ? 'accessToken' : `${safeModule}_accessToken`;
+    try {
+      if (window.sessionStorage) token = window.sessionStorage.getItem(key);
+      if (!token && window.localStorage) token = window.localStorage.getItem(key);
+      if (token) {
+        accessTokenStore.set(safeModule, token);
+      }
+    } catch {}
+  }
+  return token || null;
 };
 
 export const clearAccessToken = (moduleName) => {
   installStoragePatch();
-  accessTokenStore.delete(String(moduleName || 'user').trim() || 'user');
+  const safeModule = String(moduleName || 'user').trim() || 'user';
+  accessTokenStore.delete(safeModule);
+  const key = safeModule === 'user' ? 'accessToken' : `${safeModule}_accessToken`;
+  try {
+    if (typeof window !== 'undefined') {
+      if (window.localStorage) window.localStorage.removeItem(key);
+      if (window.sessionStorage) window.sessionStorage.removeItem(key);
+    }
+  } catch {}
 };
 
 export const clearAllAccessTokens = () => {
   installStoragePatch();
   accessTokenStore.clear();
+  try {
+    if (typeof window !== 'undefined') {
+      ['admin', 'restaurant', 'delivery', 'user'].forEach((m) => {
+        const k = m === 'user' ? 'accessToken' : `${m}_accessToken`;
+        if (window.localStorage) window.localStorage.removeItem(k);
+        if (window.sessionStorage) window.sessionStorage.removeItem(k);
+      });
+    }
+  } catch {}
 };
 
 export const hasStoredSession = (moduleName) => {
@@ -111,20 +209,9 @@ export const hasStoredSession = (moduleName) => {
 
 export const removeLegacyStoredTokens = (moduleName) => {
   installStoragePatch();
-  if (typeof window === 'undefined' || !window.localStorage) return;
-  const safeModule = String(moduleName || 'user').trim() || 'user';
-  const legacyKeys = [`${safeModule}_accessToken`, `${safeModule}_refreshToken`];
-  if (safeModule === 'user') {
-    legacyKeys.push('accessToken', 'refreshToken');
-  }
-  legacyKeys.forEach((key) => {
-    try {
-      window.localStorage.removeItem(key);
-    } catch {
-    }
-  });
 };
 
 export const bootstrapTokenStore = () => {
   installStoragePatch();
 };
+

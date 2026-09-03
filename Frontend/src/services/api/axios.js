@@ -193,4 +193,41 @@ apiClient.interceptors.request.use(
   (err) => Promise.reject(err),
 );
 
+apiClient.interceptors.response.use(
+  (response) => response,
+  async (err) => {
+    const original = err?.config;
+    if (err?.response?.status !== 401 || !original || original._retry) {
+      return Promise.reject(err);
+    }
+    const moduleName = original.contextModule || getModuleFromUrl(original.url);
+    if (!hasStoredSession(moduleName)) {
+      return Promise.reject(err);
+    }
+
+    original._retry = true;
+    try {
+      const refreshUrl = baseURL ? `${baseURL}/food/auth/refresh-token` : '/api/v1/food/auth/refresh-token';
+      const { data } = await axios.post(refreshUrl, {}, { timeout: 10000, withCredentials: true });
+      const newAccessToken = data?.data?.accessToken || data?.accessToken;
+
+      if (newAccessToken) {
+        setAccessToken(moduleName, newAccessToken);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('authRefreshed', {
+            detail: { module: moduleName, token: newAccessToken },
+          }));
+        }
+        original.headers.Authorization = `Bearer ${newAccessToken}`;
+        return apiClient(original);
+      }
+    } catch {
+      return Promise.reject(err);
+    }
+
+    return Promise.reject(err);
+  },
+);
+
 export default apiClient;
+

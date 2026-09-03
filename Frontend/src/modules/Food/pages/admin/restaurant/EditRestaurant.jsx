@@ -95,27 +95,41 @@ async function loadGooglePlaces() {
 
   window.gm_authFailure = () => {}
 
-  const existing = document.getElementById("admin-google-maps-script")
+  const existing =
+    document.getElementById("admin-google-maps-script") ||
+    document.getElementById("google-maps-sdk") ||
+    document.querySelector('script[src*="maps.googleapis.com/maps/api/js"]')
+
   if (existing) {
-    await new Promise((resolve, reject) => {
+    await new Promise((resolve) => {
       if (window.google?.maps?.places?.Autocomplete) {
         resolve()
         return
       }
       existing.addEventListener("load", resolve, { once: true })
-      existing.addEventListener("error", reject, { once: true })
+      existing.addEventListener("error", resolve, { once: true })
+      const interval = setInterval(() => {
+        if (window.google?.maps?.places?.Autocomplete) {
+          clearInterval(interval)
+          resolve()
+        }
+      }, 100)
+      setTimeout(() => {
+        clearInterval(interval)
+        resolve()
+      }, 5000)
     })
     return !!window.google?.maps?.places?.Autocomplete
   }
 
-  await new Promise((resolve, reject) => {
+  await new Promise((resolve) => {
     const script = document.createElement("script")
     script.id = "admin-google-maps-script"
     script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&v=weekly`
     script.async = true
     script.defer = true
     script.onload = resolve
-    script.onerror = reject
+    script.onerror = resolve
     document.head.appendChild(script)
   })
 
@@ -210,11 +224,21 @@ export default function EditRestaurant() {
   }, [])
 
   useEffect(() => {
-    if (!locationSearchInputRef.current) return
+    if (loading) return
     if (placesAutocompleteRef.current) return
 
     let cancelled = false
     const init = async () => {
+      // Wait for input element to mount in DOM after loading finishes
+      let inputEl = locationSearchInputRef.current
+      for (let i = 0; i < 30 && !inputEl; i++) {
+        await new Promise((r) => setTimeout(r, 50))
+        if (cancelled) return
+        inputEl = locationSearchInputRef.current
+      }
+      if (!inputEl || cancelled) return
+      if (placesAutocompleteRef.current) return
+
       setLocationError("")
       const loaded = await loadGooglePlaces()
       if (cancelled) return
@@ -223,14 +247,15 @@ export default function EditRestaurant() {
         return
       }
 
-      placesAutocompleteRef.current = new window.google.maps.places.Autocomplete(
-        locationSearchInputRef.current,
+      const autocomplete = new window.google.maps.places.Autocomplete(
+        inputEl,
         {
           fields: ["formatted_address", "address_components", "geometry"],
           // Omit `types: ["geocode"]` — that biases Autocomplete toward Geocoding API (geocode/json) traffic.
           componentRestrictions: { country: "in" },
         },
       )
+      placesAutocompleteRef.current = autocomplete
 
       const parsePlace = (place) => {
         const formattedAddress = place?.formatted_address || ""
@@ -259,8 +284,8 @@ export default function EditRestaurant() {
         }
       }
 
-      placesAutocompleteRef.current.addListener("place_changed", () => {
-        const place = placesAutocompleteRef.current.getPlace()
+      autocomplete.addListener("place_changed", () => {
+        const place = autocomplete.getPlace()
         const parsed = parsePlace(place)
         setLocationForm((prev) => ({
           ...prev,
@@ -276,12 +301,15 @@ export default function EditRestaurant() {
       })
     }
 
-    requestAnimationFrame(init)
+    init()
     return () => {
       cancelled = true
+      if (placesAutocompleteRef.current && window.google?.maps?.event) {
+        window.google.maps.event.clearInstanceListeners(placesAutocompleteRef.current)
+      }
       placesAutocompleteRef.current = null
     }
-  }, [])
+  }, [loading])
 
   const currentZoneLabel = useMemo(() => {
     const zid = normalizeZoneId(locationForm.zoneId)

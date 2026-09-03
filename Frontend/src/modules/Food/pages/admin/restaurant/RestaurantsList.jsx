@@ -490,27 +490,41 @@ export default function RestaurantsList() {
       )
     }
 
-    const existingScript = document.getElementById("admin-google-maps-script")
+    const existingScript =
+      document.getElementById("admin-google-maps-script") ||
+      document.getElementById("google-maps-sdk") ||
+      document.querySelector('script[src*="maps.googleapis.com/maps/api/js"]')
+
     if (existingScript) {
-      await new Promise((resolve, reject) => {
+      await new Promise((resolve) => {
         if (window.google?.maps?.places?.Autocomplete) {
           resolve()
           return
         }
         existingScript.addEventListener("load", resolve, { once: true })
-        existingScript.addEventListener("error", reject, { once: true })
+        existingScript.addEventListener("error", resolve, { once: true })
+        const interval = setInterval(() => {
+          if (window.google?.maps?.places?.Autocomplete) {
+            clearInterval(interval)
+            resolve()
+          }
+        }, 100)
+        setTimeout(() => {
+          clearInterval(interval)
+          resolve()
+        }, 5000)
       })
       return !!window.google?.maps?.places?.Autocomplete
     }
 
-    await new Promise((resolve, reject) => {
+    await new Promise((resolve) => {
       const script = document.createElement("script")
       script.id = "admin-google-maps-script"
       script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&v=weekly`
       script.async = true
       script.defer = true
       script.onload = resolve
-      script.onerror = reject
+      script.onerror = resolve
       document.head.appendChild(script)
     })
 
@@ -518,7 +532,12 @@ export default function RestaurantsList() {
   }
 
   const initPlacesAutocomplete = async () => {
-    if (!locationSearchInputRef.current) return
+    let inputEl = locationSearchInputRef.current
+    for (let i = 0; i < 30 && !inputEl; i++) {
+      await new Promise((r) => setTimeout(r, 50))
+      inputEl = locationSearchInputRef.current
+    }
+    if (!inputEl) return
     if (placesAutocompleteRef.current) return
     setLocationEditError("")
     const loaded = await loadGoogleMapsScript()
@@ -527,13 +546,14 @@ export default function RestaurantsList() {
       return
     }
 
-    placesAutocompleteRef.current = new window.google.maps.places.Autocomplete(
-      locationSearchInputRef.current,
+    const autocomplete = new window.google.maps.places.Autocomplete(
+      inputEl,
       {
         fields: ["formatted_address", "address_components", "geometry"],
         componentRestrictions: { country: "in" },
       }
     )
+    placesAutocompleteRef.current = autocomplete
 
     const parsePlace = (place) => {
       const formattedAddress = place?.formatted_address || ""
@@ -560,8 +580,8 @@ export default function RestaurantsList() {
       }
     }
 
-    placesAutocompleteRef.current.addListener("place_changed", () => {
-      const place = placesAutocompleteRef.current.getPlace()
+    autocomplete.addListener("place_changed", () => {
+      const place = autocomplete.getPlace()
       const parsed = parsePlace(place)
       setLocationForm((prev) => ({
         ...prev,
@@ -723,13 +743,16 @@ export default function RestaurantsList() {
       .finally(() => setZonesLoading(false))
 
     // Init dropdown autocomplete after mount.
-    requestAnimationFrame(() => initPlacesAutocomplete())
+    initPlacesAutocomplete()
 
     return () => {
+      if (placesAutocompleteRef.current && window.google?.maps?.event) {
+        window.google.maps.event.clearInstanceListeners(placesAutocompleteRef.current)
+      }
       placesAutocompleteRef.current = null
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isEditingLocation, selectedRestaurant, restaurantDetails?._id])
+  }, [isEditingLocation, loadingDetails, selectedRestaurant, restaurantDetails?._id])
 
   const getDetailsEditSource = () => {
     return restaurantDetails || selectedRestaurant?.originalData || selectedRestaurant || null

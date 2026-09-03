@@ -5,6 +5,7 @@ import {
   updateAppCustomizationSettings,
 } from './appCustomization.service.js';
 import { sendTestSubscriptionReminder } from '../subscription/services/subscription.service.js';
+import { invalidateCache } from '../../../middleware/cache.js';
 
 function validateAppCustomizationPayload(body = {}) {
   const payload = {};
@@ -95,6 +96,20 @@ function validateAppCustomizationPayload(body = {}) {
     }
   }
 
+  if (body.mealSelection !== undefined) {
+    payload.mealSelection = {};
+    if (body.mealSelection?.maxDishesPerMeal !== undefined) {
+      const max = Number(body.mealSelection.maxDishesPerMeal);
+      if (!Number.isInteger(max) || max < 1 || max > 20) {
+        throw new ValidationError('Max dishes per meal must be an integer between 1 and 20');
+      }
+      payload.mealSelection.maxDishesPerMeal = max;
+    }
+    if (body.mealSelection?.allowQuantityPerDish !== undefined) {
+      payload.mealSelection.allowQuantityPerDish = Boolean(body.mealSelection.allowQuantityPerDish);
+    }
+  }
+
   return payload;
 }
 
@@ -112,6 +127,7 @@ export async function updateAppCustomizationController(req, res, next) {
     const adminId = req.user?.userId;
     const payload = validateAppCustomizationPayload(req.body || {});
     const settings = await updateAppCustomizationSettings(payload, adminId);
+    await invalidateCache('app_customization_public:*').catch(() => {});
     return sendResponse(res, 200, 'App customization settings updated', { settings });
   } catch (err) {
     next(err);

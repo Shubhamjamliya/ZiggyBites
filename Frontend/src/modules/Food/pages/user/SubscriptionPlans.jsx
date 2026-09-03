@@ -6,6 +6,7 @@ import {
   ChevronRight,
   Clock3,
   Edit3,
+  HelpCircle,
   MessageCircle,
   ShieldCheck,
   UserCircle2,
@@ -131,14 +132,25 @@ export default function SubscriptionPlans() {
           <h1 className="flex-1 text-left text-lg font-bold text-gray-900 dark:text-white">
             Choose your plan
           </h1>
-          <button
-            type="button"
-            onClick={() => navigate("/food/user/profile")}
-            className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 shadow-sm ring-1 ring-gray-200 dark:ring-gray-700 transition-colors"
-            aria-label="Profile"
-          >
-            <UserCircle2 className="h-6 w-6" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => navigate("/food/user/help")}
+              className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 shadow-sm ring-1 ring-gray-200 dark:ring-gray-700 transition-colors hover:bg-gray-100 dark:hover:bg-gray-750"
+              aria-label="Help & Support"
+              title="Help & Support"
+            >
+              <HelpCircle className="h-5 w-5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate("/food/user/profile")}
+              className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 shadow-sm ring-1 ring-gray-200 dark:ring-gray-700 transition-colors hover:bg-gray-100 dark:hover:bg-gray-750"
+              aria-label="Profile"
+            >
+              <UserCircle2 className="h-6 w-6" />
+            </button>
+          </div>
         </header>
 
         <section className="mt-4 overflow-hidden rounded-[16px] bg-[#fff6f0] dark:bg-[#201511] border border-transparent dark:border-[#3d241c] px-4 py-4 transition-colors">

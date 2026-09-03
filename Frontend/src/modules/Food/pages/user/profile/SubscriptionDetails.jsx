@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, CalendarDays, Clock3, CreditCard, MapPin, Store, Utensils } from "lucide-react";
+import { ArrowLeft, CalendarDays, Clock3, CreditCard, HelpCircle, MapPin, Store, Utensils } from "lucide-react";
 import AnimatedPage from "@food/components/user/AnimatedPage";
 import { Card, CardContent } from "@food/components/ui/card";
 import { Button } from "@food/components/ui/button";
@@ -170,16 +170,27 @@ export default function SubscriptionDetails() {
   return (
     <AnimatedPage className="min-h-screen bg-[#f5f5f5] dark:bg-[#0a0a0a]">
       <div className="max-w-md mx-auto px-4 py-4 pb-24">
-        <div className="mb-4 flex items-center gap-3">
-          <Button variant="ghost" size="icon" className="h-8 w-8 p-0" onClick={() => navigate(-1)}>
-            <ArrowLeft className="h-5 w-5 text-black dark:text-white" />
-          </Button>
-          <div>
-            <h1 className="text-xl font-bold text-gray-900 dark:text-white">Subscription details</h1>
-            <p className="text-xs text-gray-500 dark:text-gray-400">
-              {subscription.restaurantName || "Restaurant"} • <span className="font-semibold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-[11px]">{formatSubscriptionId(subscription)}</span>
-            </p>
+        <div className="mb-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Button variant="ghost" size="icon" className="h-8 w-8 p-0" onClick={() => navigate(-1)}>
+              <ArrowLeft className="h-5 w-5 text-black dark:text-white" />
+            </Button>
+            <div>
+              <h1 className="text-xl font-bold text-gray-900 dark:text-white">Subscription details</h1>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                {subscription.restaurantName || "Restaurant"} • <span className="font-semibold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-[11px]">{formatSubscriptionId(subscription)}</span>
+              </p>
+            </div>
           </div>
+          <button
+            type="button"
+            onClick={() => navigate("/food/user/help")}
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-white dark:bg-[#1a1a1a] text-gray-600 dark:text-gray-300 shadow-sm border border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+            aria-label="Help & Support"
+            title="Help & Support"
+          >
+            <HelpCircle className="h-5 w-5" />
+          </button>
         </div>
 
         <div className="space-y-3">
@@ -317,6 +328,26 @@ export default function SubscriptionDetails() {
               )}
             </CardContent>
           </Card>
+
+          {/* Need Help Card */}
+          <div className="rounded-2xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-[#1a1a1a] p-4 flex items-center justify-between shadow-sm">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-purple-50 dark:bg-purple-950/40 flex items-center justify-center text-[#55254b] dark:text-[#d38abf] shrink-0">
+                <HelpCircle className="h-5 w-5" strokeWidth={2} />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-bold text-gray-900 dark:text-white">Need help with your subscription?</p>
+                <p className="text-[11px] text-gray-500 dark:text-gray-400">Our support team is available 24/7</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => navigate("/food/user/help")}
+              className="inline-flex shrink-0 items-center gap-1 rounded-full border border-purple-100 dark:border-purple-900/40 bg-purple-50 dark:bg-purple-950/40 px-3 py-1.5 text-xs font-bold text-[#55254b] dark:text-[#d38abf] active:scale-95 transition-all"
+            >
+              Support
+            </button>
+          </div>
         </div>
       </div>
     </AnimatedPage>

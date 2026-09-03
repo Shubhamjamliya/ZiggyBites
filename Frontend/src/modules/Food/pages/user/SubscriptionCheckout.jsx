@@ -95,7 +95,7 @@ export default function SubscriptionCheckout() {
           navigate("/food/user", { replace: true });
         }
       })
-      .catch(() => {});
+      .catch(() => { });
     return () => {
       mounted = false;
     };
@@ -127,7 +127,7 @@ export default function SubscriptionCheckout() {
             });
           }
         })
-        .catch(() => {});
+        .catch(() => { });
     }
     return () => {
       mounted = false;
@@ -463,8 +463,8 @@ export default function SubscriptionCheckout() {
 
             toast.error(
               error?.response?.data?.message ||
-                error?.message ||
-                "Payment verification failed.",
+              error?.message ||
+              "Payment verification failed.",
             );
           } finally {
             setIsPlacingOrder(false);
@@ -476,8 +476,8 @@ export default function SubscriptionCheckout() {
           console.error("[SubscriptionCheckout] Razorpay payment error", error);
           toast.error(
             error?.description ||
-              error?.message ||
-              "Payment failed. Please try again.",
+            error?.message ||
+            "Payment failed. Please try again.",
           );
           setIsPlacingOrder(false);
         },
@@ -501,8 +501,8 @@ export default function SubscriptionCheckout() {
       console.error("[SubscriptionCheckout] Failed to start subscription payment", error);
       toast.error(
         error?.response?.data?.message ||
-          error?.message ||
-          "Failed to start subscription payment.",
+        error?.message ||
+        "Failed to start subscription payment.",
       );
       setIsPlacingOrder(false);
     }
@@ -529,6 +529,15 @@ export default function SubscriptionCheckout() {
             </button>
             <h1 className="text-lg font-bold tracking-tight">Plan details & payment</h1>
           </div>
+          <button
+            type="button"
+            onClick={() => navigate("/food/user/help")}
+            className="flex h-9 w-9 items-center justify-center rounded-full text-gray-500 hover:text-gray-800 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+            aria-label="Contact Support"
+            title="Contact Support"
+          >
+            <HelpCircle className="h-6 w-6" strokeWidth={1.8} />
+          </button>
         </header>
 
         <main className="max-w-md mx-auto p-4 space-y-4">
@@ -674,8 +683,14 @@ export default function SubscriptionCheckout() {
           </button>
           <h1 className="text-lg font-bold tracking-tight">Plan details & payment</h1>
         </div>
-        <button className="text-gray-500">
-          <HelpCircle className="h-6 w-6" strokeWidth={1.5} />
+        <button
+          type="button"
+          onClick={() => navigate("/food/user/help")}
+          className="flex h-9 w-9 items-center justify-center rounded-full text-gray-500 hover:text-gray-800 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+          aria-label="Contact Support"
+          title="Contact Support"
+        >
+          <HelpCircle className="h-6 w-6" strokeWidth={1.8} />
         </button>
       </header>
 
@@ -847,29 +862,49 @@ export default function SubscriptionCheckout() {
           </ul>
         </div>
 
-        <div className="mt-8 space-y-3 pb-8">
-          <button
-            onClick={handlePlaceOrder}
-            disabled={isPlacingOrder}
-            className="w-full bg-[#e3282c] text-white rounded-[12px] py-3.5 flex justify-center items-center gap-2 font-bold text-sm transition-opacity active:opacity-80 disabled:opacity-70 shadow-sm hover:bg-[#d02023]"
-          >
-            {isPlacingOrder ? (
-              "Processing..."
-            ) : (
-              <>
-                <Lock className="h-4 w-4" strokeWidth={2} />
-                Proceed to pay {RUPEE_SYMBOL}
-                {totalAmount.toLocaleString("en-IN")}
-              </>
-            )}
-          </button>
-          <button
-            onClick={() => navigate(-1)}
-            className="w-full bg-white text-[#e3282c] border border-[#e3282c] rounded-[12px] py-3.5 flex justify-center items-center font-bold text-sm transition-colors active:bg-red-50 hover:bg-red-50/50"
-          >
-            Back to plans
-          </button>
-        </div>
+        <div className="rounded-[16px] border border-gray-100 dark:border-gray-800 bg-white dark:bg-[#141414] p-4 flex items-center justify-between shadow-sm">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-red-50 dark:bg-red-950/40 flex items-center justify-center text-[#e3282c] dark:text-[#ff5257] shrink-0">
+                <HelpCircle className="h-5 w-5" strokeWidth={2} />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-bold text-gray-900 dark:text-white">Have questions about this plan?</p>
+                <p className="text-[11px] text-gray-500 dark:text-gray-400">Our support team is here to assist you 24/7</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => navigate("/food/user/help")}
+              className="inline-flex shrink-0 items-center gap-1 rounded-full border border-red-100 bg-red-50 dark:bg-red-950/40 px-3 py-1.5 text-xs font-bold text-[#e3282c] dark:text-[#ff5257] active:scale-95 transition-all"
+            >
+              Support
+              <ChevronRight className="h-3.5 w-3.5" />
+            </button>
+          </div>
+
+          <div className="mt-8 space-y-3 pb-8">
+            <button
+              onClick={handlePlaceOrder}
+              disabled={isPlacingOrder}
+              className="w-full bg-[#e3282c] text-white rounded-[12px] py-3.5 flex justify-center items-center gap-2 font-bold text-sm transition-opacity active:opacity-80 disabled:opacity-70 shadow-sm hover:bg-[#d02023]"
+            >
+              {isPlacingOrder ? (
+                "Processing..."
+              ) : (
+                <>
+                  <Lock className="h-4 w-4" strokeWidth={2} />
+                  Proceed to pay {RUPEE_SYMBOL}
+                  {totalAmount.toLocaleString("en-IN")}
+                </>
+              )}
+            </button>
+            <button
+              onClick={() => navigate(-1)}
+              className="w-full bg-white text-[#e3282c] border border-[#e3282c] rounded-[12px] py-3.5 flex justify-center items-center font-bold text-sm transition-colors active:bg-red-50 hover:bg-red-50/50"
+            >
+              Back to plans
+            </button>
+          </div>
       </main>
     </div>
   );

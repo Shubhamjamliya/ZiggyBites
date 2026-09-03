@@ -1024,10 +1024,25 @@ export default function OrderTracking() {
   };
 
   const customerDeliveryOtp = useMemo(() => {
-    const codeFromOrder = order?.deliveryVerification?.dropOtp?.code
-    const code = codeFromOrder ?? socketDropOtpCode
-    return code ? String(code) : null
-  }, [order?.deliveryVerification?.dropOtp?.code, socketDropOtpCode])
+    const isAtDrop =
+      currentStage === 'at_drop' ||
+      orderStatus === 'reached_drop' ||
+      order?.deliveryState?.currentPhase === 'at_drop' ||
+      order?.deliveryState?.status === 'reached_drop';
+
+    if (!isAtDrop) return null;
+
+    const codeFromOrder = order?.deliveryVerification?.dropOtp?.code;
+    const code = codeFromOrder ?? socketDropOtpCode;
+    return code ? String(code) : null;
+  }, [
+    currentStage,
+    orderStatus,
+    order?.deliveryState?.currentPhase,
+    order?.deliveryState?.status,
+    order?.deliveryVerification?.dropOtp?.code,
+    socketDropOtpCode,
+  ]);
 
   useEffect(() => {
     if (!isEditWindowOpen) return

@@ -169,6 +169,8 @@ export default function RestaurantLogin() {
             <Link to="/food/restaurant/profile/terms" className="font-black text-[#ff2727] underline">Terms of Service</Link>
             <span> - </span>
             <Link to="/food/restaurant/profile/privacy" className="font-black text-[#ff2727] underline">Privacy Policy</Link>
+            <span> - </span>
+            <Link to="/food/restaurant/profile/conduct" className="font-black text-[#ff2727] underline">Code of Conduct</Link>
           </p>
         </motion.div>
       </div>

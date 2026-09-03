@@ -323,9 +323,13 @@ export default function RestaurantSignup() {
               <Link to="/food/restaurant/profile/terms" className="text-primary hover:underline">
                 Terms of Service
               </Link>
-              {" & "}
+              {", "}
               <Link to="/food/restaurant/profile/privacy" className="text-primary hover:underline">
                 Privacy Policy
+              </Link>
+              {" & "}
+              <Link to="/food/restaurant/profile/conduct" className="text-primary hover:underline">
+                Code of Conduct
               </Link>
             </p>
           </div>

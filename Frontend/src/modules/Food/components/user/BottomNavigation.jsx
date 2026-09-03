@@ -108,8 +108,20 @@ export default function BottomNavigation() {
       setIsKeyboardOpen(false)
     }
 
-    const handleFocusIn = () => {
-      setIsKeyboardOpen(true)
+    const handleFocusIn = (e) => {
+      const target = e?.target
+      const isInput = Boolean(
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.tagName === "SELECT" ||
+          target.isContentEditable ||
+          target.getAttribute?.("contenteditable") === "true")
+      )
+
+      if (isInput) {
+        setIsKeyboardOpen(true)
+      }
       setTimeout(checkKeyboardState, 50)
       setTimeout(checkKeyboardState, 150)
     }

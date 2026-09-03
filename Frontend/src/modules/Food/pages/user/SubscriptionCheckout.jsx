@@ -17,6 +17,7 @@ import { useProfile } from "@food/context/ProfileContext";
 import { useLocation as useUserLocation } from "@food/hooks/useLocation";
 import { useSubscriptions } from "@food/context/SubscriptionsContext";
 import { DEFAULT_APP_CUSTOMIZATION, loadAppCustomization } from "@food/utils/appCustomization";
+import { toast } from "sonner";
 
 const RUPEE_SYMBOL = "\u20B9";
 const SUBSCRIPTION_GST_RATE = 5;

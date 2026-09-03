@@ -523,7 +523,12 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
   }, [isOnline]);
 
   useEffect(() => { 
-    if (newOrder !== undefined) setIncomingOrder(newOrder); 
+    if (newOrder !== undefined) {
+      setIncomingOrder(newOrder); 
+      if (newOrder) {
+        setIsModalMinimized(false);
+      }
+    }
   }, [newOrder]);
 
   useEffect(() => {
@@ -1069,7 +1074,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
       </div>
 
       {/* OVERLAYS (Persistent if active) - Outside flex container to avoid clipping and z-index issues */}
-      {(currentTab === 'feed' || activeOrder) && (
+      {(currentTab === 'feed' || activeOrder || incomingOrder) && (
         <AnimatePresence>
           {!isModalMinimized && (
             <motion.div
@@ -1090,6 +1095,10 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
                         // Only dismiss the modal on successful accept
                         setIncomingOrder(null);
                         clearNewOrder();
+                        if (currentTab !== 'feed') {
+                          setCurrentTab('feed');
+                          navigate('/food/delivery/feed');
+                        }
                       } catch (err) {
                         // acceptOrder already shows a toast for the specific error:
                         // - "Order already accepted by another partner" (403)

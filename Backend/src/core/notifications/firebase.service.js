@@ -186,17 +186,27 @@ const buildMessagePayload = (payload = {}, token) => {
         ? `broadcast_${broadcastId}`
         : (orderId ? `order_${orderId}` : (data.type ? String(data.type) : undefined));
 
-    message.android = {
-        priority: 'high',
-        ...(broadcastId ? { collapse_key: `broadcast_${broadcastId}` } : {}),
-        notification: {
-            channel_id: 'default',
-            sound: 'default',
-            default_vibrate_timings: true,
-            default_light_settings: true,
-            ...(notificationTag ? { tag: notificationTag } : {})
-        }
-    };
+    if (!payload.dataOnly) {
+        message.android = {
+            priority: 'high',
+            ...(broadcastId ? { collapse_key: `broadcast_${broadcastId}` } : {}),
+            notification: {
+                title: notification.title,
+                body: notification.body,
+                channel_id: 'default',
+                sound: 'default',
+                default_vibrate_timings: true,
+                default_light_settings: true,
+                ...(notificationTag ? { tag: notificationTag } : {}),
+                ...(image ? { image } : {})
+            }
+        };
+    } else {
+        message.android = {
+            priority: 'high',
+            ...(broadcastId ? { collapse_key: `broadcast_${broadcastId}` } : {})
+        };
+    }
 
     message.webpush = {
         headers: {

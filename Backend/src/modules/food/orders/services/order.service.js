@@ -590,7 +590,11 @@ export async function getOrderById(
         verified: Boolean(drop.verified),
       },
     };
-    if (!drop.verified && secret) {
+    const isAtDrop =
+      order.deliveryState?.currentPhase === "at_drop" ||
+      order.deliveryState?.status === "reached_drop" ||
+      order.orderStatus === "reached_drop";
+    if (!drop.verified && secret && isAtDrop) {
       out.handoverOtp = secret;
     }
     return out;
@@ -761,9 +765,13 @@ export async function resyncState(userId, role) {
 
     if (order) {
       const out = normalizeOrderForClient(order);
-      // Re-add handover OTP if order is picked up
+      // Re-add handover OTP only once the delivery partner has reached the drop location
+      const isAtDrop =
+        order.deliveryState?.currentPhase === "at_drop" ||
+        order.deliveryState?.status === "reached_drop" ||
+        order.orderStatus === "reached_drop";
       if (
-        (order.deliveryState?.currentPhase === "at_drop" || order.orderStatus === "picked_up") &&
+        isAtDrop &&
         !order.deliveryVerification?.dropOtp?.verified &&
         order.deliveryOtp
       ) {

@@ -30,12 +30,12 @@ import { ProfileDetailsV2 } from './pages/profile/ProfileDetailsV2';
 import TermsAndConditionsV2 from './pages/TermsAndConditionsV2';
 import PrivacyPolicyV2 from './pages/PrivacyPolicyV2';
 import NotificationsV2 from './pages/NotificationsV2';
-
-
+import DeliveryGlobalTaskModal from './components/DeliveryGlobalTaskModal';
 
 const DeliveryV2Router = () => {
   return (
     <Suspense fallback={<Loader />}>
+      <DeliveryGlobalTaskModal />
       <Routes>
         {/* Auth routes */}
         <Route path="welcome" element={<Welcome />} />

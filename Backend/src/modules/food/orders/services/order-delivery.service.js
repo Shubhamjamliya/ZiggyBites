@@ -196,7 +196,6 @@ function emitOrderUpdate(order, deliveryPartnerId, options = {}) {
         {
           title: userTitle,
           body: userBody,
-          dataOnly: true,
           data: {
             type: 'order_status_update',
             orderId,
@@ -213,7 +212,6 @@ function emitOrderUpdate(order, deliveryPartnerId, options = {}) {
         {
           title: riderTitle,
           body: riderBody,
-          dataOnly: true,
           data: {
             type: status === 'delivered' ? 'order_completed' : 'order_status_update',
             orderId,

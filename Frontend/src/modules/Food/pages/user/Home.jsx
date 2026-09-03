@@ -1479,6 +1479,8 @@ export default function Home() {
     [vegMode, activeFilters],
   );
 
+  const matchesVegMode = matchesDietaryFilter;
+
   // Filter restaurants and foods based on active filters
   const filteredRestaurants = useMemo(() => {
     return (restaurantsData || []).filter(matchesDietaryFilter);
@@ -2063,7 +2065,7 @@ export default function Home() {
     });
 
     return [...orderedFromSettings, ...fromFetchedMissing]
-      .filter(matchesVegMode)
+      .filter(matchesDietaryFilter)
       .slice(0, 12);
   }, [
     recommendedRestaurantIds,
@@ -2071,7 +2073,7 @@ export default function Home() {
     restaurantsData,
     extractImages,
     normalizeImageUrl,
-    matchesVegMode,
+    matchesDietaryFilter,
   ]);
 
   // Featured foods removed - will be handled by restaurants data from API

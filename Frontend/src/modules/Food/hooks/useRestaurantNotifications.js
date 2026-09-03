@@ -796,6 +796,23 @@ export const useRestaurantNotifications = () => {
       }
     });
 
+    socketRef.current.on('restaurant_approved', (payload) => {
+      debugLog('🎉 Restaurant approved event received:', payload);
+      const title = payload?.title || 'Congratulations! 🎉';
+      const message = payload?.message || 'Your restaurant has been approved. You can now start receiving orders!';
+      toast.success(title, {
+        description: message,
+        duration: 10000,
+      });
+      playNotificationSound();
+      dispatchNotificationInboxRefresh();
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('restaurantApproved', { detail: payload || {} })
+        );
+      }
+    });
+
     socketRef.current.on('admin_notification', (payload) => {
       debugLog('?? Admin broadcast received:', payload);
       dispatchNotificationInboxRefresh();

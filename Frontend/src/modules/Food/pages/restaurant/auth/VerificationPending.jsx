@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react"
 import { useLocation, useNavigate } from "react-router-dom"
 import { AlertCircle, Clock3, ShieldCheck } from "lucide-react"
 import { Button } from "@food/components/ui/button"
+import { toast } from "sonner"
 import { useCompanyName } from "@food/hooks/useCompanyName"
 import { restaurantAPI } from "@food/api"
 import {
@@ -25,6 +26,17 @@ export default function VerificationPending() {
       ""
     )
   }, [location.state?.phone])
+
+  useEffect(() => {
+    const handleApproved = (event) => {
+      const msg = event?.detail?.message || "Your restaurant has been approved by Admin! You can now log in.";
+      toast.success("Restaurant Approved! 🎉", { description: msg, duration: 8000 });
+      clearRestaurantPendingPhone();
+      navigate("/food/restaurant/login", { replace: true });
+    };
+    window.addEventListener("restaurantApproved", handleApproved);
+    return () => window.removeEventListener("restaurantApproved", handleApproved);
+  }, [navigate]);
 
   useEffect(() => {
     let cancelled = false
@@ -161,15 +173,25 @@ export default function VerificationPending() {
                 Retry Registration
               </Button>
             ) : (
-              <Button
-                className="h-14 w-full rounded-2xl bg-primary text-white font-bold text-base shadow-xl shadow-primary/20 hover:bg-[#6a2f56] transition-all active:scale-[0.98]"
-                onClick={() => {
-                  clearRestaurantPendingPhone()
-                  navigate("/food/restaurant/login", { replace: true })
-                }}
-              >
-                Back to Login
-              </Button>
+              <>
+                <Button
+                  className="h-14 w-full rounded-2xl bg-emerald-600 text-white font-bold text-base shadow-xl shadow-emerald-200 hover:bg-emerald-700 transition-all active:scale-[0.98]"
+                  onClick={() => {
+                    navigate("/food/restaurant/login", { replace: true })
+                  }}
+                >
+                  Check Approval & Log In
+                </Button>
+                <Button
+                  className="h-14 w-full rounded-2xl bg-primary text-white font-bold text-base shadow-xl shadow-primary/20 hover:bg-[#6a2f56] transition-all active:scale-[0.98]"
+                  onClick={() => {
+                    clearRestaurantPendingPhone()
+                    navigate("/food/restaurant/login", { replace: true })
+                  }}
+                >
+                  Back to Login
+                </Button>
+              </>
             )}
             
             {isRejected && (

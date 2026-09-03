@@ -444,6 +444,22 @@ export const registerRestaurant = async (payload, files) => {
             console.error('Failed to notify admins of new restaurant registration:', e);
         }
 
+        try {
+            const { getIO } = await import('../../../../config/socket.js');
+            const io = getIO();
+            if (io) {
+                io.to('admin').emit('admin_notification', {
+                    title: 'New Restaurant Registration 🏪',
+                    message: `A new restaurant "${restaurant.restaurantName}" has registered and is pending approval.`,
+                    type: 'restaurant_approval',
+                    path: '/admin/food/restaurants/joining-request',
+                    id: String(restaurant._id)
+                });
+            }
+        } catch (e) {
+            // non-blocking socket emission
+        }
+
         return restaurant.toObject();
     } catch (err) {
         // Handle uniqueness conflicts deterministically (race-safe).

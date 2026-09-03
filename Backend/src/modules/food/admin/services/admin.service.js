@@ -3558,13 +3558,16 @@ export async function approveRestaurant(id) {
     ).lean();
 
     if (updated) {
+        const approvalTitle = 'Congratulations! 🎉';
+        const approvalBody = `Your restaurant "${updated.restaurantName}" has been approved. You can now start receiving orders!`;
+
         try {
             const { notifyOwnersSafely } = await import('../../../../core/notifications/firebase.service.js');
             await notifyOwnersSafely(
                 [{ ownerType: 'RESTAURANT', ownerId: updated._id }],
                 {
-                    title: 'Congratulations! 🎉',
-                    body: `Your restaurant "${updated.restaurantName}" has been approved. You can now start receiving orders!`,
+                    title: approvalTitle,
+                    body: approvalBody,
                     image: updated.profileImage || 'https://i.ibb.co/3m2Yh7r/Appzeto-Brand-Image.png',
                     data: {
                         type: 'restaurant_approved',
@@ -3573,7 +3576,50 @@ export async function approveRestaurant(id) {
                 }
             );
         } catch (e) {
-            console.error('Failed to send restaurant approval notification:', e);
+            console.error('Failed to send restaurant approval push notification:', e);
+        }
+
+        // Save into restaurant notification inbox
+        try {
+            const { FoodNotification } = await import('../../../../core/notifications/models/notification.model.js');
+            await FoodNotification.create({
+                ownerType: 'RESTAURANT',
+                ownerId: updated._id,
+                title: approvalTitle,
+                message: approvalBody,
+                category: 'approval',
+                source: 'ADMIN_BROADCAST',
+                link: '/food/restaurant',
+                metadata: {
+                    type: 'restaurant_approved',
+                    restaurantId: String(updated._id)
+                }
+            });
+        } catch (e) {
+            console.error('Failed to create restaurant approval inbox notification:', e);
+        }
+
+        // Real-time socket broadcast to the restaurant/kitchen
+        try {
+            const { getIO, rooms } = await import('../../../../config/socket.js');
+            const io = getIO();
+            if (io) {
+                const approvalPayload = {
+                    restaurantId: String(updated._id),
+                    status: 'approved',
+                    title: approvalTitle,
+                    message: approvalBody
+                };
+                if (rooms?.restaurant) {
+                    io.to(rooms.restaurant(updated._id)).emit('restaurant_approved', approvalPayload);
+                }
+                io.to('all_restaurants').emit('restaurant_approved', approvalPayload);
+                if (updated.ownerPhone) {
+                    io.to(`restaurant_phone:${updated.ownerPhone}`).emit('restaurant_approved', approvalPayload);
+                }
+            }
+        } catch (e) {
+            console.error('Failed to emit restaurant approval socket event:', e);
         }
     }
     return updated;

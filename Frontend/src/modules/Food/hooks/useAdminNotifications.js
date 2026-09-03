@@ -57,17 +57,19 @@ const uniqueById = (items = []) => {
 const joinMeta = (...parts) => parts.filter(Boolean).join(" • ");
 
 const mapPendingRestaurants = (rows = []) =>
-  (Array.isArray(rows) ? rows : []).map((item) => ({
-    id: `approval-restaurant-${String(item?._id || item?.id || "")}`,
-    title: "Restaurant Approval Pending",
-    message: `${item?.restaurantName || "Restaurant"} submitted a restaurant approval request. Owner: ${item?.ownerName || "N/A"}. Contact: ${item?.ownerPhone || "N/A"}.`,
-    type: "approval",
-    category: "restaurant_approval",
-    path: "/admin/food/restaurants/joining-request",
-    createdAt: item?.createdAt || item?.updatedAt,
-    timeLabel: toDateLabel(item?.createdAt || item?.updatedAt),
-    metaLabel: joinMeta(item?.restaurantName, item?.ownerName, item?.ownerPhone),
-  }));
+  (Array.isArray(rows) ? rows : [])
+    .filter((item) => !item.status || item.status === "pending")
+    .map((item) => ({
+      id: `approval-restaurant-${String(item?._id || item?.id || "")}`,
+      title: "Restaurant Approval Pending",
+      message: `${item?.restaurantName || "Restaurant"} submitted a restaurant approval request. Owner: ${item?.ownerName || "N/A"}. Contact: ${item?.ownerPhone || "N/A"}.`,
+      type: "approval",
+      category: "restaurant_approval",
+      path: "/admin/food/restaurants/joining-request",
+      createdAt: item?.createdAt || item?.updatedAt,
+      timeLabel: toDateLabel(item?.createdAt || item?.updatedAt),
+      metaLabel: joinMeta(item?.restaurantName, item?.ownerName, item?.ownerPhone),
+    }));
 
 const mapDeliveryJoinRequests = (response) => {
   const payload = response?.data?.data;
@@ -219,10 +221,10 @@ export default function useAdminNotifications(options = {}) {
         adminAPI.getExpiredFssaiNotifications(),
       ]);
 
-      const restaurantRows =
-        restaurantsRes?.data?.data ||
-        restaurantsRes?.data?.restaurants ||
-        [];
+      const restaurantPayload = restaurantsRes?.data?.data ?? restaurantsRes?.data;
+      const restaurantRows = Array.isArray(restaurantPayload)
+        ? restaurantPayload
+        : (restaurantPayload?.restaurants || restaurantPayload?.pending || restaurantPayload?.data || []);
 
       const aggregated = uniqueById([
         ...mapPendingRestaurants(restaurantRows),

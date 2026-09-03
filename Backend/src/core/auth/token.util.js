@@ -2,8 +2,12 @@ import jwt from 'jsonwebtoken';
 import { config } from '../../config/env.js';
 
 export const signAccessToken = (payload) => {
+    const isDelivery = String(payload?.role || '').toUpperCase() === 'DELIVERY_PARTNER';
+    const expiresIn = isDelivery
+        ? (config.jwtDeliveryAccessExpiresIn || '30d')
+        : config.jwtAccessExpiresIn;
     return jwt.sign(payload, config.jwtAccessSecret, {
-        expiresIn: config.jwtAccessExpiresIn
+        expiresIn
     });
 };
 

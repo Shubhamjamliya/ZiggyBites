@@ -211,6 +211,54 @@ export const removeLegacyStoredTokens = (moduleName) => {
   installStoragePatch();
 };
 
+export const setRefreshToken = (moduleName, token) => {
+  installStoragePatch();
+  const safeModule = String(moduleName || 'user').trim() || 'user';
+  const key = safeModule === 'user' ? 'refreshToken' : `${safeModule}_refreshToken`;
+  if (!token) {
+    try {
+      if (typeof window !== 'undefined') {
+        if (window.localStorage) window.localStorage.removeItem(key);
+        if (window.sessionStorage) window.sessionStorage.removeItem(key);
+      }
+    } catch {}
+    return;
+  }
+  const strToken = String(token);
+  try {
+    if (typeof window !== 'undefined') {
+      if (window.localStorage) window.localStorage.setItem(key, strToken);
+      if (window.sessionStorage) window.sessionStorage.setItem(key, strToken);
+    }
+  } catch {}
+};
+
+export const getRefreshToken = (moduleName) => {
+  installStoragePatch();
+  const safeModule = String(moduleName || 'user').trim() || 'user';
+  const key = safeModule === 'user' ? 'refreshToken' : `${safeModule}_refreshToken`;
+  let token = null;
+  try {
+    if (typeof window !== 'undefined') {
+      if (window.sessionStorage) token = window.sessionStorage.getItem(key);
+      if (!token && window.localStorage) token = window.localStorage.getItem(key);
+    }
+  } catch {}
+  return token || null;
+};
+
+export const clearRefreshToken = (moduleName) => {
+  installStoragePatch();
+  const safeModule = String(moduleName || 'user').trim() || 'user';
+  const key = safeModule === 'user' ? 'refreshToken' : `${safeModule}_refreshToken`;
+  try {
+    if (typeof window !== 'undefined') {
+      if (window.localStorage) window.localStorage.removeItem(key);
+      if (window.sessionStorage) window.sessionStorage.removeItem(key);
+    }
+  } catch {}
+};
+
 export const bootstrapTokenStore = () => {
   installStoragePatch();
 };

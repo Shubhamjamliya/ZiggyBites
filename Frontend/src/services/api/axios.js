@@ -3,7 +3,7 @@
  */
 
 import axios from 'axios';
-import { bootstrapTokenStore, getAccessToken, hasStoredSession, setAccessToken } from '../../core/auth/tokenStore.js';
+import { bootstrapTokenStore, getAccessToken, getRefreshToken, hasStoredSession, setAccessToken, setRefreshToken } from '../../core/auth/tokenStore.js';
 
 bootstrapTokenStore();
 
@@ -115,12 +115,27 @@ function createModuleClient(moduleName) {
       isRefreshing = true;
 
       try {
+        const storedRefreshToken =
+          getRefreshToken(moduleName) ||
+          (typeof localStorage !== 'undefined'
+            ? localStorage.getItem(`${moduleName}_refreshToken`) ||
+              (moduleName === 'user' ? localStorage.getItem('refreshToken') : null)
+            : null);
+
         const refreshUrl = baseURL ? `${baseURL}/food/auth/refresh-token` : '/api/v1/food/auth/refresh-token';
-        const { data } = await axios.post(refreshUrl, {}, { timeout: 10000, withCredentials: true });
+        const { data } = await axios.post(
+          refreshUrl,
+          storedRefreshToken ? { refreshToken: storedRefreshToken } : {},
+          { timeout: 10000, withCredentials: true }
+        );
         const newAccessToken = data?.data?.accessToken || data?.accessToken;
+        const newRefreshToken = data?.data?.refreshToken || data?.refreshToken;
 
         if (newAccessToken) {
           setAccessToken(moduleName, newAccessToken);
+          if (newRefreshToken) {
+            setRefreshToken(moduleName, newRefreshToken);
+          }
           if (typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('authRefreshed', {
               detail: { module: moduleName, token: newAccessToken },
@@ -130,8 +145,16 @@ function createModuleClient(moduleName) {
           original.headers.Authorization = `Bearer ${newAccessToken}`;
           return client(original);
         }
-      } catch {
-        onRefreshFailed();
+      } catch (refreshErr) {
+        const status = refreshErr?.response?.status;
+        const isAuthRejection =
+          status === 401 ||
+          status === 403 ||
+          (status === 400 &&
+            String(refreshErr?.response?.data?.message || '').toLowerCase().includes('refresh token'));
+        if (isAuthRejection) {
+          onRefreshFailed();
+        }
         return Promise.reject(err);
       } finally {
         isRefreshing = false;
@@ -207,12 +230,27 @@ apiClient.interceptors.response.use(
 
     original._retry = true;
     try {
+      const storedRefreshToken =
+        getRefreshToken(moduleName) ||
+        (typeof localStorage !== 'undefined'
+          ? localStorage.getItem(`${moduleName}_refreshToken`) ||
+            (moduleName === 'user' ? localStorage.getItem('refreshToken') : null)
+          : null);
+
       const refreshUrl = baseURL ? `${baseURL}/food/auth/refresh-token` : '/api/v1/food/auth/refresh-token';
-      const { data } = await axios.post(refreshUrl, {}, { timeout: 10000, withCredentials: true });
+      const { data } = await axios.post(
+        refreshUrl,
+        storedRefreshToken ? { refreshToken: storedRefreshToken } : {},
+        { timeout: 10000, withCredentials: true }
+      );
       const newAccessToken = data?.data?.accessToken || data?.accessToken;
+      const newRefreshToken = data?.data?.refreshToken || data?.refreshToken;
 
       if (newAccessToken) {
         setAccessToken(moduleName, newAccessToken);
+        if (newRefreshToken) {
+          setRefreshToken(moduleName, newRefreshToken);
+        }
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('authRefreshed', {
             detail: { module: moduleName, token: newAccessToken },

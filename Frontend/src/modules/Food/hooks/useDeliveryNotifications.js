@@ -990,6 +990,19 @@ export const useDeliveryNotifications = () => {
       if (claimedId) setClaimedOrderId({ orderId: claimedId, claimedBy: data?.claimedBy });
     });
 
+    socketRef.current.on('delivery_partner_approved', (payload) => {
+      debugLog('🎉 Delivery partner approved event received:', payload);
+      const title = payload?.title || 'Welcome Aboard! 🚲';
+      const message = payload?.message || 'Your delivery partner application has been approved. You can now go online and start earning!';
+      toast.success(title, {
+        description: message,
+        duration: 10000,
+      });
+      playNotificationSound();
+      dispatchNotificationInboxRefresh();
+      window.dispatchEvent(new CustomEvent('deliveryPartnerApproved', { detail: payload }));
+    });
+
     socketRef.current.on('admin_notification', (payload) => {
       debugLog('Admin broadcast received via socket', payload);
       setAdminNotification(payload);

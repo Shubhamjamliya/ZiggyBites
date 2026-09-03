@@ -111,6 +111,22 @@ export const registerDeliveryPartner = async (payload, files) => {
         console.error('Failed to notify admins of new delivery partner registration:', e);
     }
 
+    try {
+        const { getIO } = await import('../../../../config/socket.js');
+        const io = getIO();
+        if (io) {
+            io.to('admin').emit('admin_notification', {
+                title: 'New Delivery Partner Registration 🚲',
+                message: `A new delivery partner "${partner.name}" has signed up and is pending approval.`,
+                type: 'delivery_approval',
+                path: '/admin/food/delivery-partners/join-request',
+                id: String(partner._id)
+            });
+        }
+    } catch (e) {
+        // non-blocking socket emission
+    }
+
     return partner.toObject();
 };
 

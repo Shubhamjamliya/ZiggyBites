@@ -3827,7 +3827,9 @@ export async function getDeliveryJoinRequests(query) {
         status: doc.status === 'rejected' ? 'denied' : doc.status,
         rejectionReason: doc.rejectionReason || undefined,
         profilePhoto: doc.profilePhoto || null,
-        profileImage: doc.profilePhoto ? { url: doc.profilePhoto } : null
+        profileImage: doc.profilePhoto ? { url: doc.profilePhoto } : null,
+        createdAt: doc.createdAt,
+        updatedAt: doc.updatedAt
     }));
 
     return { requests };
@@ -4727,13 +4729,16 @@ export async function approveDeliveryPartner(id) {
     partner.rejectionReason = undefined;
     await partner.save();
 
+    const approvalTitle = 'Welcome Aboard! 🚲';
+    const approvalBody = 'Your delivery partner application has been approved. You can now go online and start earning!';
+
     try {
         const { notifyOwnerSafely } = await import('../../../../core/notifications/firebase.service.js');
         await notifyOwnerSafely(
             { ownerType: 'DELIVERY_PARTNER', ownerId: partner._id },
             {
-                title: 'Welcome Aboard! 🚲',
-                body: `Your delivery partner application has been approved. You can now go online and start earning!`,
+                title: approvalTitle,
+                body: approvalBody,
                 image: 'https://i.ibb.co/3m2Yh7r/Appzeto-Brand-Image.png',
                 data: {
                     type: 'onboarding_approved',
@@ -4742,7 +4747,50 @@ export async function approveDeliveryPartner(id) {
             }
         );
     } catch (e) {
-        console.error('Failed to send delivery partner approval notification:', e);
+        console.error('Failed to send delivery partner approval push notification:', e);
+    }
+
+    // Save into delivery partner notification inbox
+    try {
+        const { FoodNotification } = await import('../../../../core/notifications/models/notification.model.js');
+        await FoodNotification.create({
+            ownerType: 'DELIVERY_PARTNER',
+            ownerId: partner._id,
+            title: approvalTitle,
+            message: approvalBody,
+            category: 'approval',
+            source: 'ADMIN_BROADCAST',
+            link: '/food/delivery/feed',
+            metadata: {
+                type: 'onboarding_approved',
+                partnerId: String(partner._id)
+            }
+        });
+    } catch (e) {
+        console.error('Failed to create delivery partner approval inbox notification:', e);
+    }
+
+    // Real-time socket broadcast to the delivery partner
+    try {
+        const { getIO, rooms } = await import('../../../../config/socket.js');
+        const io = getIO();
+        if (io) {
+            const approvalPayload = {
+                partnerId: String(partner._id),
+                status: 'approved',
+                title: approvalTitle,
+                message: approvalBody
+            };
+            if (rooms?.delivery) {
+                io.to(rooms.delivery(partner._id)).emit('delivery_partner_approved', approvalPayload);
+            }
+            io.to('all_delivery').emit('delivery_partner_approved', approvalPayload);
+            if (partner.phone) {
+                io.to(`delivery_phone:${partner.phone}`).emit('delivery_partner_approved', approvalPayload);
+            }
+        }
+    } catch (e) {
+        console.error('Failed to emit delivery partner approval socket event:', e);
     }
 
     // Referral crediting: on approval, credit the referrer partner's pocket balance via DeliveryBonusTransaction.

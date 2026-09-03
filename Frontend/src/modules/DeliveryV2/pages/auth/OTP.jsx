@@ -81,7 +81,18 @@ export default function DeliveryOTP() {
   }, [])
 
   useEffect(() => {
-    // Don't auto-focus - let user manually enter OTP
+    const handleApproved = (event) => {
+      const msg = event?.detail?.message || "Your account has been approved by Admin! You can now log in.";
+      toast.success("Account Approved! 🎉", { description: msg, duration: 8000 });
+      setPendingMessage("");
+      setIsRejected(false);
+      setRejectionReason("");
+    };
+    window.addEventListener("deliveryPartnerApproved", handleApproved);
+    return () => window.removeEventListener("deliveryPartnerApproved", handleApproved);
+  }, []);
+
+  useEffect(() => {
     // Focus first input only if all fields are empty (small delay to ensure inputs are rendered)
     if (inputRefs.current[0] && otp.every(digit => digit === "")) {
       setTimeout(() => {
@@ -508,7 +519,18 @@ export default function DeliveryOTP() {
                   >
                     Re-apply Now
                   </button>
-                ) : null}
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPendingMessage("");
+                      setError("");
+                    }}
+                    className="w-full py-3 bg-amber-600 text-white rounded-lg font-bold text-sm hover:bg-amber-700 shadow-md transition-all active:scale-95"
+                  >
+                    Check Approval & Try Login
+                  </button>
+                )}
                 
                 <button
                   type="button"

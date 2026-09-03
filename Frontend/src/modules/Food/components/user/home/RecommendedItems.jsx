@@ -26,17 +26,21 @@ const getFoodTypeTag = (item, fallbackLabel) => {
 };
 
 function RecommendedDishCard({ item, fallbackLabel, handleAddHomeItemToCart }) {
+  const navigate = useNavigate();
   const nutritionSummary = getNutritionSummary(item.nutrition);
   const foodTypeTag = getFoodTypeTag(item, fallbackLabel);
 
+  const handleCardClick = () => {
+    navigate({
+      pathname: "/food/user/choose-meal",
+      search: `?dish=${encodeURIComponent(item.name || "")}&dishId=${encodeURIComponent(item.itemId || item.id || "")}&restaurant=${encodeURIComponent(item.restaurantName || "")}&restaurantId=${encodeURIComponent(item.restaurantId || "")}&category=${encodeURIComponent(item.categoryName || "")}${Number.isFinite(item.price) ? `&price=${encodeURIComponent(item.price)}` : ""}`,
+    }, { state: { dish: item } });
+  };
+
   return (
-    <Link
-      to={{
-        pathname: "/food/user/choose-meal",
-        search: `?dish=${encodeURIComponent(item.name || "")}&dishId=${encodeURIComponent(item.itemId || item.id || "")}&restaurant=${encodeURIComponent(item.restaurantName || "")}&restaurantId=${encodeURIComponent(item.restaurantId || "")}&category=${encodeURIComponent(item.categoryName || "")}${Number.isFinite(item.price) ? `&price=${encodeURIComponent(item.price)}` : ""}`,
-      }}
-      state={{ dish: item }}
-      className="flex gap-3 rounded-[10px] bg-white dark:bg-[#1a1a1a] border border-orange-100 dark:border-gray-800 shadow-sm p-2 transition-colors"
+    <div
+      onClick={handleCardClick}
+      className="flex gap-3 rounded-[10px] bg-white dark:bg-[#1a1a1a] border border-orange-100 dark:border-gray-800 shadow-sm p-2 transition-colors cursor-pointer"
     >
       <div className="h-[74px] w-[94px] rounded-lg overflow-hidden shrink-0 bg-orange-50 dark:bg-gray-800 flex items-center justify-center">
         {item.image ? (
@@ -85,7 +89,10 @@ function RecommendedDishCard({ item, fallbackLabel, handleAddHomeItemToCart }) {
           )}
           <button
             type="button"
-            onClick={(event) => handleAddHomeItemToCart(event, item)}
+            onClick={(event) => {
+              event.stopPropagation();
+              handleAddHomeItemToCart(event, item);
+            }}
             className="ml-auto h-6 w-6 rounded-full bg-[#ef2b24] text-white flex items-center justify-center hover:scale-105 active:scale-95 transition-transform"
             aria-label={`Add ${item.name || "item"} to cart`}
           >
@@ -93,7 +100,7 @@ function RecommendedDishCard({ item, fallbackLabel, handleAddHomeItemToCart }) {
           </button>
         </div>
       </div>
-    </Link>
+    </div>
   );
 }
 

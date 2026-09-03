@@ -40,9 +40,10 @@ export default function Wallet() {
       const response = await userAPI.getWallet()
       const walletData = response?.data?.data?.wallet || response?.data?.wallet
 
-      if (walletData) {
+      if (walletData && typeof walletData === "object") {
         setWallet(walletData)
-        setTransactions(walletData.transactions || [])
+        const rawTx = Array.isArray(walletData.transactions) ? walletData.transactions : []
+        setTransactions(rawTx.filter(Boolean))
       } else {
         setWallet({ balance: 0, referralEarnings: 0, transactions: [] })
         setTransactions([])
@@ -55,6 +56,8 @@ export default function Wallet() {
           ? "Please sign in to view your wallet."
           : err?.response?.data?.message || "Failed to load wallet data. Please try again."
       setError(msg)
+      setWallet({ balance: 0, referralEarnings: 0, transactions: [] })
+      setTransactions([])
     } finally {
       setLoading(false)
     }
@@ -64,38 +67,45 @@ export default function Wallet() {
     fetchWalletData()
   }, [])
 
-  const currentBalance = wallet?.balance || 0
+  const currentBalance = Number(wallet?.balance || 0)
 
   const referralEarnings = useMemo(() => {
     if (wallet?.referralEarnings != null) {
-      return Number(wallet.referralEarnings) || 0
+      const num = Number(wallet.referralEarnings)
+      return Number.isFinite(num) ? num : 0
     }
+
+    if (!Array.isArray(transactions)) return 0
 
     return transactions
       .filter(
         (transaction) =>
+          transaction &&
           transaction.type === "addition" &&
-          transaction.status === "Completed" &&
+          (transaction.status === "Completed" || !transaction.status) &&
           (transaction?.metadata?.source === "referral_signup" ||
             String(transaction.description || "").toLowerCase().startsWith("referral reward"))
       )
-      .reduce((sum, transaction) => sum + (Number(transaction.amount) || 0), 0)
+      .reduce((sum, transaction) => sum + (Number(transaction?.amount) || 0), 0)
   }, [wallet, transactions])
 
   const filteredTransactions = useMemo(() => {
+    if (!Array.isArray(transactions)) return []
+    const valid = transactions.filter(Boolean)
+
     if (selectedFilter === TRANSACTION_TYPES.ALL) {
-      return transactions
+      return valid
     }
 
-    return transactions.filter((transaction) => {
+    return valid.filter((transaction) => {
       if (selectedFilter === TRANSACTION_TYPES.ADDITIONS) {
-        return transaction.type === "addition"
+        return transaction?.type === "addition"
       }
       if (selectedFilter === TRANSACTION_TYPES.DEDUCTIONS) {
-        return transaction.type === "deduction"
+        return transaction?.type === "deduction"
       }
       if (selectedFilter === TRANSACTION_TYPES.REFUNDS) {
-        return transaction.type === "refund"
+        return transaction?.type === "refund"
       }
       return true
     })
@@ -111,6 +121,8 @@ export default function Wallet() {
     if (!dateString) return "N/A"
 
     const date = new Date(dateString)
+    if (isNaN(date.getTime())) return "N/A"
+
     const formattedDate = date.toLocaleDateString("en-IN", {
       year: "numeric",
       month: "2-digit",
@@ -282,9 +294,9 @@ export default function Wallet() {
 
               {filteredTransactions.length > 0 ? (
                 <div className="space-y-3 md:space-y-4">
-                  {filteredTransactions.map((transaction) => (
+                  {filteredTransactions.map((transaction, idx) => (
                     <Card
-                      key={transaction.id}
+                      key={transaction?.id || transaction?._id || `tx-${idx}`}
                       className="py-0 border border-gray-100 dark:border-gray-800 shadow-sm dark:bg-[#1a1a1a] hover:shadow-md transition-all duration-200 cursor-pointer"
                     >
                       <CardContent className="p-4 md:p-5 lg:p-6">
@@ -292,29 +304,29 @@ export default function Wallet() {
                           <div className="flex items-center gap-4 md:gap-5 lg:gap-6 flex-1 min-w-0">
                             <div className="flex-shrink-0">
                               <div className="w-12 h-12 md:w-14 md:h-14 lg:w-16 lg:h-16 flex items-center justify-center rounded-full bg-gray-50 dark:bg-gray-800/50">
-                                {getTransactionIcon(transaction.type)}
+                                {getTransactionIcon(transaction?.type)}
                               </div>
                             </div>
 
                             <div className="flex-1 min-w-0">
                               <p className="text-gray-900 dark:text-white font-semibold text-sm md:text-base lg:text-lg truncate mb-1">
-                                {transaction.description}
+                                {transaction?.description || "Transaction"}
                               </p>
                               {(transaction?.metadata?.source === "referral_signup" ||
-                                String(transaction.description || "").toLowerCase().startsWith("referral reward")) && (
+                                String(transaction?.description || "").toLowerCase().startsWith("referral reward")) && (
                                 <p className="text-[11px] md:text-xs text-green-600 dark:text-green-400 font-medium mb-1">
                                   Referral reward
                                 </p>
                               )}
                               <p className="text-gray-500 dark:text-gray-400 text-xs md:text-sm lg:text-base">
-                                {formatDate(transaction.date || transaction.createdAt)}
+                                {formatDate(transaction?.date || transaction?.createdAt)}
                               </p>
                             </div>
                           </div>
 
-                          <div className={`flex-shrink-0 font-bold text-lg md:text-xl lg:text-2xl ${getTransactionColor(transaction.type)}`}>
-                            {transaction.type === "deduction" ? "-" : "+"}
-                            {formatAmount(transaction.amount)}
+                          <div className={`flex-shrink-0 font-bold text-lg md:text-xl lg:text-2xl ${getTransactionColor(transaction?.type)}`}>
+                            {transaction?.type === "deduction" ? "-" : "+"}
+                            {formatAmount(transaction?.amount)}
                           </div>
                         </div>
                       </CardContent>

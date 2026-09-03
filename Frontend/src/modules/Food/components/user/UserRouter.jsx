@@ -400,6 +400,10 @@ export default function UserRouter() {
               </ProtectedRoute>
             }
           />
+          <Route
+            path="profile/wallet"
+            element={<Navigate to="/food/user/wallet" replace />}
+          />
 
           {/* Complaints - Protected (user auth) */}
           <Route

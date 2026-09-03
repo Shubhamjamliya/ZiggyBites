@@ -135,21 +135,27 @@ const resolveCustomTargets = async ({ targets = [], targetIds = [] } = {}) => {
 };
 
 const resolveTargets = async ({ targetType, targetIds = [], targets = [] } = {}) => {
+    let resolved = [];
     if (targetType === 'ALL') {
         const [users, restaurants, deliveryPartners] = await Promise.all([
             loadTargetsByOwnerType('USER'),
             loadTargetsByOwnerType('RESTAURANT'),
             loadTargetsByOwnerType('DELIVERY_PARTNER')
         ]);
-        return [...users, ...restaurants, ...deliveryPartners];
+        resolved = [...users, ...restaurants, ...deliveryPartners];
+    } else if (targetType === 'USER') {
+        resolved = await loadTargetsByOwnerType('USER');
+    } else if (targetType === 'RESTAURANT') {
+        resolved = await loadTargetsByOwnerType('RESTAURANT');
+    } else if (targetType === 'DELIVERY') {
+        resolved = await loadTargetsByOwnerType('DELIVERY_PARTNER');
+    } else if (targetType === 'CUSTOM') {
+        resolved = await resolveCustomTargets({ targets, targetIds });
+    } else {
+        throw new ValidationError('Unsupported targetType');
     }
 
-    if (targetType === 'USER') return loadTargetsByOwnerType('USER');
-    if (targetType === 'RESTAURANT') return loadTargetsByOwnerType('RESTAURANT');
-    if (targetType === 'DELIVERY') return loadTargetsByOwnerType('DELIVERY_PARTNER');
-    if (targetType === 'CUSTOM') return resolveCustomTargets({ targets, targetIds });
-
-    throw new ValidationError('Unsupported targetType');
+    return dedupeTargets(resolved);
 };
 
 const buildNotificationPayload = ({ title, message, link, broadcastId, target }) => ({
@@ -171,12 +177,23 @@ const emitRealtimeNotifications = (targets = [], broadcast) => {
     const io = getIO();
     if (!io) return;
 
+    const emittedRooms = new Set();
     for (const target of targets) {
-        const ownerId = String(target.ownerId || '');
-        if (!ownerId) continue;
+        const ownerId = String(target.ownerId || '').trim();
+        const ownerType = String(target.ownerType || '').trim().toUpperCase();
+        if (!ownerId || !ownerType) continue;
+
+        let roomName = null;
+        if (ownerType === 'USER') roomName = rooms.user(ownerId);
+        else if (ownerType === 'RESTAURANT') roomName = rooms.restaurant(ownerId);
+        else if (ownerType === 'DELIVERY_PARTNER') roomName = rooms.delivery(ownerId);
+
+        if (!roomName || emittedRooms.has(roomName)) continue;
+        emittedRooms.add(roomName);
 
         const payload = {
             id: String(broadcast._id),
+            broadcastId: String(broadcast._id),
             title: broadcast.title,
             message: broadcast.message,
             link: broadcast.link || '',
@@ -184,15 +201,7 @@ const emitRealtimeNotifications = (targets = [], broadcast) => {
             createdAt: broadcast.createdAt
         };
 
-        if (target.ownerType === 'USER') {
-            io.to(rooms.user(ownerId)).emit('admin_notification', payload);
-        }
-        if (target.ownerType === 'RESTAURANT') {
-            io.to(rooms.restaurant(ownerId)).emit('admin_notification', payload);
-        }
-        if (target.ownerType === 'DELIVERY_PARTNER') {
-            io.to(rooms.delivery(ownerId)).emit('admin_notification', payload);
-        }
+        io.to(roomName).emit('admin_notification', payload);
     }
 };
 

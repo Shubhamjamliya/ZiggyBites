@@ -89,25 +89,47 @@ export default function Notifications() {
         }
       })
       .filter((item) => item.id && !dismissedIds.includes(item.id))
-    const broadcastRows = (broadcastNotifications || []).map((item) => ({
-      id: item.id,
-      message: item.title || "Broadcast notification",
-      detail: item.message || "",
-      source: "broadcast",
-      read: item.read,
-      timeValue: item.createdAt ? new Date(item.createdAt).getTime() : 0,
-      time: item.createdAt
-        ? new Date(item.createdAt).toLocaleString("en-IN", {
-            day: "2-digit",
-            month: "short",
-            hour: "2-digit",
-            minute: "2-digit",
-            hour12: true,
-          })
-        : "N/A",
-    }))
+    const broadcastRows = (broadcastNotifications || [])
+      .filter((item) => item.id && !dismissedIds.includes(item.id))
+      .map((item) => ({
+        id: item.id,
+        broadcastId: item.broadcastId || item.id,
+        message: item.title || "Broadcast notification",
+        detail: item.message || "",
+        source: "broadcast",
+        read: item.read,
+        timeValue: item.createdAt ? new Date(item.createdAt).getTime() : 0,
+        time: item.createdAt
+          ? new Date(item.createdAt).toLocaleString("en-IN", {
+              day: "2-digit",
+              month: "short",
+              hour: "2-digit",
+              minute: "2-digit",
+              hour12: true,
+            })
+          : "N/A",
+      }))
 
-    return [...broadcastRows, ...orderNotifications].sort((a, b) => b.timeValue - a.timeValue)
+    // Deduplicate broadcast notifications by broadcastId or message+detail
+    const seenBroadcastKeys = new Set();
+    const uniqueBroadcastRows = [];
+    for (const b of broadcastRows) {
+      const key = b.broadcastId ? `b_${b.broadcastId}` : `m_${b.message}_${b.detail}`;
+      if (!seenBroadcastKeys.has(key)) {
+        seenBroadcastKeys.add(key);
+        uniqueBroadcastRows.push(b);
+      }
+    }
+
+    const combined = [...uniqueBroadcastRows, ...orderNotifications];
+    const seenIds = new Set();
+    return combined
+      .filter((item) => {
+        if (!item?.id || seenIds.has(item.id)) return false;
+        seenIds.add(item.id);
+        return true;
+      })
+      .sort((a, b) => b.timeValue - a.timeValue);
   }, [broadcastNotifications, dismissedIds, orders])
 
   const removeNotification = (id, source = "order") => {

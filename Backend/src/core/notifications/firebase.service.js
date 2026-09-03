@@ -180,13 +180,21 @@ const buildMessagePayload = (payload = {}, token) => {
     
     message.data = data;
 
+    const broadcastId = data.broadcastId || payload.data?.broadcastId;
+    const orderId = data.orderId || payload.data?.orderId;
+    const notificationTag = broadcastId
+        ? `broadcast_${broadcastId}`
+        : (orderId ? `order_${orderId}` : (data.type ? String(data.type) : undefined));
+
     message.android = {
         priority: 'high',
+        ...(broadcastId ? { collapse_key: `broadcast_${broadcastId}` } : {}),
         notification: {
             channel_id: 'default',
             sound: 'default',
             default_vibrate_timings: true,
-            default_light_settings: true
+            default_light_settings: true,
+            ...(notificationTag ? { tag: notificationTag } : {})
         }
     };
 
@@ -238,11 +246,14 @@ const normalizeTokenList = (tokens = []) => {
 const readTokensFromDoc = (doc, platform) => {
     if (!doc) return [];
     if (platform) {
-        return normalizeTokenList(doc[getTokenFieldForPlatform(platform)] || []);
+        const platformTokens = Array.isArray(doc[getTokenFieldForPlatform(platform)]) ? doc[getTokenFieldForPlatform(platform)] : [];
+        return normalizeTokenList(platform === 'mobile' ? platformTokens.slice(-2) : platformTokens);
     }
+    const webTokens = Array.isArray(doc.fcmTokens) ? doc.fcmTokens : [];
+    const mobileTokens = Array.isArray(doc.fcmTokenMobile) ? doc.fcmTokenMobile : [];
     return normalizeTokenList([
-        ...(Array.isArray(doc.fcmTokens) ? doc.fcmTokens : []),
-        ...(Array.isArray(doc.fcmTokenMobile) ? doc.fcmTokenMobile : [])
+        ...webTokens,
+        ...mobileTokens.slice(-2)
     ]);
 };
 
@@ -280,7 +291,9 @@ export const upsertFirebaseDeviceToken = async ({ ownerType, ownerId, token, pla
     const existingTokens = Array.isArray(doc[field]) ? doc[field] : [];
     console.log(`[FCM-DEBUG] upsert - Current tokens in DB count: ${existingTokens.length}`);
     
-    const tokens = normalizeTokenList([...existingTokens, normalizedToken]);
+    // For mobile tokens, keep at most 2 latest tokens to prevent stale reinstall tokens from duplicating pushes
+    const maxTokens = normalizedPlatform === 'mobile' ? 2 : 5;
+    const tokens = normalizeTokenList([...existingTokens.filter((t) => t !== normalizedToken), normalizedToken]).slice(-maxTokens);
     doc[field] = tokens;
     
     await doc.save();
@@ -369,7 +382,7 @@ export const sendPushNotification = async (tokens, payload = {}) => {
     return { successCount, failureCount, results };
 };
 
-export const sendNotificationToOwner = async ({ ownerType, ownerId, payload, platform } = {}) => {
+export const sendNotificationToOwner = async ({ ownerType, ownerId, payload, platform, tokensOverride } = {}) => {
     // 💡 Clone the payload to avoid side-effects (e.g. adding multiple prefixes to the same object during broadcasting)
     const enrichedPayload = { ...payload };
 
@@ -391,7 +404,9 @@ export const sendNotificationToOwner = async ({ ownerType, ownerId, payload, pla
         }
     }
 
-    const tokens = await listOwnerTokens({ ownerType, ownerId, platform });
+    const tokens = Array.isArray(tokensOverride)
+        ? normalizeTokenList(tokensOverride)
+        : await listOwnerTokens({ ownerType, ownerId, platform });
     if (!tokens.length) {
         return { successCount: 0, failureCount: 0, results: [] };
     }
@@ -433,16 +448,32 @@ export const sendNotificationToOwners = async (targets = [], payload = {}) => {
         ? [...new Map(targets.filter(t => t?.ownerType && t?.ownerId).map(t => [`${t.ownerType}:${t.ownerId}`, t])).values()]
         : [];
 
+    // Global token deduplication set: ensures each unique FCM token receives at most 1 push across the batch
+    const sentTokens = new Set();
     const results = [];
     for (const target of uniqueTargets) {
-        results.push(
-            await sendNotificationToOwner({
-                ownerType: target.ownerType,
-                ownerId: target.ownerId,
-                platform: target.platform,
-                payload
-            })
-        );
+        const targetTokens = await listOwnerTokens({
+            ownerType: target.ownerType,
+            ownerId: target.ownerId,
+            platform: target.platform
+        });
+
+        const freshTokens = targetTokens.filter((tok) => !sentTokens.has(tok));
+        for (const tok of freshTokens) {
+            sentTokens.add(tok);
+        }
+
+        if (freshTokens.length > 0) {
+            results.push(
+                await sendNotificationToOwner({
+                    ownerType: target.ownerType,
+                    ownerId: target.ownerId,
+                    platform: target.platform,
+                    tokensOverride: freshTokens,
+                    payload
+                })
+            );
+        }
     }
     return results;
 };

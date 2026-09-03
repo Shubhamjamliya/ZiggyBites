@@ -1,17 +1,35 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { notificationAPI } from "@food/api";
 
-const normalizeInboxItems = (rows = []) =>
-  (Array.isArray(rows) ? rows : []).map((item, index) => ({
-    id: String(item?._id || item?.id || `broadcast-${index}`),
-    source: "broadcast",
-    title: String(item?.title || "Notification").trim(),
-    message: String(item?.message || "").trim(),
-    link: String(item?.link || "").trim(),
-    read: Boolean(item?.isRead),
-    createdAt: item?.createdAt || item?.updatedAt || new Date().toISOString(),
-    category: String(item?.category || "broadcast"),
-  }));
+const normalizeInboxItems = (rows = []) => {
+  const list = Array.isArray(rows) ? rows : [];
+  const seen = new Set();
+  const normalized = [];
+
+  for (let index = 0; index < list.length; index++) {
+    const item = list[index];
+    const id = String(item?._id || item?.id || `broadcast-${index}`);
+    const broadcastId = item?.broadcastId ? String(item.broadcastId) : (item?.metadata?.broadcastId ? String(item.metadata.broadcastId) : null);
+    const dedupKey = broadcastId ? `b_${broadcastId}` : `id_${id}`;
+
+    if (seen.has(dedupKey)) continue;
+    seen.add(dedupKey);
+
+    normalized.push({
+      id,
+      broadcastId,
+      source: "broadcast",
+      title: String(item?.title || "Notification").trim(),
+      message: String(item?.message || "").trim(),
+      link: String(item?.link || "").trim(),
+      read: Boolean(item?.isRead),
+      createdAt: item?.createdAt || item?.updatedAt || new Date().toISOString(),
+      category: String(item?.category || "broadcast"),
+    });
+  }
+
+  return normalized;
+};
 
 const REFRESH_EVENT = "foodNotificationInboxRefresh";
 

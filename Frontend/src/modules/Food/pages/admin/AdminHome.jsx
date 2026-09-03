@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback, useRef } from "react"
 import { useNavigate } from "react-router-dom"
 import { Card, CardContent, CardHeader, CardTitle } from "@food/components/ui/card"
 import {
@@ -25,8 +25,10 @@ import {
   XAxis,
   YAxis,
 } from "recharts"
-import { Activity, ArrowUpRight, ShoppingBag, CreditCard, Truck, Receipt, DollarSign, Store, UserCheck, Package, UserCircle, Clock, CheckCircle, Plus, XCircle } from "lucide-react"
+import { Activity, ArrowUpRight, ShoppingBag, CreditCard, Truck, Receipt, DollarSign, Store, UserCheck, Package, UserCircle, Clock, CheckCircle, Plus, XCircle, RefreshCw } from "lucide-react"
 import { adminAPI } from "@food/api"
+import { API_BASE_URL } from "@food/api/config"
+import io from "socket.io-client"
 const debugLog = () => {}
 const debugError = () => {}
 
@@ -44,8 +46,10 @@ export default function AdminHome() {
   const [selectedZone, setSelectedZone] = useState("all")
   const [selectedPeriod, setSelectedPeriod] = useState("overall")
   const [isLoading, setIsLoading] = useState(true)
+  const [isRefreshing, setIsRefreshing] = useState(false)
   const [dashboardData, setDashboardData] = useState(null)
   const [zones, setZones] = useState([])
+  const socketRef = useRef(null)
 
   // Fetch zone list for filter
   useEffect(() => {
@@ -63,53 +67,87 @@ export default function AdminHome() {
     fetchZones()
   }, [])
 
-  // Fetch dashboard stats from backend when filters change
-  useEffect(() => {
-    let isMounted = true
-
-    const fetchDashboardStats = async (isBackground = false) => {
-      try {
-        if (!isBackground) setIsLoading(true)
-        const params = {
-          period: selectedPeriod,
-          ...(selectedZone !== "all" ? { zoneId: selectedZone } : {}),
-        }
-        const response = await adminAPI.getDashboardStats(params)
-        if (isMounted && response.data?.success && response.data?.data) {
-          setDashboardData(response.data.data)
-        }
-      } catch (error) {
-        if (isMounted && !isBackground) {
-          setDashboardData(null)
-          debugError("Error fetching dashboard stats:", error)
-        }
-      } finally {
-        if (isMounted && !isBackground) {
-          setIsLoading(false)
-        }
+  const fetchDashboardStats = useCallback(async (isBackground = false) => {
+    try {
+      if (!isBackground) setIsLoading(true)
+      const params = {
+        period: selectedPeriod,
+        ...(selectedZone !== "all" ? { zoneId: selectedZone } : {}),
+      }
+      const response = await adminAPI.getDashboardStats(params)
+      if (response.data?.success && response.data?.data) {
+        setDashboardData(response.data.data)
+      }
+    } catch (error) {
+      if (!isBackground) {
+        setDashboardData(null)
+        debugError("Error fetching dashboard stats:", error)
+      }
+    } finally {
+      if (!isBackground) {
+        setIsLoading(false)
+        setIsRefreshing(false)
       }
     }
+  }, [selectedZone, selectedPeriod])
 
+  const handleManualRefresh = async () => {
+    setIsRefreshing(true)
+    await fetchDashboardStats(false)
+    setTimeout(() => setIsRefreshing(false), 500)
+  }
+
+  // Fetch dashboard stats and establish realtime listeners
+  useEffect(() => {
     fetchDashboardStats(false)
 
-    // Periodic auto-refresh every 20 seconds for live order state monitoring
+    // Periodic auto-refresh every 12 seconds for live order state monitoring
     const pollInterval = setInterval(() => {
       fetchDashboardStats(true)
-    }, 20000)
+    }, 12000)
 
     const handleOrderEvent = () => fetchDashboardStats(true)
     window.addEventListener("orderUpdated", handleOrderEvent)
     window.addEventListener("foodOrderCreated", handleOrderEvent)
     window.addEventListener("foodOrderStatusChanged", handleOrderEvent)
 
+    // Socket.IO realtime connection for instantaneous updates
+    const backendUrl = (API_BASE_URL || "").replace(/\/api\/?$/, "")
+    if (backendUrl && backendUrl.startsWith("http")) {
+      try {
+        const socket = io(backendUrl, {
+          transports: ["websocket", "polling"],
+          reconnection: true,
+          reconnectionDelay: 2000,
+          timeout: 15000,
+        })
+        socketRef.current = socket
+
+        socket.on("connect", () => {
+          socket.emit("join-admin-orders")
+        })
+
+        const onSocketUpdate = () => fetchDashboardStats(true)
+        socket.on("admin_new_order", onSocketUpdate)
+        socket.on("order_status_update", onSocketUpdate)
+        socket.on("order_updated", onSocketUpdate)
+        socket.on("order_cancelled", onSocketUpdate)
+        socket.on("order_delivered", onSocketUpdate)
+        socket.on("admin_dashboard_refresh", onSocketUpdate)
+      } catch (_) {}
+    }
+
     return () => {
-      isMounted = false
       clearInterval(pollInterval)
       window.removeEventListener("orderUpdated", handleOrderEvent)
       window.removeEventListener("foodOrderCreated", handleOrderEvent)
       window.removeEventListener("foodOrderStatusChanged", handleOrderEvent)
+      if (socketRef.current) {
+        socketRef.current.disconnect()
+        socketRef.current = null
+      }
     }
-  }, [selectedZone, selectedPeriod])
+  }, [fetchDashboardStats])
 
   // Get order stats from real data
   const getOrderStats = () => {
@@ -151,7 +189,7 @@ export default function AdminHome() {
   // Calculate totals from real data
   const revenueTotal = dashboardData?.revenue?.total || 0
   const commissionTotal = dashboardData?.commission?.total || 0
-  const ordersTotal = dashboardData?.orders?.total || 0
+  const ordersTotal = dashboardData?.orders?.total ?? dashboardData?.orderStats?.total ?? 0
   const platformFeeTotal = dashboardData?.platformFee?.total || 0
   const deliveryFeeTotal = dashboardData?.deliveryFee?.total || 0
   const gstTotal = dashboardData?.gst?.total || 0
@@ -168,6 +206,7 @@ export default function AdminHome() {
   const pendingOrders = dashboardData?.orderStats?.pending || 0
   const processingOrders = dashboardData?.orderStats?.processing || 0
   const completedOrders = dashboardData?.orderStats?.completed || 0
+  const cancelledOrders = dashboardData?.orderStats?.cancelled ?? dashboardData?.orders?.byStatus?.cancelled ?? 0
 
   const pieData = orderStats.map((item) => ({
     name: item.label,
@@ -208,8 +247,16 @@ export default function AdminHome() {
             </div>
 
           </div>
-          <div className="flex flex-wrap items-center gap-4">
-
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              onClick={handleManualRefresh}
+              disabled={isLoading || isRefreshing}
+              className="flex items-center gap-2 px-3.5 py-2 rounded-xl border border-neutral-300 bg-white text-sm font-semibold text-neutral-700 hover:bg-neutral-50 hover:text-neutral-900 active:scale-95 transition-all shadow-sm disabled:opacity-50"
+              title="Refresh dashboard metrics"
+            >
+              <RefreshCw className={`h-4 w-4 text-neutral-600 ${isRefreshing ? "animate-spin text-primary" : ""}`} />
+              <span className="hidden sm:inline">Refresh</span>
+            </button>
             <Select value={selectedZone} onValueChange={setSelectedZone}>
               <SelectTrigger className="min-w-[160px] border-neutral-300 bg-white text-neutral-900">
                 <SelectValue placeholder="All zones" />
@@ -241,10 +288,18 @@ export default function AdminHome() {
         <div className="space-y-6 px-6 py-6">
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <MetricCard
+              title="Total orders"
+              value={ordersTotal.toLocaleString("en-IN")}
+              helper={`${periodLabel} all orders placed`}
+              icon={<ShoppingBag className="h-5 w-5 text-blue-600" />}
+              accent="bg-blue-200/40"
+              path="/admin/food/orders/all"
+            />
+            <MetricCard
               title="Gross revenue"
               value={formatCurrency(revenueTotal)}
               helper={`${periodLabel} transaction volume`}
-              icon={<ShoppingBag className="h-5 w-5 text-emerald-600" />}
+              icon={<DollarSign className="h-5 w-5 text-emerald-600" />}
               accent="bg-emerald-200/40"
               path="/admin/food/transaction-report"
             />
@@ -257,12 +312,44 @@ export default function AdminHome() {
               path="/admin/food/restaurants/commission"
             />
             <MetricCard
-              title="Orders processed"
+              title="Platform Total"
+              value={formatCurrency(totalAdminEarnings, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              helper={totalRevenueHelper}
+              icon={<DollarSign className="h-5 w-5 text-green-600" />}
+              accent="bg-green-200/40"
+              path="/admin/food/transaction-report"
+            />
+            <MetricCard
+              title="Completed orders"
+              value={completedOrders.toLocaleString("en-IN")}
+              helper="Successfully delivered"
+              icon={<CheckCircle className="h-5 w-5 text-emerald-600" />}
+              accent="bg-emerald-200/40"
+              path="/admin/food/orders/delivered"
+            />
+            <MetricCard
+              title="Orders in processing"
               value={processingOrders.toLocaleString("en-IN")}
               helper="Orders currently being processed"
               icon={<Activity className="h-5 w-5 text-amber-600" />}
               accent="bg-amber-200/40"
               path="/admin/food/orders/processing"
+            />
+            <MetricCard
+              title="Pending orders"
+              value={pendingOrders.toLocaleString("en-IN")}
+              helper="Orders awaiting processing"
+              icon={<Clock className="h-5 w-5 text-orange-600" />}
+              accent="bg-orange-200/40"
+              path="/admin/food/orders/pending"
+            />
+            <MetricCard
+              title="Cancelled orders"
+              value={cancelledOrders.toLocaleString("en-IN")}
+              helper="Cancelled or rejected orders"
+              icon={<XCircle className="h-5 w-5 text-rose-600" />}
+              accent="bg-rose-200/40"
+              path="/admin/food/orders/canceled"
             />
             <MetricCard
               title="Platform fee"
@@ -289,12 +376,12 @@ export default function AdminHome() {
               path="/admin/food/tax-report"
             />
             <MetricCard
-              title="Platform Total"
-              value={formatCurrency(totalAdminEarnings, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              helper={totalRevenueHelper}
-              icon={<DollarSign className="h-5 w-5 text-green-600" />}
-              accent="bg-green-200/40"
-              path="/admin/food/transaction-report"
+              title="Total customers"
+              value={totalCustomers.toLocaleString("en-IN")}
+              helper="Registered users"
+              icon={<UserCircle className="h-5 w-5 text-cyan-600" />}
+              accent="bg-cyan-200/40"
+              path="/admin/food/customers"
             />
             <MetricCard
               title="Total restaurants"
@@ -308,8 +395,8 @@ export default function AdminHome() {
               title="Restaurant request pending"
               value={pendingRestaurantRequests.toLocaleString("en-IN")}
               helper="Awaiting approval"
-              icon={<UserCheck className="h-5 w-5 text-orange-600" />}
-              accent="bg-orange-200/40"
+              icon={<UserCheck className="h-5 w-5 text-amber-600" />}
+              accent="bg-amber-200/40"
               path="/admin/food/restaurants/joining-request"
             />
             <MetricCard
@@ -343,30 +430,6 @@ export default function AdminHome() {
               icon={<Plus className="h-5 w-5 text-pink-600" />}
               accent="bg-pink-200/40"
               path="/admin/food/addons"
-            />
-            <MetricCard
-              title="Total customers"
-              value={totalCustomers.toLocaleString("en-IN")}
-              helper="Registered users"
-              icon={<UserCircle className="h-5 w-5 text-cyan-600" />}
-              accent="bg-cyan-200/40"
-              path="/admin/food/customers"
-            />
-            <MetricCard
-              title="Pending orders"
-              value={pendingOrders.toLocaleString("en-IN")}
-              helper="Orders awaiting processing"
-              icon={<Clock className="h-5 w-5 text-red-600" />}
-              accent="bg-red-200/40"
-              path="/admin/food/orders/pending"
-            />
-            <MetricCard
-              title="Completed orders"
-              value={completedOrders.toLocaleString("en-IN")}
-              helper="Successfully delivered"
-              icon={<CheckCircle className="h-5 w-5 text-emerald-600" />}
-              accent="bg-emerald-200/40"
-              path="/admin/food/orders/delivered"
             />
           </div>
 
@@ -584,10 +647,33 @@ export default function AdminHome() {
                       }
                     }
 
+                    const getSignalPath = (type) => {
+                      switch (type) {
+                        case "restaurant":
+                          return "/admin/food/restaurants/joining-request"
+                        case "delivery":
+                          return "/admin/food/delivery-partners/join-request"
+                        case "order_pending":
+                          return "/admin/food/orders/pending"
+                        case "order_delivered":
+                          return "/admin/food/orders/delivered"
+                        case "order_cancelled":
+                          return "/admin/food/orders/canceled"
+                        case "customer":
+                          return "/admin/food/customers"
+                        default:
+                          return null
+                      }
+                    }
+
                     return (
                       <div
                         key={idx}
-                        className={`flex items-start gap-3 rounded-xl border border-neutral-200 ${getBg(item.type)} px-3 py-3 hover:border-neutral-300 transition-all`}
+                        onClick={() => {
+                          const target = getSignalPath(item.type)
+                          if (target) navigate(target)
+                        }}
+                        className={`flex items-start gap-3 rounded-xl border border-neutral-200 ${getBg(item.type)} px-3 py-3 hover:border-neutral-300 transition-all cursor-pointer hover:shadow-sm`}
                       >
                         <div className="mt-0.5">{getIcon(item.type)}</div>
                         <div className="flex-1 min-w-0">

@@ -485,7 +485,7 @@ export async function getDashboardStats(query = {}) {
                         $sum: { 
                             $cond: [
                                 DELIVERED_ORDER_STATUS_EXPR,
-                                { $ifNull: ['$pricing.total', { $ifNull: ['$totalAmount', 0] }] },
+                                { $ifNull: ['$pricing.total', { $ifNull: ['$totalAmount', { $ifNull: ['$subscriptionUsage.operationalOrderValue', 0] }] }] },
                                 0
                             ] 
                         } 
@@ -494,26 +494,34 @@ export async function getDashboardStats(query = {}) {
                         $sum: { 
                             $cond: [
                                 DELIVERED_ORDER_STATUS_EXPR,
-                                { $ifNull: ['$pricing.restaurantCommission', { $ifNull: ['$restaurantCommission', 0] }] },
+                                { $ifNull: ['$pricing.restaurantCommission', { $ifNull: ['$restaurantCommission', { $ifNull: ['$platformProfit', 0] }] }] },
                                 0
                             ] 
                         } 
                     },
                     platformFeeTotal: { 
                         $sum: { 
-                            $cond: [DELIVERED_ORDER_STATUS_EXPR, DASHBOARD_PLATFORM_FEE_EXPR, 0] 
+                            $cond: [
+                                DELIVERED_ORDER_STATUS_EXPR,
+                                { $ifNull: ['$pricing.platformFee', { $ifNull: ['$subscriptionUsage.allocatedPlatformFeeAmount', DASHBOARD_PLATFORM_FEE_EXPR] }] },
+                                0
+                            ] 
                         } 
                     },
                     deliveryFeeTotal: { 
                         $sum: { 
-                            $cond: [DELIVERED_ORDER_STATUS_EXPR, DASHBOARD_DELIVERY_FEE_EXPR, 0] 
+                            $cond: [
+                                DELIVERED_ORDER_STATUS_EXPR,
+                                { $ifNull: ['$pricing.deliveryFee', { $ifNull: ['$subscriptionUsage.allocatedDeliveryFeeAmount', DASHBOARD_DELIVERY_FEE_EXPR] }] },
+                                0
+                            ] 
                         } 
                     },
                     gstTotal: { 
                         $sum: { 
                             $cond: [
                                 DELIVERED_ORDER_STATUS_EXPR,
-                                { $ifNull: ['$pricing.tax', { $ifNull: ['$pricing.gst', { $ifNull: ['$tax', { $ifNull: ['$gst', 0] }] }] }] },
+                                { $ifNull: ['$pricing.tax', { $ifNull: ['$pricing.gst', { $ifNull: ['$subscriptionUsage.allocatedGstAmount', { $ifNull: ['$tax', { $ifNull: ['$gst', 0] }] }] }] }] },
                                 0
                             ] 
                         } 
@@ -571,8 +579,8 @@ export async function getDashboardStats(query = {}) {
         ]),
         FoodRestaurant.countDocuments({ ...restaurantMatch, status: 'approved' }),
         FoodRestaurant.countDocuments({ ...restaurantMatch, status: 'pending' }),
-        FoodDeliveryPartner.countDocuments({ status: 'approved' }),
-        FoodDeliveryPartner.countDocuments({ status: 'pending' }),
+        FoodDeliveryPartner.countDocuments({ ...(zoneId ? { zoneId } : {}), status: 'approved' }),
+        FoodDeliveryPartner.countDocuments({ ...(zoneId ? { zoneId } : {}), status: 'pending' }),
         FoodItem.countDocuments({ approvalStatus: 'approved', ...zoneScopedRestaurantMatch }),
         FoodAddon.countDocuments({ approvalStatus: 'approved', isDeleted: { $ne: true }, ...zoneScopedRestaurantMatch }),
         zoneId
@@ -712,6 +720,13 @@ export async function getDashboardStats(query = {}) {
         });
     }
 
+    const commissionTotal = Number(totals.commissionTotal || 0);
+    const platformFeeTotal = Number(totals.platformFeeTotal || 0);
+    const gstTotal = Number(totals.gstTotal || 0);
+    const adminNetProfit = Number(totals.adminNetProfit || 0);
+    const deliveryProfit = Math.max(0, adminNetProfit - commissionTotal - platformFeeTotal);
+    const totalAdminEarnings = commissionTotal + platformFeeTotal + deliveryProfit + gstTotal;
+
     return {
         orders: {
             total: Number(totals.totalOrders || 0),
@@ -719,16 +734,17 @@ export async function getDashboardStats(query = {}) {
                 delivered: Number(totals.delivered || 0),
                 cancelled: Number(totals.cancelled || 0),
                 refunded: Number(totals.refunded || 0),
-                pending: Number(totals.pending || 0)
+                pending: Number(totals.pending || 0),
+                processing: Number(totals.dashboardProcessing || 0)
             }
         },
         revenue: { total: Number(totals.revenueTotal || 0) },
-        commission: { total: Number(totals.commissionTotal || 0) },
-        platformFee: { total: Number(totals.platformFeeTotal || 0) },
+        commission: { total: commissionTotal },
+        platformFee: { total: platformFeeTotal },
         deliveryFee: { total: Number(totals.deliveryFeeTotal || 0) },
-        gst: { total: Number(totals.gstTotal || 0) },
-        totalAdminEarnings: Number(totals.adminNetProfit || 0) + Number(totals.gstTotal || 0),
-        deliveryProfit: Number(totals.adminNetProfit || 0) - Number(totals.commissionTotal || 0) - Number(totals.platformFeeTotal || 0),
+        gst: { total: gstTotal },
+        totalAdminEarnings,
+        deliveryProfit,
         restaurants: {
             total: Number(restaurantsTotal || 0),
             pendingRequests: Number(restaurantsPending || 0)
@@ -741,9 +757,12 @@ export async function getDashboardStats(query = {}) {
         addons: { total: Number(addonsTotal || 0) },
         customers: { total: Number(customersTotal || 0) },
         orderStats: {
+            total: Number(totals.totalOrders || 0),
             pending: Number(totals.dashboardPending || 0),
             processing: Number(totals.dashboardProcessing || 0),
-            completed: Number(totals.delivered || 0)
+            completed: Number(totals.delivered || 0),
+            cancelled: Number(totals.cancelled || 0),
+            refunded: Number(totals.refunded || 0)
         },
         monthlyData,
         liveSignals: finalLiveSignals

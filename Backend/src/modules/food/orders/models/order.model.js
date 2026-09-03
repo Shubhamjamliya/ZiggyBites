@@ -378,7 +378,7 @@ const settingsSchema = new mongoose.Schema(
             at: { type: Date }
         }
     },
-    { collection: 'food_settings', timestamps: true }
+    { collection: 'food_settings', timestamps: true, strict: false }
 );
 
 export const FoodSettings = mongoose.model('FoodSettings', settingsSchema);

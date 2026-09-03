@@ -162,7 +162,7 @@ export async function updateAppCustomizationSettings(payload = {}, adminId) {
         updatedBy: { role: "ADMIN", adminId, at: new Date() },
       },
     },
-    { upsert: true, new: true },
+    { upsert: true, new: true, strict: false },
   ).lean();
 
   const settings = normalizeAppCustomizationSettings(doc || next);
